@@ -15,7 +15,7 @@ One battle on a single freshly generated terrain, ending when at most one Tank s
 _Avoid_: Level, map, battle
 
 **Turn**:
-One Player's opportunity to aim and fire once within a Round.
+One Player's opportunity to aim and fire once within a Round, ending only when everything has come to rest: the Projectile is gone, its Explosion is over, and all Settling is complete.
 _Avoid_: Move, go, shot
 
 **Round Win**:
@@ -62,6 +62,10 @@ _Avoid_: HP, hit points, life, shields
 A kind of projectile a Tank can fire, defining what its Explosion does (e.g. Baby Missile).
 _Avoid_: Ammo, missile (as a general term), shot type
 
+**Projectile**:
+The object a Tank fires, flying under gravity and Wind until it touches Terrain or a Tank, or leaves the side of the field.
+_Avoid_: Bullet, shell, shot
+
 **Explosion**:
 The blast where a projectile lands, removing Terrain and damaging Tanks within its radius, with damage falling off from the centre.
 _Avoid_: Blast, impact, detonation
@@ -76,5 +80,5 @@ The destructible ground of a Round, made of dirt that explosions remove.
 _Avoid_: Map, level, ground
 
 **Settling**:
-Loose dirt left unsupported after an explosion falling straight down until it rests.
+Unsupported dirt, and any Tank resting on it, falling straight down after an Explosion until it rests.
 _Avoid_: Collapse, gravity
