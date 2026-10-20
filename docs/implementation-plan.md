@@ -17,6 +17,7 @@ This plan builds the first playable version of Scorched Earth. Work through the 
 ## Scope (do NOT build anything outside this)
 
 **In scope:**
+
 - 2 Players, each Human or Computer.
 - A Round count from 1 to 99 (default 10).
 - One Weapon (Baby Missile) with unlimited ammo.
@@ -32,6 +33,7 @@ This plan builds the first playable version of Scorched Earth. Work through the 
 - CI and GitHub Pages deploy.
 
 **Out of scope:**
+
 - Money and shop.
 - Other Weapons.
 - Fall damage.
@@ -78,6 +80,7 @@ This plan builds the first playable version of Scorched Earth. Work through the 
 Create the following, using these **exact** dev-dependency versions (do not use `^` or `latest`):
 
 `package.json`:
+
 ```json
 {
   "name": "scorched-earth",
@@ -106,9 +109,11 @@ Create the following, using these **exact** dev-dependency versions (do not use 
   }
 }
 ```
+
 Run `npm install` to produce `package-lock.json`, and commit the lockfile.
 
 `tsconfig.json` (the whole app):
+
 ```json
 {
   "compilerOptions": {
@@ -129,6 +134,7 @@ Run `npm install` to produce `package-lock.json`, and commit the lockfile.
 ```
 
 `tsconfig.sim.json`: proves `src/sim` has no DOM dependency, because `lib` contains no `DOM`:
+
 ```json
 {
   "extends": "./tsconfig.json",
@@ -137,16 +143,20 @@ Run `npm install` to produce `package-lock.json`, and commit the lockfile.
   "exclude": ["src/sim/**/*.test.ts"]
 }
 ```
+
 Test files are excluded because Vitest's types may pull in DOM types. They are still typechecked by `tsconfig.json`. Tests import `{ describe, it, expect } from "vitest"` explicitly; no globals.
 
 `vite.config.ts`:
+
 ```ts
 import { defineConfig } from "vite";
 export default defineConfig({ base: "./" });
 ```
+
 (`base: "./"` makes the build work under any GitHub Pages sub-path.)
 
 `eslint.config.js`:
+
 ```js
 import js from "@eslint/js";
 import tseslint from "typescript-eslint";
@@ -158,8 +168,18 @@ export default tseslint.config(
   {
     files: ["src/sim/**/*.ts"],
     rules: {
-      "no-restricted-globals": ["error", "window", "document", "requestAnimationFrame", "performance", "localStorage"],
-      "no-restricted-properties": ["error", { object: "Math", property: "random", message: "Use Rng from src/sim/rng.ts" }],
+      "no-restricted-globals": [
+        "error",
+        "window",
+        "document",
+        "requestAnimationFrame",
+        "performance",
+        "localStorage",
+      ],
+      "no-restricted-properties": [
+        "error",
+        { object: "Math", property: "random", message: "Use Rng from src/sim/rng.ts" },
+      ],
       "no-restricted-imports": ["error", { patterns: ["**/render/**", "**/input/**", "**/ui/**"] }],
     },
   },
@@ -171,6 +191,7 @@ export default tseslint.config(
 `.gitignore`: `node_modules`, `dist`.
 
 `index.html` (repo root):
+
 ```html
 <!doctype html>
 <html lang="en">
@@ -191,6 +212,7 @@ export default tseslint.config(
 ```
 
 `src/style.css`:
+
 - `html, body { margin:0; height:100%; background:#000; color:#fff; font-family: monospace; }`
 - `#stage` is centred with flex, `position: relative`.
 - `#field { image-rendering: pixelated; display:block; }`
@@ -201,6 +223,7 @@ export default tseslint.config(
 ### 1.2 CI workflows
 
 `.github/workflows/ci.yml`:
+
 ```yaml
 name: CI
 on:
@@ -220,6 +243,7 @@ jobs:
 ```
 
 `.github/workflows/deploy.yml`:
+
 ```yaml
 name: Deploy
 on:
@@ -247,9 +271,11 @@ jobs:
       - id: deployment
         uses: actions/deploy-pages@v4
 ```
+
 **Manual step for the human:** in the repo's Settings → Pages, set the source to "GitHub Actions". Tell the user to do this; you cannot do it yourself.
 
 ### 1.3 Done when
+
 - `npm run check` passes. Add one trivial test, `src/sim/smoke.test.ts`, so Vitest has something to run; delete it in Milestone 2.
 - `npm run build` produces `dist/`.
 - Temporarily add `Math.random()` to a file in `src/sim`: `npm run lint` must fail. Remove it again.
@@ -326,10 +352,13 @@ export const COMPUTER_THINK_SECONDS = 3;
 ### 2.2 `src/sim/rng.ts`
 
 Implement a small seeded PRNG (mulberry32):
+
 ```ts
 export class Rng {
   private state: number;
-  constructor(seed: number) { this.state = seed >>> 0; }
+  constructor(seed: number) {
+    this.state = seed >>> 0;
+  }
   /** Float in [0, 1). */
   next(): number {
     let t = (this.state = (this.state + 0x6d2b79f5) >>> 0);
@@ -338,15 +367,22 @@ export class Rng {
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   }
   /** Integer in [min, max] inclusive. */
-  int(min: number, max: number): number { return min + Math.floor(this.next() * (max - min + 1)); }
+  int(min: number, max: number): number {
+    return min + Math.floor(this.next() * (max - min + 1));
+  }
   /** Float in [min, max). */
-  range(min: number, max: number): number { return min + this.next() * (max - min); }
+  range(min: number, max: number): number {
+    return min + this.next() * (max - min);
+  }
   /** Fisher–Yates shuffle, returns a new array. */
-  shuffle<T>(items: readonly T[]): T[] { /* implement */ }
+  shuffle<T>(items: readonly T[]): T[] {
+    /* implement */
+  }
 }
 ```
 
 ### 2.3 Tests: `src/sim/rng.test.ts`
+
 - The same seed gives the same first 10 values; different seeds give different sequences.
 - `int(-20, 20)` over 10 000 draws stays within bounds and hits both −20 and 20.
 - `shuffle` returns a permutation: same elements, same length, and the input is not mutated.
@@ -387,6 +423,7 @@ export class Terrain {
   settlePass(): boolean;
 }
 ```
+
 Increment `version` in every mutating method that changes something.
 
 ### 3.2 `src/sim/terrainGen.ts`
@@ -394,7 +431,9 @@ Increment `version` in every mutating method that changes something.
 ```ts
 export function generateHills(rng: Rng, width: number, height: number): Terrain;
 ```
+
 Algorithm, which is deterministic for a given seed:
+
 1. `base = height * TERRAIN_BASE_FRACTION`.
 2. For `k = 1 … TERRAIN_HARMONICS`, pick:
    - `amp_k = rng.range(0.3, 1) * TERRAIN_MAX_AMPLITUDE / k`
@@ -404,6 +443,7 @@ Algorithm, which is deterministic for a given seed:
 4. Return `Terrain.fromSurface(surface, width, height)`.
 
 ### 3.3 Tests: `src/sim/terrain.test.ts`
+
 - `fromSurface` sets the right cells; `surfaceY` matches the input surface.
 - `isSolid` returns false outside the sides and above the top, and true below the bottom.
 - `carveCircle(100, 300, 20)` on flat ground at y = 300 clears `(100, 310)` and leaves `(100, 330)` and `(130, 310)` alone. `version` increases.
@@ -462,6 +502,7 @@ export interface Explosion {
   elapsed: number; // seconds since it started
 }
 ```
+
 Player colours: Player 1 is `#ff5050`, Player 2 is `#50a0ff`. Define them in `src/sim/players.ts` together with `createPlayers(kinds: PlayerKind[]): Player[]`.
 
 ### 4.2 `src/sim/tank.ts`
@@ -481,7 +522,9 @@ export function isSupported(t: Tank, terrain: Terrain): boolean;
 ```ts
 export function placeTanks(rng: Rng, terrain: Terrain, playerIds: readonly number[]): Tank[];
 ```
+
 For `n = playerIds.length`:
+
 1. For slot `i`, compute `x = round(width * (i + 0.5) / n + rng.range(-j, j))`, where `j = min(PLACEMENT_MAX_JITTER, width / (4n))`. Clamp it to `[PLACEMENT_EDGE_MARGIN, width - 1 - PLACEMENT_EDGE_MARGIN]`.
 2. `groundY = terrain.surfaceY(x)`. Then call `terrain.flatten(x - PAD_HALF_WIDTH, x + PAD_HALF_WIDTH, groundY)`.
 3. Create the Tank with `{ playerId, x, y: groundY, angle: START_ANGLE, power: START_POWER, health: MAX_HEALTH }`.
@@ -499,10 +542,16 @@ export type ProjectileOutcome =
 
 /** Advance one tick. Mutates p. */
 export function stepProjectile(
-  p: Projectile, wind: number, terrain: Terrain, tanks: readonly Tank[], dt: number,
+  p: Projectile,
+  wind: number,
+  terrain: Terrain,
+  tanks: readonly Tank[],
+  dt: number,
 ): ProjectileOutcome;
 ```
+
 Algorithm for `stepProjectile`:
+
 1. Update velocity first: `vx += wind * WIND_ACCELERATION_PER_UNIT * dt`; `vy += GRAVITY * dt`.
 2. Compute the displacement `dx = vx*dt`, `dy = vy*dt`.
 3. **Sub-step** so the Projectile never tunnels through thin dirt: `n = max(1, ceil(max(|dx|, |dy|)))`. Repeat `n` times:
@@ -513,19 +562,23 @@ Algorithm for `stepProjectile`:
 4. Return `flying`.
 
 ### 4.5 Tests
+
 `src/sim/tank.test.ts`:
+
 - `powerCap` is 1000 at full Health and 400 at Health 40.
 - `clampAim` reduces power 700 to 400 when Health is 40.
 - `barrelTip` at angle 0 is to the right of the hitbox; at 90 it is above it.
 - `hitTest` is false for a dead Tank.
 
 `src/sim/placement.test.ts`:
+
 - Two Tanks end up on opposite halves of the field.
 - Each Tank is supported.
 - The pad is flat: `surfaceY` is equal for all columns within `PAD_HALF_WIDTH`.
 - The result is deterministic for a seed.
 
 `src/sim/projectile.test.ts`, on flat Terrain at y = 400 with no Tanks:
+
 - Fired at 90° with Wind 0, the Projectile lands within 1 px of its start x.
 - Two Projectiles at 45° and 135° from the same point with Wind 0 land mirror-symmetrically, within 2 px.
 - With Wind +20, a 90° Projectile lands to the right of its start; with −20, to the left.
@@ -548,14 +601,23 @@ export function damageAt(weapon: Weapon, distance: number): number;
 // distance >= radius → 0; otherwise Math.round(maxDamage * (1 - distance / radius))
 
 /** Apply an Explosion: damage every living Tank (including the firer), carve Terrain, clamp aim. */
-export function detonate(x: number, y: number, weapon: Weapon, terrain: Terrain, tanks: Tank[]): Explosion;
+export function detonate(
+  x: number,
+  y: number,
+  weapon: Weapon,
+  terrain: Terrain,
+  tanks: Tank[],
+): Explosion;
 ```
+
 `detonate` steps, in this order:
+
 1. For each living Tank, set `health = max(0, health - damageAt(weapon, dist(centre(t), (x, y))))`, then `clampAim(t)`.
 2. `terrain.carveCircle(x, y, weapon.radius)`.
 3. Return `{ x, y, radius: weapon.radius, elapsed: 0 }`.
 
 ### 5.2 Tests: `src/sim/explosion.test.ts`
+
 - `damageAt` gives 30 at distance 0, 15 at distance 10, and 0 at distance 20 and beyond.
 - A direct hit on a Tank centre takes its Health from 100 to 70.
 - A Tank 25 px away is untouched.
@@ -608,6 +670,7 @@ export class Round {
 ```
 
 **Constructor:**
+
 1. Generate the Terrain with `generateHills`.
 2. Place the Tanks with `placeTanks`.
 3. Set `wind = rng.int(-WIND_MAX, WIND_MAX)` and `turnOrder = rng.shuffle(playerIds)`.
@@ -616,11 +679,13 @@ export class Round {
 Keep a reference to `players` and `rng`. The Moron Personality needs the `rng`.
 
 **`act`** (human, aiming only):
+
 - `adjustAngle`: add `delta`, then `clampAim`.
 - `adjustPower`: add `delta`, then `clampAim`.
 - `fire`: set the phase to `flying` with `launch(currentTank, BABY_MISSILE)`.
 
 **`tick(dt)`**, which switches on `phase.kind`:
+
 - **aiming:** if `thinkRemaining !== null`, subtract `dt`. When it reaches 0 or below, fire, exactly like a human `fire`.
 - **flying:** call `stepProjectile`.
   - `flying`: nothing more to do.
@@ -634,12 +699,14 @@ Keep a reference to `players` and `rng`. The Moron Personality needs the `rng`.
 - **over:** do nothing.
 
 **`endTurn()`:**
+
 1. Count the living Tanks.
    - 0 left: set the phase to `over` with a `draw`.
    - 1 left: set the phase to `over` with a `win` for that Tank's Player.
 2. Otherwise, advance `currentIndex` (wrapping) to the next Player whose Tank is alive, then call `beginTurn()`.
 
 **`beginTurn()`:**
+
 1. Find the current Player.
 2. If it is a computer, call `chooseAim(personality, tank, rng)` (Milestone 8). Set the Tank's angle and power to the result, then `clampAim`. Set the phase to `aiming` with `thinkRemaining = COMPUTER_THINK_SECONDS`.
 3. Otherwise, set the phase to `aiming` with `thinkRemaining = null`.
@@ -649,6 +716,7 @@ Until Milestone 8 exists, stub `chooseAim` to return `{ angle: 90, power: 0 }`.
 ### 6.2 Tests: `src/sim/round.test.ts`
 
 Write a helper `runUntil(round, predicate, maxTicks = 20000)` that ticks with `TICK_SECONDS` and fails the test if the cap is hit. In scenario tests, set `round.wind = 0` first. A shot fired at 90° then falls straight back onto the firer, which is the easy way to cause a predictable Explosion at a known spot.
+
 - A new Round has 2 Tanks at full Health, Wind within ±20, and is in the `aiming` phase.
 - Human `adjustAngle` / `adjustPower` change the current Tank and are clamped.
 - `act` is ignored outside `aiming`.
@@ -693,9 +761,11 @@ export class Match {
   winner(): Player | null;
 }
 ```
+
 One `Rng` is created per Match and shared by every Round, so a whole Match is reproducible from its seed.
 
 ### 7.2 Tests: `src/sim/match.test.ts`
+
 - Wins and draws are tallied correctly. To test this, force results by manipulating `round.phase` directly.
 - `isOver()` becomes true after `totalRounds` recorded results.
 - `winner()` returns null on a tie.
@@ -711,14 +781,19 @@ Commit: `Add Match`.
 ### 8.1 `src/sim/personalities.ts`
 
 ```ts
-export interface Aim { angle: number; power: number }
+export interface Aim {
+  angle: number;
+  power: number;
+}
 export function chooseAim(personality: PersonalityName, tank: Tank, rng: Rng): Aim;
 ```
+
 - `moron`: `angle = rng.int(MIN_ANGLE, MAX_ANGLE)`, `power = rng.int(0, powerCap(tank))`.
 
 Wire `chooseAim` into `Round.beginTurn()`, replacing the stub.
 
 ### 8.2 Tests
+
 - Moron's aim is always within its bounds and respects the Health-based cap.
 - A Computer Player's Turn shows its aim during the pause. Right after `beginTurn`, the Tank's angle and power equal the chosen aim, the phase is `aiming`, and `thinkRemaining` is 3. The Projectile is launched after 3 seconds of ticks (180 ticks, ±1), not before.
 - **Integration:** the Computer-vs-Computer, 3-Round Match from 7.2 completes within 3 × 200 000 ticks, and `results.length === 3`.
@@ -732,6 +807,7 @@ Commit: `Add Moron Personality`.
 No tests are needed for rendering; it is verified visually. Keep render code dumb: it reads state and never changes it.
 
 ### 9.1 `src/render/palette.ts`
+
 ```ts
 export const SKY_TOP = "#000020";
 export const SKY_BOTTOM = "#402070";
@@ -743,12 +819,14 @@ export const HUD_TEXT = "#ffffff";
 ```
 
 ### 9.2 `src/render/renderer.ts`
+
 ```ts
 export class Renderer {
   constructor(canvas: HTMLCanvasElement);
   draw(match: Match): void;
 }
 ```
+
 - **Sky:** a vertical linear gradient filling the canvas, from `SKY_TOP` to `SKY_BOTTOM`.
 - **Terrain:** keep an offscreen `ImageData` (640×480). Rebuild it **only when `terrain.version` or the Round object changed** since the last frame. For solid cells, write the dirt colour linearly interpolated by `y` between `DIRT_SURFACE` and `DIRT_DEEP`; for air cells, set alpha 0. Draw it with `putImageData` on an offscreen canvas, then `drawImage` onto the main canvas, so the sky shows through the transparent cells.
 - **Tanks** (living only), in the Player's colour:
@@ -760,7 +838,9 @@ export class Renderer {
 - **HUD:** see 9.3.
 
 ### 9.3 `src/render/hud.ts`
+
 Draw it in a 14-px monospace font at the top of the canvas over the sky, with a semi-transparent black strip behind it (rows 0–35).
+
 - **Line 1**, at y ≈ 14: `{name}   Angle: {angle}   Power: {power}/{cap}   Wind: {arrow}{|wind|}   Round {n}/{total}`.
   - The name is drawn in the current Player's colour.
   - The arrow is `→` for positive Wind, `←` for negative, and nothing for 0.
@@ -768,12 +848,15 @@ Draw it in a 14-px monospace font at the top of the canvas over the sky, with a 
 - While a Computer Player is thinking, append `(thinking…)` to line 1.
 
 ### 9.4 Scaling (`src/render/scale.ts`)
+
 - On load and on window `resize`, compute `s = max(1, floor(min(innerWidth / 640, innerHeight / 480)))`.
 - Set the canvas CSS width and height to `640*s` and `480*s` px. Do the same for `#overlay`.
 - The canvas's internal resolution stays 640×480.
 
 ### 9.5 Done when
+
 `main.ts` (temporarily) creates a Computer-vs-Computer Match, ticks it in a `requestAnimationFrame` loop, and draws it. You should see the following:
+
 - Hills appear.
 - Tanks sit on flat pads.
 - Shots arc and are visibly pushed by the Wind.
@@ -790,25 +873,32 @@ Commit: `Add canvas renderer and HUD`.
 ## Milestone 10: Input and game loop
 
 ### 10.1 `src/input/keyboard.ts`
+
 ```ts
-export function attachKeyboard(target: Window, onAction: (a: RoundAction) => void, onConfirm: () => void): () => void; // returns detach
+export function attachKeyboard(
+  target: Window,
+  onAction: (a: RoundAction) => void,
+  onConfirm: () => void,
+): () => void; // returns detach
 ```
+
 Listen for `keydown`. Each event, including OS auto-repeat, is one step:
 
-| Key | Action |
-|---|---|
-| `ArrowLeft` | `adjustAngle +ANGLE_STEP` (the barrel turns left) |
-| `ArrowRight` | `adjustAngle −ANGLE_STEP` |
-| `ArrowUp` | `adjustPower +POWER_STEP` (`+POWER_STEP_FAST` if `shiftKey`) |
-| `ArrowDown` | `adjustPower −POWER_STEP` (`−POWER_STEP_FAST` if `shiftKey`) |
-| `Space` | `fire`. Ignore `event.repeat` for Space, so holding it doesn't fire twice. |
-| `Enter` | `onConfirm()`, used by the overlay screens |
+| Key          | Action                                                                     |
+| ------------ | -------------------------------------------------------------------------- |
+| `ArrowLeft`  | `adjustAngle +ANGLE_STEP` (the barrel turns left)                          |
+| `ArrowRight` | `adjustAngle −ANGLE_STEP`                                                  |
+| `ArrowUp`    | `adjustPower +POWER_STEP` (`+POWER_STEP_FAST` if `shiftKey`)               |
+| `ArrowDown`  | `adjustPower −POWER_STEP` (`−POWER_STEP_FAST` if `shiftKey`)               |
+| `Space`      | `fire`. Ignore `event.repeat` for Space, so holding it doesn't fire twice. |
+| `Enter`      | `onConfirm()`, used by the overlay screens                                 |
 
 Call `preventDefault()` for these keys so the page doesn't scroll. Both humans in hot-seat play use the same keys.
 
 ### 10.2 `src/game.ts`: the app controller
 
 It owns the screen state: `"setup" | "round" | "roundResults" | "standings"`.
+
 - Fixed-timestep loop using `requestAnimationFrame`:
   ```
   accumulator += min(frameSeconds, 0.25)
@@ -822,6 +912,7 @@ It owns the screen state: `"setup" | "round" | "roundResults" | "standings"`.
 - Seed each new Match with `Date.now() >>> 0`. This is the **only** place wall-clock time touches the sim.
 
 ### 10.3 `src/main.ts`
+
 Find `#field` and `#overlay`, then create the scaler, `Renderer` and `Game`, and call `game.start()`.
 
 Commit: `Add keyboard input and fixed-timestep game loop`.

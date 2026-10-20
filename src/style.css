@@ -1,0 +1,35 @@
+html,
+body {
+  margin: 0;
+  height: 100%;
+  background: #000;
+  color: #fff;
+  font-family: monospace;
+}
+
+body {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+#stage {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+#field {
+  image-rendering: pixelated;
+  display: block;
+}
+
+#overlay {
+  position: absolute;
+  inset: 0;
+}
+
+#overlay:empty {
+  display: none;
+}
