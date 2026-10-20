@@ -11,12 +11,20 @@ A complete game from setup to final standings, made up of a fixed number of Roun
 _Avoid_: Game, session
 
 **Round**:
-One battle on a single freshly generated terrain, ending when at most one tank survives. Money earned carries over to the next Round.
+One battle on a single freshly generated terrain, ending when at most one Tank survives.
 _Avoid_: Level, map, battle
 
 **Turn**:
-One player's opportunity to aim and fire once within a Round.
+One Player's opportunity to aim and fire once within a Round.
 _Avoid_: Move, go, shot
+
+**Round Win**:
+Awarded to the Player whose Tank is the last one surviving a Round; the Match winner is the Player with the most.
+_Avoid_: Point, score, victory
+
+**Draw**:
+A Round in which no Tank survives, so no Player earns a Round Win.
+_Avoid_: Tie, stalemate
 
 ### Participants
 
@@ -49,6 +57,14 @@ _Avoid_: Force, velocity, strength
 **Health**:
 How much damage a Tank can still take before it is destroyed; starts each Round at 100.
 _Avoid_: HP, hit points, life, shields
+
+**Weapon**:
+A kind of projectile a Tank can fire, defining what its Explosion does (e.g. Baby Missile).
+_Avoid_: Ammo, missile (as a general term), shot type
+
+**Explosion**:
+The blast where a projectile lands, removing Terrain and damaging Tanks within its radius, with damage falling off from the centre.
+_Avoid_: Blast, impact, detonation
 
 **Wind**:
 A sideways push on projectiles, fixed for the duration of a Round.
