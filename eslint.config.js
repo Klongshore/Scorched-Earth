@@ -19,8 +19,16 @@ export default tseslint.config(
       "no-restricted-properties": [
         "error",
         { object: "Math", property: "random", message: "Use Rng from src/sim/rng.ts" },
+        {
+          object: "Date",
+          property: "now",
+          message: "The simulation only advances by TICK_SECONDS",
+        },
       ],
-      "no-restricted-imports": ["error", { patterns: ["**/render/**", "**/input/**", "**/ui/**"] }],
+      "no-restricted-imports": [
+        "error",
+        { patterns: ["**/render", "**/render/**", "**/input", "**/input/**", "**/ui", "**/ui/**"] },
+      ],
     },
   },
 );
