@@ -20,6 +20,7 @@ import {
 import {
   chooseAim,
   chooseTarget,
+  isReachable,
   newComputerMemory,
   shooterAim,
   type Aim,
@@ -150,7 +151,7 @@ describe("chooseTarget", () => {
       for (const t of tanks) if (t !== self && rng.next() < 0.5) t.health = 0;
       if (!tanks.some((t) => t !== self && t.health > 0)) continue;
       const memory = newComputerMemory();
-      const target = chooseTarget(memory, self, tanks, rng);
+      const target = chooseTarget(memory, self, tanks, rng) as Tank;
       expect(target).not.toBe(self);
       expect(target.health).toBeGreaterThan(0);
       expect(memory.targetId).toBe(target.playerId);
@@ -163,7 +164,7 @@ describe("chooseTarget", () => {
     const rng = new Rng(4);
     const picked = new Set<number>();
     for (let i = 0; i < 200; i++)
-      picked.add(chooseTarget(newComputerMemory(), self, tanks, rng).playerId);
+      picked.add((chooseTarget(newComputerMemory(), self, tanks, rng) as Tank).playerId);
     expect([...picked].sort()).toEqual([0, 1, 3, 4]);
   });
 
@@ -180,7 +181,7 @@ describe("chooseTarget", () => {
     const twin = new Rng(8);
     for (let turn = 0; turn < 10; turn++) {
       (tanks[4] as Tank).health -= 5;
-      expect(chooseTarget(memory, self, tanks, rng).playerId).toBe(4);
+      expect(chooseTarget(memory, self, tanks, rng)?.playerId).toBe(4);
     }
     expect(memory).toEqual(kept);
     // Keeping the Target draws nothing from the Rng.
@@ -199,7 +200,7 @@ describe("chooseTarget", () => {
       };
       (tanks[3] as Tank).health = 0;
       (tanks[0] as Tank).health = 0;
-      const target = chooseTarget(memory, self, tanks, rng);
+      const target = chooseTarget(memory, self, tanks, rng) as Tank;
       expect([2, 4]).toContain(target.playerId);
       expect(memory).toEqual({ targetId: target.playerId, lastAim: null, lastLanding: null });
     }
@@ -210,6 +211,85 @@ describe("chooseTarget", () => {
     for (const t of tanks.slice(1)) t.health = 0;
     expect(() => chooseTarget(newComputerMemory(), tanks[0] as Tank, tanks, new Rng(1))).toThrow();
   });
+
+  it("switches to a reachable living opponent once its Target is out of reach", () => {
+    const rng = new Rng(13);
+    for (let i = 0; i < 50; i++) {
+      // At 30 Health (Power cap 300) the Tank at 60 reaches 180 but not 420 or 560.
+      const tanks = fiveTanks();
+      const self = tankAt(0, 60, 30);
+      tanks[0] = self;
+      (tanks[2] as Tank).health = 0;
+      const memory: ComputerMemory = {
+        targetId: 4,
+        lastAim: { angle: 45, power: 300 },
+        lastLanding: { kind: "hit", x: 300 },
+      };
+      const target = chooseTarget(memory, self, tanks, rng);
+      expect(target?.playerId).toBe(1);
+      expect(memory).toEqual({ targetId: 1, lastAim: null, lastLanding: null });
+    }
+  });
+
+  it("returns null and forgets its Target when no living opponent is reachable", () => {
+    const tanks = fiveTanks();
+    const self = tankAt(2, 300, 5);
+    tanks[2] = self;
+    const memory: ComputerMemory = {
+      targetId: 4,
+      lastAim: { angle: 45, power: 50 },
+      lastLanding: { kind: "hit", x: 320 },
+    };
+    expect(chooseTarget(memory, self, tanks, new Rng(1))).toBeNull();
+    expect(memory).toEqual(newComputerMemory());
+  });
+});
+
+describe("isReachable", () => {
+  it("is true when the Power to hit at 45° is within the Power cap", () => {
+    const self = tankAt(0, 100, 60);
+    const near = tankAt(1, 400);
+    const needed = powerToHit(self, near, 45) as number;
+    expect(isReachable(self, near)).toBe(needed <= powerCap(self));
+    expect(isReachable(self, near)).toBe(true);
+    expect(isReachable({ ...self, health: Math.floor((needed - 1) / 10) }, near)).toBe(false);
+  });
+
+  it("aims at 45° toward the Target, on either side", () => {
+    const self = tankAt(0, 320, 60);
+    expect(isReachable(self, tankAt(1, 60))).toBe(isReachable(self, tankAt(1, 580)));
+    expect(isReachable(self, tankAt(1, 60))).toBe(true);
+  });
+
+  it("is false for a Target no Power can reach at 45°", () => {
+    const self = tankAt(0, 300);
+    expect(isReachable(self, tankAt(1, 302, MAX_HEALTH, GROUND - 200))).toBe(false);
+  });
+});
+
+describe("Shooter and Tosser with no reachable opponent", () => {
+  for (const personality of ["shooter", "tosser"] as const) {
+    it(`a ${personality} aims like a Moron: any Angle, and Power within its cap`, () => {
+      const rng = new Rng(17);
+      const angles = new Set<number>();
+      for (let i = 0; i < 2000; i++) {
+        const tanks = fiveTanks();
+        const self = tankAt(0, 60, 5);
+        tanks[0] = self;
+        const memory = newComputerMemory();
+        const aim = chooseAim(personality, self, tanks, memory, rng);
+        expect(Number.isInteger(aim.angle)).toBe(true);
+        expect(aim.angle).toBeGreaterThanOrEqual(MIN_ANGLE);
+        expect(aim.angle).toBeLessThanOrEqual(MAX_ANGLE);
+        expect(aim.power).toBeGreaterThanOrEqual(0);
+        expect(aim.power).toBeLessThanOrEqual(powerCap(self));
+        expect(memory).toEqual(newComputerMemory());
+        angles.add(aim.angle);
+      }
+      expect(angles.has(MIN_ANGLE)).toBe(true);
+      expect(angles.has(MAX_ANGLE)).toBe(true);
+    });
+  }
 });
 
 function flat(): Terrain {
@@ -244,7 +324,8 @@ describe("Shooter Personality", () => {
       const self = tanks[rng.int(0, 4)] as Tank;
       const memory = newComputerMemory();
       const aim = chooseAim("shooter", self, tanks, memory, rng);
-      const target = tanks[memory.targetId as number] as Tank;
+      if (memory.targetId === null) continue; // no reachable opponent: aims like a Moron
+      const target = tanks[memory.targetId] as Tank;
       expect(target).not.toBe(self);
       expect(Number.isInteger(aim.angle)).toBe(true);
       expect(Number.isInteger(aim.power)).toBe(true);
@@ -357,6 +438,7 @@ describe("Tosser Personality", () => {
       const targetX = rng.int(20, FIELD_WIDTH - 20);
       if (selfX === targetX) continue;
       const { self, target, tanks, memory } = tosserAt(selfX, targetX, rng.int(1, MAX_HEALTH));
+      if (!isReachable(self, target)) continue; // aims like a Moron instead
       const aim = chooseAim("tosser", self, tanks, memory, rng);
       const angle = targetX > selfX ? TOSSER_ANGLE : 180 - TOSSER_ANGLE;
       expect(aim.angle).toBe(angle);
@@ -409,8 +491,8 @@ describe("Tosser Personality", () => {
   });
 
   it("never exceeds its Power cap", () => {
-    const { self, tanks, memory } = tosserAt(100, 400, 30);
-    memory.lastAim = { angle: TOSSER_ANGLE, power: 280 };
+    const { self, tanks, memory } = tosserAt(100, 400, 60);
+    memory.lastAim = { angle: TOSSER_ANGLE, power: 550 };
     memory.lastLanding = { kind: "hit", x: 150 };
     expect(chooseAim("tosser", self, tanks, memory, new Rng(1)).power).toBe(powerCap(self));
   });

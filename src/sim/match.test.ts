@@ -189,9 +189,7 @@ describe("Match integration", () => {
     const match = new Match({
       players: [shooter, moron, shooter, shooter, moron],
       rounds: 3,
-      // Not 2024: in that Match's Round 2, two damaged Shooters end up out of each other's
-      // reach and fire at their Power caps forever.
-      seed: 2025,
+      seed: 2024,
     });
     playOut(match, 3 * 200_000);
     expect(match.results.length).toBe(3);
@@ -207,6 +205,28 @@ describe("Match integration", () => {
     });
     playOut(match, 3 * 200_000);
     expect(match.results.length).toBe(3);
+  });
+
+  describe("1-Round Matches of 10 Computer Players finish within the tick budget", () => {
+    const shooter: PlayerSetup = { kind: "computer", personality: "shooter" };
+    const tosser: PlayerSetup = { kind: "computer", personality: "tosser" };
+    const lineups: Record<string, PlayerSetup[]> = {
+      Shooters: Array.from({ length: MAX_PLAYERS }, () => shooter),
+      Tossers: Array.from({ length: MAX_PLAYERS }, () => tosser),
+      "a mix": Array.from(
+        { length: MAX_PLAYERS },
+        (_, i) => [shooter, tosser, moron][i % 3] as PlayerSetup,
+      ),
+    };
+    for (const [name, players] of Object.entries(lineups)) {
+      it(`of ${name}, across 40 seeds`, () => {
+        for (let seed = 1; seed <= 40; seed++) {
+          const match = new Match({ players, rounds: 1, seed });
+          playOut(match, 200_000);
+          expect(match.results.length).toBe(1);
+        }
+      });
+    }
   });
 
   it("plays a seeded Moron-only Match exactly as before Shooter existed", () => {

@@ -175,7 +175,10 @@ export class Round {
     }
   }
 
-  /** The playerId of a Computer Player's Target this Round; null before it picks one, or for a Human. */
+  /**
+   * The playerId of a Computer Player's Target this Round; null before it picks one, while no
+   * opponent is within its reach, or for a Human.
+   */
   targetOf(playerId: number): number | null {
     return this.memories.get(playerId)?.targetId ?? null;
   }

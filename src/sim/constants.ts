@@ -60,6 +60,7 @@ export const MAX_ROUNDS = 99;
 
 // Computer Players
 export const COMPUTER_THINK_SECONDS = 1.5;
+export const REACH_ANGLE = 45; // degrees above the horizontal: the longest-range Angle, for reachability
 
 // Shooter
 export const SHOOTER_MIN_ANGLE = 30; // degrees above the horizontal, toward the Target
