@@ -1,6 +1,8 @@
 import { Renderer } from "./render/renderer";
 import { installScaling } from "./render/scale";
 import { FIELD_HEIGHT, FIELD_WIDTH } from "./sim/constants";
+import { placeTanks } from "./sim/placement";
+import { createPlayers } from "./sim/players";
 import { Rng } from "./sim/rng";
 import { generateHills } from "./sim/terrainGen";
 
@@ -13,11 +15,18 @@ installScaling(canvas, document.querySelector<HTMLElement>("#overlay"));
 const seedParam = new URLSearchParams(window.location.search).get("seed");
 const seed =
   seedParam !== null && seedParam !== "" ? Number(seedParam) : Math.floor(Math.random() * 2 ** 32);
-const terrain = generateHills(new Rng(seed), FIELD_WIDTH, FIELD_HEIGHT);
+const rng = new Rng(seed);
+const terrain = generateHills(rng, FIELD_WIDTH, FIELD_HEIGHT);
+const players = createPlayers(["human", "human"]);
+const tanks = placeTanks(
+  rng,
+  terrain,
+  players.map((p) => p.id),
+);
 
 const renderer = new Renderer(canvas);
 function frame(): void {
-  renderer.draw(terrain);
+  renderer.draw(terrain, tanks, players);
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);

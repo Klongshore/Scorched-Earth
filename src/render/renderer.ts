@@ -1,4 +1,7 @@
+import { TANK_HALF_WIDTH, TANK_HEIGHT } from "../sim/constants";
+import { barrelTip, isAlive } from "../sim/tank";
 import type { Terrain } from "../sim/terrain";
+import type { Player, Tank } from "../sim/types";
 import { DIRT_DEEP, DIRT_SURFACE, SKY_BOTTOM, SKY_TOP } from "./palette";
 
 export class Renderer {
@@ -25,13 +28,34 @@ export class Renderer {
     this.sky.addColorStop(1, SKY_BOTTOM);
   }
 
-  draw(terrain: Terrain): void {
+  draw(terrain: Terrain, tanks: readonly Tank[], players: readonly Player[]): void {
     this.context.fillStyle = this.sky;
     this.context.fillRect(0, 0, this.canvas.width, this.canvas.height);
     if (this.builtTerrain !== terrain || this.builtVersion !== terrain.version) {
       this.rebuildTerrain(terrain);
     }
     this.context.drawImage(this.terrainCanvas, 0, 0);
+    for (const tank of tanks) {
+      if (isAlive(tank)) this.drawTank(tank, players[tank.playerId]?.color ?? "#ffffff");
+    }
+  }
+
+  private drawTank(tank: Tank, color: string): void {
+    const ctx = this.context;
+    const top = tank.y - TANK_HEIGHT;
+    const half = TANK_HEIGHT / 2;
+    ctx.fillStyle = color;
+    ctx.fillRect(tank.x - TANK_HALF_WIDTH, top + half, TANK_HALF_WIDTH * 2 + 1, half);
+    ctx.beginPath();
+    ctx.arc(tank.x + 0.5, top + half, half, Math.PI, 0);
+    ctx.fill();
+    const tip = barrelTip(tank);
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(tank.x + 0.5, top);
+    ctx.lineTo(tip.x + 0.5, tip.y);
+    ctx.stroke();
   }
 
   private rebuildTerrain(terrain: Terrain): void {
