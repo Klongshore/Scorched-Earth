@@ -18,13 +18,17 @@ function setup() {
     (a) => actions.push(a),
     () => confirms++,
   );
-  const press = (key: string, opts: { shiftKey?: boolean; repeat?: boolean } = {}) => {
+  const press = (
+    key: string,
+    opts: { shiftKey?: boolean; repeat?: boolean; target?: { tagName: string } } = {},
+  ) => {
     let prevented = false;
     const event = {
       key,
       code: key === " " ? "Space" : key,
       shiftKey: opts.shiftKey ?? false,
       repeat: opts.repeat ?? false,
+      target: opts.target ?? null,
       preventDefault: () => {
         prevented = true;
       },
@@ -83,6 +87,18 @@ describe("attachKeyboard", () => {
     }
     expect(k.press(" ", { repeat: true })).toBe(true);
     expect(k.press("a")).toBe(false);
+  });
+
+  it("leaves arrows and Space to a focused form control but still confirms on Enter", () => {
+    const k = setup();
+    for (const tagName of ["SELECT", "INPUT", "BUTTON"]) {
+      for (const key of ["ArrowUp", "ArrowLeft", " "]) {
+        expect(k.press(key, { target: { tagName } })).toBe(false);
+      }
+      expect(k.press("Enter", { target: { tagName } })).toBe(true);
+    }
+    expect(k.actions).toEqual([]);
+    expect(k.confirms()).toBe(3);
   });
 
   it("detach removes the listener", () => {

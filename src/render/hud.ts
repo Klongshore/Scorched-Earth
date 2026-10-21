@@ -1,15 +1,7 @@
 import { MAX_HEALTH } from "../sim/constants";
-import type { Round } from "../sim/round";
+import type { Match } from "../sim/match";
 import { powerCap } from "../sim/tank";
-import type { Player } from "../sim/types";
 import { HUD_BAR_BACKGROUND, HUD_STRIP, HUD_TEXT } from "./palette";
-
-/** What the renderer and HUD read about the Match being played. A Match satisfies it. */
-export interface MatchView {
-  readonly players: readonly Player[];
-  readonly totalRounds: number;
-  readonly round: Round;
-}
 
 const FONT = "14px monospace";
 const STRIP_HEIGHT = 36;
@@ -42,12 +34,11 @@ function drawRun(
   return x;
 }
 
-function aimLine(match: MatchView): Piece[] {
+function aimLine(match: Match): Piece[] {
   const { round, players } = match;
   const player = players[round.currentPlayerId];
   const tank = round.currentTank();
-  const thinking =
-    round.phase.kind === "aiming" && round.phase.thinkRemaining !== null ? "   (thinking…)" : "";
+  const thinking = round.isComputerThinking ? "   (thinking…)" : "";
   return [
     [player?.name ?? "?", player?.color ?? HUD_TEXT],
     [
@@ -58,27 +49,14 @@ function aimLine(match: MatchView): Piece[] {
   ];
 }
 
-/** Until the Round results screen exists, line 1 announces the result once the Round is over. */
-function resultLine(match: MatchView): Piece[] | null {
-  const { round, players } = match;
-  if (round.phase.kind !== "over") return null;
-  const result = round.phase.result;
-  if (result.kind === "draw") return [[`Round ${round.number} is a draw   (Enter)`, HUD_TEXT]];
-  const winner = players[result.playerId];
-  return [
-    [winner?.name ?? "?", winner?.color ?? HUD_TEXT],
-    [` wins Round ${round.number}!   (Enter)`, HUD_TEXT],
-  ];
-}
-
-export function drawHud(ctx: CanvasRenderingContext2D, match: MatchView): void {
+export function drawHud(ctx: CanvasRenderingContext2D, match: Match): void {
   const { round, players } = match;
   ctx.save();
   ctx.fillStyle = HUD_STRIP;
   ctx.fillRect(0, 0, ctx.canvas.width, STRIP_HEIGHT);
   ctx.font = FONT;
 
-  drawRun(ctx, resultLine(match) ?? aimLine(match), LEFT, LINE_1_Y);
+  drawRun(ctx, aimLine(match), LEFT, LINE_1_Y);
 
   let x = LEFT;
   for (const player of players) {

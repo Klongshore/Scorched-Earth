@@ -2,7 +2,8 @@ import { EXPLOSION_SECONDS, TANK_HALF_WIDTH, TANK_HEIGHT } from "../sim/constant
 import { barrelTip, isAlive } from "../sim/tank";
 import type { Terrain } from "../sim/terrain";
 import type { Explosion, Tank } from "../sim/types";
-import { drawHud, type MatchView } from "./hud";
+import type { Match } from "../sim/match";
+import { drawHud } from "./hud";
 import {
   DIRT_DEEP,
   DIRT_SURFACE,
@@ -40,12 +41,17 @@ export class Renderer {
     this.sky.addColorStop(1, SKY_BOTTOM);
   }
 
-  /** Draw the Match's current Round and the HUD. Reads state only; never changes it. */
-  draw(match: MatchView): void {
-    const { round, players } = match;
-    const { terrain, tanks, phase } = round;
+  /** Draw only the sky, for when no Match is in play (the Setup screen). */
+  drawBackdrop(): void {
     this.context.fillStyle = this.sky;
     this.context.fillRect(0, 0, this.canvas.width, this.canvas.height);
+  }
+
+  /** Draw the Match's current Round and the HUD. Reads state only; never changes it. */
+  draw(match: Match): void {
+    const { round, players } = match;
+    const { terrain, tanks, phase } = round;
+    this.drawBackdrop();
     if (this.builtTerrain !== terrain || this.builtVersion !== terrain.version) {
       this.rebuildTerrain(terrain);
     }

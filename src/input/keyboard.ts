@@ -18,9 +18,19 @@ function aimActionFor(event: KeyboardEvent): RoundAction | null {
   }
 }
 
+const FORM_CONTROLS = new Set(["INPUT", "SELECT", "TEXTAREA", "BUTTON"]);
+
+/** True when the key press belongs to a focused form control (e.g. on the Setup screen). */
+function isFormControl(target: EventTarget | null): boolean {
+  const tagName = (target as { tagName?: unknown } | null)?.tagName;
+  return typeof tagName === "string" && FORM_CONTROLS.has(tagName);
+}
+
 /**
  * Translate keydown events into Round actions. Each event, including OS auto-repeat,
- * is one step, except Space, which fires once per press. Returns a detach function.
+ * is one step, except Space, which fires once per press. Arrow keys and Space are left
+ * alone while a form control has focus, so the overlay screens stay keyboard-usable;
+ * Enter always confirms. Returns a detach function.
  */
 export function attachKeyboard(
   target: Window,
@@ -28,14 +38,15 @@ export function attachKeyboard(
   onConfirm: () => void,
 ): () => void {
   const onKeyDown = (event: KeyboardEvent): void => {
-    if (event.code === "Space" || event.key === " ") {
-      event.preventDefault();
-      if (!event.repeat) onAction({ kind: "fire" });
-      return;
-    }
     if (event.key === "Enter") {
       event.preventDefault();
       onConfirm();
+      return;
+    }
+    if (isFormControl(event.target)) return;
+    if (event.code === "Space" || event.key === " ") {
+      event.preventDefault();
+      if (!event.repeat) onAction({ kind: "fire" });
       return;
     }
     const action = aimActionFor(event);

@@ -33,3 +33,89 @@ body {
 #overlay:empty {
   display: none;
 }
+
+#overlay {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.panel {
+  min-width: 320px;
+  max-width: 90%;
+  padding: 24px 32px;
+  background: rgba(0, 0, 0, 0.75);
+  border: 1px solid #808080;
+  font-family: monospace;
+  font-size: 14px;
+  text-align: center;
+}
+
+.panel h1 {
+  margin: 0 0 16px;
+  font-size: 28px;
+  letter-spacing: 4px;
+}
+
+.panel h2 {
+  margin: 0 0 16px;
+  font-size: 18px;
+}
+
+.panel form {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+}
+
+.panel label {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+}
+
+.panel select,
+.panel input,
+.panel button {
+  font: inherit;
+  color: #fff;
+  background: #202020;
+  border: 1px solid #808080;
+  padding: 4px 8px;
+}
+
+.panel input {
+  width: 5em;
+}
+
+.panel button {
+  margin-top: 8px;
+  padding: 6px 16px;
+  cursor: pointer;
+}
+
+.panel select:focus,
+.panel input:focus,
+.panel button:focus {
+  outline: 2px solid #ffff40;
+  outline-offset: 2px;
+}
+
+.panel table {
+  margin: 0 auto 16px;
+  border-collapse: collapse;
+}
+
+.panel th,
+.panel td {
+  padding: 4px 16px;
+  text-align: left;
+}
+
+.panel .hint {
+  margin: 16px 0 0;
+  color: #c0c0c0;
+  white-space: pre;
+}

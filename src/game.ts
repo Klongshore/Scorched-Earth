@@ -1,14 +1,22 @@
 import { attachKeyboard } from "./input/keyboard";
-import type { MatchView } from "./render/hud";
 import type { Renderer } from "./render/renderer";
 import { MAX_TICKS_PER_FRAME, TICK_SECONDS } from "./sim/constants";
-import { createPlayers } from "./sim/players";
-import { Rng } from "./sim/rng";
-import { Round, type RoundAction } from "./sim/round";
-import type { PlayerKind } from "./sim/types";
+import { Match } from "./sim/match";
+import type { RoundAction } from "./sim/round";
+import {
+  clampRounds,
+  clearOverlay,
+  showRoundResults,
+  showSetup,
+  showStandings,
+  type SetupChoice,
+} from "./ui/screens";
 
 /** Longest wall-clock gap one frame may feed the simulation (e.g. after a background tab). */
 const MAX_FRAME_SECONDS = 0.25;
+
+/** How long the field stays in view after a Round ends before Round results appear. */
+const ROUND_RESULTS_DELAY_SECONDS = 1;
 
 /**
  * Feed one frame's wall-clock time into a fixed-timestep accumulator. Calls `tick` with
@@ -30,24 +38,16 @@ export function advance(
   return Math.min(accumulator, TICK_SECONDS);
 }
 
-/**
- * The screens the app moves between. "setup" and "standings" arrive with the Setup and
- * Final standings screens; until then the app plays one Round after another.
- */
-type Screen = "round" | "roundResults";
-
-/** Until Match exists: two human Players playing a single Round hot-seat. */
-const PLAYER_KINDS: readonly PlayerKind[] = ["human", "human"];
-
-function startMatch(seed: number): MatchView {
-  const players = createPlayers(PLAYER_KINDS);
-  return { players, totalRounds: 1, round: new Round(1, players, new Rng(seed)) };
-}
+/** The screens the app moves between. */
+type Screen = "setup" | "round" | "roundResults" | "standings";
 
 /** The app controller: owns the screen state, the keyboard and the fixed-timestep loop. */
 export class Game {
-  private screen: Screen = "round";
-  private match: MatchView;
+  private screen: Screen = "setup";
+  private match: Match | null = null;
+  /** Seconds of simulation left before Round results appear, counted once the Round is over. */
+  private resultsDelay = ROUND_RESULTS_DELAY_SECONDS;
+  private submitSetup: (() => void) | null = null;
   private accumulator = 0;
   private lastFrame: number | null = null;
   private detachKeyboard: (() => void) | null = null;
@@ -55,16 +55,17 @@ export class Game {
   constructor(
     private readonly window: Window,
     private readonly renderer: Renderer,
-  ) {
-    this.match = this.newMatch();
-  }
+    private readonly overlay: HTMLElement,
+  ) {}
 
   start(): void {
-    this.detachKeyboard ??= attachKeyboard(
+    if (this.detachKeyboard) return;
+    this.detachKeyboard = attachKeyboard(
       this.window,
       (action) => this.onAction(action),
       () => this.onConfirm(),
     );
+    this.showSetup();
     this.window.requestAnimationFrame(this.frame);
   }
 
@@ -73,19 +74,69 @@ export class Game {
     this.detachKeyboard = null;
   }
 
+  private showSetup(): void {
+    this.screen = "setup";
+    this.match = null;
+    this.submitSetup = showSetup(this.overlay, (choice) => this.startMatch(choice));
+  }
+
   /** Seeding a new Match is the only place wall-clock time touches the simulation. */
-  private newMatch(): MatchView {
-    return startMatch(Date.now() >>> 0);
+  private startMatch(choice: SetupChoice): void {
+    if (this.screen !== "setup") return;
+    this.submitSetup = null;
+    this.match = new Match({
+      playerKinds: choice.playerKinds,
+      rounds: clampRounds(choice.rounds),
+      seed: Date.now() >>> 0,
+    });
+    this.beginRound();
+  }
+
+  private beginRound(): void {
+    this.screen = "round";
+    this.resultsDelay = ROUND_RESULTS_DELAY_SECONDS;
+    this.accumulator = 0;
+    clearOverlay(this.overlay);
   }
 
   private onAction(action: RoundAction): void {
-    if (this.screen === "round") this.match.round.act(action);
+    if (this.screen === "round") this.match?.round.act(action);
   }
 
   private onConfirm(): void {
-    if (this.screen === "roundResults") {
-      this.match = this.newMatch();
-      this.screen = "round";
+    const match = this.match;
+    switch (this.screen) {
+      case "setup":
+        this.submitSetup?.();
+        break;
+      case "roundResults":
+        if (!match) break;
+        if (match.isOver()) {
+          this.screen = "standings";
+          showStandings(this.overlay, match);
+        } else {
+          match.startNextRound();
+          this.beginRound();
+        }
+        break;
+      case "standings":
+        this.showSetup();
+        break;
+      case "round":
+        break;
+    }
+  }
+
+  private tick(match: Match, dt: number): void {
+    const { round } = match;
+    round.tick(dt);
+    if (this.screen !== "round" || round.phase.kind !== "over") return;
+    if (match.results.length < round.number) match.recordRoundResult();
+    // Keep ticking and drawing for a moment so the final Explosion stays visible.
+    this.resultsDelay -= dt;
+    if (this.resultsDelay <= 0) {
+      this.screen = "roundResults";
+      showRoundResults(this.overlay, match);
     }
   }
 
@@ -93,10 +144,13 @@ export class Game {
     if (this.detachKeyboard === null) return; // stopped
     const frameSeconds = this.lastFrame === null ? 0 : (now - this.lastFrame) / 1000;
     this.lastFrame = now;
-    const { round } = this.match;
-    this.accumulator = advance(this.accumulator, frameSeconds, (dt) => round.tick(dt));
-    if (this.screen === "round" && round.phase.kind === "over") this.screen = "roundResults";
-    this.renderer.draw(this.match);
+    const match = this.match;
+    if (match) {
+      this.accumulator = advance(this.accumulator, frameSeconds, (dt) => this.tick(match, dt));
+      this.renderer.draw(match);
+    } else {
+      this.renderer.drawBackdrop();
+    }
     this.window.requestAnimationFrame(this.frame);
   };
 }
