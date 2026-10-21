@@ -1,13 +1,14 @@
-import type { Player, PlayerKind } from "./types";
+import type { Player, PlayerSetup } from "./types";
 
 export const PLAYER_COLORS = ["#ff5050", "#50a0ff"] as const;
 
-export function createPlayers(kinds: readonly PlayerKind[]): Player[] {
-  return kinds.map((kind, id) => ({
+/** One Player per setup, in order; a Computer Player takes its setup's Personality. */
+export function createPlayers(setups: readonly PlayerSetup[]): Player[] {
+  return setups.map((setup, id) => ({
     id,
     name: `Player ${id + 1}`,
     color: PLAYER_COLORS[id] ?? "#ffffff",
-    kind,
-    personality: kind === "computer" ? "moron" : null,
+    kind: setup.kind,
+    personality: setup.kind === "computer" ? setup.personality : null,
   }));
 }

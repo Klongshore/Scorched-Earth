@@ -2,9 +2,13 @@ import { describe, expect, it } from "vitest";
 import { TICK_SECONDS } from "./constants";
 import { Match, type MatchSetup } from "./match";
 import type { RoundResult } from "./round";
+import type { PlayerSetup } from "./types";
+
+const human: PlayerSetup = { kind: "human" };
+const moron: PlayerSetup = { kind: "computer", personality: "moron" };
 
 function newMatch(overrides: Partial<MatchSetup> = {}): Match {
-  return new Match({ playerKinds: ["human", "human"], rounds: 3, seed: 1, ...overrides });
+  return new Match({ players: [human, human], rounds: 3, seed: 1, ...overrides });
 }
 
 /** Force the current Round to end with `result`, record it, and start the next Round if any. */
@@ -19,13 +23,22 @@ const draw: RoundResult = { kind: "draw" };
 
 describe("Match", () => {
   it("creates the Players and Round 1", () => {
-    const match = newMatch({ playerKinds: ["human", "computer"] });
+    const match = newMatch({ players: [human, moron] });
     expect(match.players.map((p) => p.kind)).toEqual(["human", "computer"]);
+    expect(match.players.map((p) => p.personality)).toEqual([null, "moron"]);
     expect(match.totalRounds).toBe(3);
     expect(match.roundWins).toEqual([0, 0]);
     expect(match.results).toEqual([]);
     expect(match.round.number).toBe(1);
     expect(match.isOver()).toBe(false);
+  });
+
+  it("creates one Player per setup, in order, with that setup's kind and Personality", () => {
+    const match = newMatch({ players: [moron, human] });
+    expect(match.players.map((p) => [p.id, p.name, p.kind, p.personality])).toEqual([
+      [0, "Player 1", "computer", "moron"],
+      [1, "Player 2", "human", null],
+    ]);
   });
 
   it("rejects Round counts outside 1..99", () => {
@@ -131,7 +144,7 @@ describe("Match", () => {
 
 describe("Match integration", () => {
   it("runs a Computer-vs-Computer, 3-Round Match to completion purely by ticking", () => {
-    const match = new Match({ playerKinds: ["computer", "computer"], rounds: 3, seed: 2024 });
+    const match = new Match({ players: [moron, moron], rounds: 3, seed: 2024 });
     const maxTicks = 3 * 200_000;
     let ticks = 0;
     while (!match.isOver()) {

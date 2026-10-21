@@ -5,7 +5,10 @@ import { createPlayers } from "./players";
 import { Rng } from "./rng";
 import { Round } from "./round";
 import { powerCap } from "./tank";
-import type { Tank } from "./types";
+import type { PlayerSetup, Tank } from "./types";
+
+const HUMAN: PlayerSetup = { kind: "human" };
+const MORON: PlayerSetup = { kind: "computer", personality: "moron" };
 
 function tankWithHealth(health: number): Tank {
   return { playerId: 0, x: 100, y: 400, angle: 90, power: 500, health };
@@ -41,12 +44,12 @@ describe("Moron Personality", () => {
 describe("Computer Turn", () => {
   it("shows its chosen aim during a 3-second pause, then fires", () => {
     const seed = 5;
-    const round = new Round(1, createPlayers(["computer", "computer"]), new Rng(seed));
+    const round = new Round(1, createPlayers([MORON, MORON]), new Rng(seed));
 
     // A human Round with the same seed consumes the Rng identically up to the Computer's aim,
     // so the next chooseAim on that Rng is the aim the Computer must have chosen.
     const rng = new Rng(seed);
-    const twin = new Round(1, createPlayers(["human", "human"]), rng);
+    const twin = new Round(1, createPlayers([HUMAN, HUMAN]), rng);
     const expected = chooseAim("moron", twin.currentTank(), rng);
 
     const tank = round.currentTank();
@@ -69,7 +72,7 @@ describe("Computer Turn", () => {
   });
 
   it("is not thinking on a human Turn", () => {
-    const round = new Round(1, createPlayers(["human", "human"]), new Rng(1));
+    const round = new Round(1, createPlayers([HUMAN, HUMAN]), new Rng(1));
     expect(round.isComputerThinking).toBe(false);
   });
 });

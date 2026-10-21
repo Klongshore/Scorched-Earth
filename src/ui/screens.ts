@@ -1,15 +1,40 @@
 import { DEFAULT_ROUNDS, MAX_ROUNDS, MIN_ROUNDS } from "../sim/constants";
 import type { Match } from "../sim/match";
 import { createPlayers } from "../sim/players";
-import type { Player, PlayerKind } from "../sim/types";
+import type { Player, PlayerSetup } from "../sim/types";
 
 /** What the Setup screen chooses; the Game adds the seed to make a MatchSetup. */
 export interface SetupChoice {
-  readonly playerKinds: readonly PlayerKind[];
+  readonly players: readonly PlayerSetup[]; // one per Player, in order
   readonly rounds: number;
 }
 
-export const DEFAULT_PLAYER_KINDS: readonly PlayerKind[] = ["human", "computer"];
+/** The choices each Player's dropdown offers, in display order. */
+export const PLAYER_OPTIONS: readonly { readonly label: string; readonly setup: PlayerSetup }[] = [
+  { label: "Human", setup: { kind: "human" } },
+  { label: "Moron", setup: { kind: "computer", personality: "moron" } },
+];
+
+export const DEFAULT_PLAYERS_SETUP: readonly PlayerSetup[] = [
+  { kind: "human" },
+  { kind: "computer", personality: "moron" },
+];
+
+/** The dropdown value for a setup: "human", or the Computer Player's Personality. */
+export function optionValue(setup: PlayerSetup): string {
+  return setup.kind === "human" ? "human" : setup.personality;
+}
+
+function setupFromOption(value: string): PlayerSetup {
+  const option = PLAYER_OPTIONS.find((o) => optionValue(o.setup) === value);
+  if (!option) throw new Error(`Unknown Player choice: ${value}`);
+  return option.setup;
+}
+
+/** Turn the form's dropdown values (one per Player, in order) and Rounds box into a choice. */
+export function setupChoiceFrom(optionValues: readonly string[], rounds: string): SetupChoice {
+  return { players: optionValues.map(setupFromOption), rounds: clampRounds(rounds) };
+}
 
 const CONTROLS_REMINDER = "←/→ Angle   ↑/↓ Power (Shift ×10)   Space Fire";
 
@@ -57,15 +82,16 @@ export function showSetup(
 ): () => void {
   const form = el("form");
   form.noValidate = true; // invalid Round counts are clamped, not rejected
-  const players = createPlayers(DEFAULT_PLAYER_KINDS);
+  const players = createPlayers(DEFAULT_PLAYERS_SETUP);
   const selects = players.map((player, i) => {
     const label = el("label");
     const select = el("select");
     select.name = `player${i + 1}`;
-    for (const kind of ["human", "computer"] as const) {
-      const option = el("option", kind === "human" ? "Human" : "Computer");
-      option.value = kind;
-      option.selected = kind === DEFAULT_PLAYER_KINDS[i];
+    const defaultSetup = DEFAULT_PLAYERS_SETUP[i];
+    for (const { label: text, setup } of PLAYER_OPTIONS) {
+      const option = el("option", text);
+      option.value = optionValue(setup);
+      option.selected = defaultSetup !== undefined && option.value === optionValue(defaultSetup);
       select.append(option);
     }
     label.append(playerName(player), select);
@@ -95,9 +121,12 @@ export function showSetup(
   const submit = (): void => {
     if (started) return;
     started = true;
-    const value = clampRounds(rounds.value);
-    rounds.value = String(value);
-    onStart({ playerKinds: selects.map((s) => s.value as PlayerKind), rounds: value });
+    const choice = setupChoiceFrom(
+      selects.map((s) => s.value),
+      rounds.value,
+    );
+    rounds.value = String(choice.rounds);
+    onStart(choice);
   };
   form.addEventListener("submit", (event) => {
     event.preventDefault();

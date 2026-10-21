@@ -12,12 +12,15 @@ import { createPlayers } from "./players";
 import { Rng } from "./rng";
 import { Round, type RoundAction } from "./round";
 import { isSupported } from "./tank";
-import type { Tank } from "./types";
+import type { PlayerSetup, Tank } from "./types";
+
+const HUMAN: PlayerSetup = { kind: "human" };
+const MORON: PlayerSetup = { kind: "computer", personality: "moron" };
 
 const GROUND = 400;
 
 function newRound(seed = 1): Round {
-  return new Round(1, createPlayers(["human", "human"]), new Rng(seed));
+  return new Round(1, createPlayers([HUMAN, HUMAN]), new Rng(seed));
 }
 
 function runUntil(round: Round, predicate: (r: Round) => boolean, maxTicks = 20000): void {
@@ -191,7 +194,7 @@ describe("Round", () => {
   });
 
   it("lets a Computer Player fire after its think time", () => {
-    const round = new Round(1, createPlayers(["computer", "computer"]), new Rng(3));
+    const round = new Round(1, createPlayers([MORON, MORON]), new Rng(3));
     expect(round.phase.kind).toBe("aiming");
     if (round.phase.kind === "aiming") expect(round.phase.thinkRemaining).not.toBeNull();
     round.act({ kind: "fire" });

@@ -10,7 +10,11 @@ function text(match: Match): string {
 
 describe("aimLine (HUD line 1)", () => {
   it("shows the current Player's name, Angle and Power while aiming", () => {
-    const match = new Match({ playerKinds: ["human", "human"], rounds: 3, seed: 1 });
+    const match = new Match({
+      players: [{ kind: "human" }, { kind: "human" }],
+      rounds: 3,
+      seed: 1,
+    });
     const { round } = match;
     const tank = round.currentTank();
     const line = text(match);
@@ -20,7 +24,11 @@ describe("aimLine (HUD line 1)", () => {
   });
 
   it("drops the Turn details once the Round is over", () => {
-    const match = new Match({ playerKinds: ["human", "human"], rounds: 3, seed: 1 });
+    const match = new Match({
+      players: [{ kind: "human" }, { kind: "human" }],
+      rounds: 3,
+      seed: 1,
+    });
     match.round.phase = { kind: "over", result: { kind: "draw" } };
     const line = text(match);
     expect(line).not.toContain("Angle");

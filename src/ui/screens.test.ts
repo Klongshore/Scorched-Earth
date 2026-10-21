@@ -1,6 +1,56 @@
 import { describe, expect, it } from "vitest";
 import { DEFAULT_ROUNDS, MAX_ROUNDS, MIN_ROUNDS } from "../sim/constants";
-import { clampRounds } from "./screens";
+import { createPlayers } from "../sim/players";
+import {
+  DEFAULT_PLAYERS_SETUP,
+  PLAYER_OPTIONS,
+  clampRounds,
+  optionValue,
+  setupChoiceFrom,
+} from "./screens";
+
+describe("Player choices on the Setup screen", () => {
+  it("offers Human and Moron", () => {
+    expect(PLAYER_OPTIONS.map((o) => o.label)).toEqual(["Human", "Moron"]);
+    expect(PLAYER_OPTIONS.map((o) => o.setup)).toEqual([
+      { kind: "human" },
+      { kind: "computer", personality: "moron" },
+    ]);
+  });
+
+  it("gives every option a distinct value", () => {
+    const values = PLAYER_OPTIONS.map((o) => optionValue(o.setup));
+    expect(new Set(values).size).toBe(values.length);
+  });
+
+  it("defaults to 2 Players: Player 1 Human and Player 2 Moron", () => {
+    expect(DEFAULT_PLAYERS_SETUP).toEqual([
+      { kind: "human" },
+      { kind: "computer", personality: "moron" },
+    ]);
+  });
+
+  it("reports one choice per Player, in order, with the Round count clamped", () => {
+    const moron = optionValue({ kind: "computer", personality: "moron" });
+    const human = optionValue({ kind: "human" });
+    expect(setupChoiceFrom([moron, human], "100")).toEqual({
+      players: [{ kind: "computer", personality: "moron" }, { kind: "human" }],
+      rounds: MAX_ROUNDS,
+    });
+  });
+
+  it("rejects an option value it does not offer", () => {
+    expect(() => setupChoiceFrom(["computer"], "3")).toThrow();
+  });
+
+  it("gives Humans no Personality and every Computer Player one", () => {
+    const players = createPlayers(PLAYER_OPTIONS.map((o) => o.setup));
+    for (const player of players) {
+      if (player.kind === "human") expect(player.personality).toBeNull();
+      else expect(player.personality).not.toBeNull();
+    }
+  });
+});
 
 describe("clampRounds", () => {
   it("keeps valid Round counts", () => {

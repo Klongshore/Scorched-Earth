@@ -2,10 +2,10 @@ import { MAX_ROUNDS, MIN_ROUNDS } from "./constants";
 import { createPlayers } from "./players";
 import { Rng } from "./rng";
 import { Round, type RoundResult } from "./round";
-import type { Player, PlayerKind } from "./types";
+import type { Player, PlayerSetup } from "./types";
 
 export interface MatchSetup {
-  readonly playerKinds: readonly PlayerKind[]; // length 2 for now
+  readonly players: readonly PlayerSetup[]; // one per Player, length 2 for now
   readonly rounds: number; // MIN_ROUNDS..MAX_ROUNDS
   readonly seed: number;
 }
@@ -26,7 +26,7 @@ export class Match {
       throw new Error(`Rounds must be an integer in ${MIN_ROUNDS}..${MAX_ROUNDS}, got ${rounds}`);
     }
     this.rng = new Rng(setup.seed);
-    this.players = createPlayers(setup.playerKinds);
+    this.players = createPlayers(setup.players);
     this.totalRounds = rounds;
     this.roundWins = this.players.map(() => 0);
     this.round = new Round(1, this.players, this.rng);

@@ -1,6 +1,9 @@
 export type PlayerKind = "human" | "computer";
 export type PersonalityName = "moron";
 
+/** What the Setup screen asks for, one per Player. */
+export type PlayerSetup = { kind: "human" } | { kind: "computer"; personality: PersonalityName };
+
 export interface Player {
   readonly id: number; // index into Match.players
   readonly name: string; // "Player 1", "Player 2"
