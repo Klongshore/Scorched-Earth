@@ -96,7 +96,9 @@ export class Round {
       case "aiming":
         if (phase.thinkRemaining !== null) {
           phase.thinkRemaining -= dt;
-          if (phase.thinkRemaining <= 0) this.fire();
+          // Within half a tick of zero counts as done: summing dt drifts, and testing <= 0
+          // would sometimes hold the pause one tick longer than COMPUTER_THINK_SECONDS.
+          if (phase.thinkRemaining < dt / 2) this.fire();
         }
         break;
       case "flying": {

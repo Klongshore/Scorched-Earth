@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { MAX_ANGLE, MAX_HEALTH, MIN_ANGLE, TICK_SECONDS } from "./constants";
+import {
+  COMPUTER_THINK_SECONDS,
+  MAX_ANGLE,
+  MAX_HEALTH,
+  MIN_ANGLE,
+  TICK_SECONDS,
+} from "./constants";
 import { chooseAim } from "./personalities";
 import { createPlayers } from "./players";
 import { Rng } from "./rng";
@@ -42,7 +48,7 @@ describe("Moron Personality", () => {
 });
 
 describe("Computer Turn", () => {
-  it("shows its chosen aim during a 3-second pause, then fires", () => {
+  it("shows its chosen aim during a COMPUTER_THINK_SECONDS pause, then fires", () => {
     const seed = 5;
     const round = new Round(1, createPlayers([MORON, MORON]), new Rng(seed));
 
@@ -54,7 +60,7 @@ describe("Computer Turn", () => {
 
     const tank = round.currentTank();
     expect({ angle: tank.angle, power: tank.power }).toEqual(expected);
-    expect(round.phase).toEqual({ kind: "aiming", thinkRemaining: 3 });
+    expect(round.phase).toEqual({ kind: "aiming", thinkRemaining: COMPUTER_THINK_SECONDS });
     expect(round.isComputerThinking).toBe(true);
 
     // Human input is ignored during the pause.
@@ -63,9 +69,9 @@ describe("Computer Turn", () => {
     expect(tank.angle).toBe(expected.angle);
     expect(round.phase.kind).toBe("aiming");
 
-    for (let i = 0; i < 179; i++) round.tick(TICK_SECONDS);
+    const pauseTicks = Math.round(COMPUTER_THINK_SECONDS / TICK_SECONDS);
+    for (let i = 0; i < pauseTicks - 1; i++) round.tick(TICK_SECONDS);
     expect(round.phase.kind).toBe("aiming");
-    round.tick(TICK_SECONDS);
     round.tick(TICK_SECONDS);
     expect(round.phase.kind).toBe("flying");
     expect(round.isComputerThinking).toBe(false);
