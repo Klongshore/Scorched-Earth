@@ -90,4 +90,26 @@ export class Terrain {
     }
     if (changed) this.version++;
   }
+
+  /**
+   * One Settling pass: every solid cell with air directly below moves down one row.
+   * Each column is scanned from row height-2 up to row 0, so a whole floating chunk drops 1 px per pass.
+   * Returns true if any cell moved.
+   */
+  settlePass(): boolean {
+    const w = this.width;
+    let moved = false;
+    for (let x = 0; x < w; x++) {
+      for (let y = this.height - 2; y >= 0; y--) {
+        const index = y * w + x;
+        if (this.cells[index] === 1 && this.cells[index + w] === 0) {
+          this.cells[index] = 0;
+          this.cells[index + w] = 1;
+          moved = true;
+        }
+      }
+    }
+    if (moved) this.version++;
+    return moved;
+  }
 }

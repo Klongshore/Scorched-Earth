@@ -11,6 +11,7 @@ import {
 import { detonate } from "./sim/explosion";
 import { placeTanks } from "./sim/placement";
 import { createPlayers } from "./sim/players";
+import { settleTick } from "./sim/settling";
 import { launch, stepProjectile } from "./sim/projectile";
 import { Rng } from "./sim/rng";
 import type { Explosion, Projectile } from "./sim/types";
@@ -39,12 +40,14 @@ const wind = rng.range(-WIND_MAX, WIND_MAX);
 // Temporary dev driver: Space fires the first Tank, Left/Right adjust its Angle.
 let projectile: Projectile | null = null;
 let explosion: Explosion | null = null;
+let settling = false;
 window.addEventListener("keydown", (e) => {
   const tank = tanks[0];
   if (!tank) return;
   if (e.key === "ArrowLeft") tank.angle = Math.min(180, tank.angle + 1);
   else if (e.key === "ArrowRight") tank.angle = Math.max(0, tank.angle - 1);
-  else if (e.key === " " && !projectile && !explosion) projectile = launch(tank, BABY_MISSILE);
+  else if (e.key === " " && !projectile && !explosion && !settling)
+    projectile = launch(tank, BABY_MISSILE);
 });
 
 const renderer = new Renderer(canvas);
@@ -64,7 +67,12 @@ function frame(now: number): void {
       if (outcome.kind !== "flying") projectile = null;
     } else if (explosion) {
       explosion.elapsed += TICK_SECONDS;
-      if (explosion.elapsed >= EXPLOSION_SECONDS) explosion = null;
+      if (explosion.elapsed >= EXPLOSION_SECONDS) {
+        explosion = null;
+        settling = true;
+      }
+    } else if (settling) {
+      settling = settleTick(terrain, tanks);
     }
   }
   renderer.draw(terrain, tanks, players, projectile, explosion);

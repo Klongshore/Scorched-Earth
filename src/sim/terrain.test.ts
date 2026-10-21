@@ -85,6 +85,43 @@ describe("Terrain", () => {
   });
 });
 
+describe("Terrain.settlePass", () => {
+  it("drops a single floating cell to the floor, then reports no movement", () => {
+    // The floor row y = 20 is the bottom row, so it cannot fall itself.
+    const t = new Terrain(10, 21);
+    t.set(5, 10, true);
+    for (let x = 0; x < 10; x++) t.set(x, 20, true);
+    for (let i = 0; i < 9; i++) expect(t.settlePass()).toBe(true);
+    expect(t.isSolid(5, 19)).toBe(true);
+    expect(t.isSolid(5, 18)).toBe(false);
+    const version = t.version;
+    expect(t.settlePass()).toBe(false);
+    expect(t.version).toBe(version);
+  });
+
+  it("drops a whole floating chunk one pixel per pass", () => {
+    const t = new Terrain(4, 20);
+    for (let y = 5; y < 8; y++) t.set(1, y, true);
+    expect(t.settlePass()).toBe(true);
+    expect([5, 6, 7, 8].map((y) => t.isSolid(1, y))).toEqual([false, true, true, true]);
+  });
+
+  it("lets an overhang fall until it rests on the dirt below", () => {
+    const t = flat(400);
+    // A 20x5 block floating at rows 300..304, with air underneath down to the ground at 400.
+    for (let y = 300; y < 305; y++) for (let x = 100; x < 120; x++) t.set(x, y, true);
+    let passes = 0;
+    while (t.settlePass()) passes++;
+    expect(passes).toBe(95);
+    for (let x = 100; x < 120; x++) {
+      expect(t.surfaceY(x)).toBe(395);
+      for (let y = 395; y < FIELD_HEIGHT; y++) expect(t.isSolid(x, y)).toBe(true);
+    }
+    expect(t.surfaceY(99)).toBe(400);
+    expect(t.surfaceY(120)).toBe(400);
+  });
+});
+
 describe("generateHills", () => {
   it("is deterministic per seed and differs between seeds", () => {
     const a = generateHills(new Rng(7), FIELD_WIDTH, FIELD_HEIGHT);
