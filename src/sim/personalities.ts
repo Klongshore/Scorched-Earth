@@ -6,6 +6,11 @@ import {
   SHOOTER_MAX_ANGLE,
   SHOOTER_MIN_ANGLE,
   SHOOTER_POWER_ERROR,
+  TOSSER_ANGLE,
+  TOSSER_FIRST_POWER_ERROR,
+  TOSSER_LOST_FACTOR,
+  TOSSER_MAX_FACTOR,
+  TOSSER_MIN_FACTOR,
 } from "./constants";
 import type { Rng } from "./rng";
 import { isAlive, powerCap } from "./tank";
@@ -16,22 +21,27 @@ export interface Aim {
   power: number;
 }
 
+/** Where a Computer Player's last Projectile ended up. */
+export type Landing = { kind: "hit"; x: number } | { kind: "lost"; side: "left" | "right" };
+
 /**
  * What a Computer Player remembers between its Turns within one Round. Each Round starts
  * a fresh one, because Tanks are recreated every Round.
  */
 export interface ComputerMemory {
   targetId: number | null; // playerId of the Target
+  lastAim: Aim | null; // the Tosser's last Angle and Power at this Target
+  lastLanding: Landing | null;
 }
 
 export function newComputerMemory(): ComputerMemory {
-  return { targetId: null };
+  return { targetId: null, lastAim: null, lastLanding: null };
 }
 
 /**
  * Keep the remembered Target while its Tank is alive; otherwise pick a random living
- * opponent with rng and remember it. Never called once `self` is the only living Tank:
- * the Round has already ended.
+ * opponent with rng, remember it, and forget the aim and landing at the old one. Never
+ * called once `self` is the only living Tank: the Round has already ended.
  */
 export function chooseTarget(
   memory: ComputerMemory,
@@ -46,6 +56,8 @@ export function chooseTarget(
   if (opponents.length === 0) throw new Error(`Player ${self.playerId} has no living opponent`);
   const target = opponents[rng.int(0, opponents.length - 1)] as Tank;
   memory.targetId = target.playerId;
+  memory.lastAim = null;
+  memory.lastLanding = null;
   return target;
 }
 
@@ -65,7 +77,22 @@ export function chooseAim(
       return { angle: rng.int(MIN_ANGLE, MAX_ANGLE), power: rng.int(0, powerCap(self)) };
     case "shooter":
       return shooterAim(self, chooseTarget(memory, self, tanks, rng), rng);
+    case "tosser": {
+      const aim = tosserAim(self, chooseTarget(memory, self, tanks, rng), memory, rng);
+      memory.lastAim = aim;
+      return aim;
+    }
   }
+}
+
+/** Clamp a Power to MIN_POWER..the Tank's Health-based cap. */
+function capped(self: Tank, power: number): number {
+  return Math.min(powerCap(self), Math.max(MIN_POWER, power));
+}
+
+/** `base` degrees above the horizontal, toward the Target: 0° points right. */
+function towards(self: Tank, target: Tank, base: number): number {
+  return target.x >= self.x ? base : 180 - base;
 }
 
 /**
@@ -78,11 +105,43 @@ export function shooterAim(
   rng: Rng,
   powerError: number = SHOOTER_POWER_ERROR,
 ): Aim {
-  const base = rng.int(SHOOTER_MIN_ANGLE, SHOOTER_MAX_ANGLE);
-  // Angle 0° points right, so a Target on the left needs 180° minus the base.
-  const angle = target.x >= self.x ? base : 180 - base;
-  const cap = powerCap(self);
-  const ideal = powerToHit(self, target, angle) ?? cap;
+  const angle = towards(self, target, rng.int(SHOOTER_MIN_ANGLE, SHOOTER_MAX_ANGLE));
+  const ideal = powerToHit(self, target, angle) ?? powerCap(self);
   const power = Math.round(ideal * (1 + rng.range(-powerError, powerError)));
-  return { angle, power: Math.min(cap, Math.max(MIN_POWER, power)) };
+  return { angle, power: capped(self, power) };
+}
+
+/**
+ * The Tosser's aim at `target`. Its first Turn at a Target is a rough guess at Shooter's
+ * Power; later Turns keep the Angle and correct the Power from where the last Projectile
+ * ended up. It never models Wind: the corrections absorb it.
+ */
+function tosserAim(self: Tank, target: Tank, memory: ComputerMemory, rng: Rng): Aim {
+  const { lastAim, lastLanding } = memory;
+  if (!lastAim || !lastLanding) {
+    const angle = towards(self, target, TOSSER_ANGLE);
+    const ideal = powerToHit(self, target, angle) ?? powerCap(self);
+    const error = rng.range(-TOSSER_FIRST_POWER_ERROR, TOSSER_FIRST_POWER_ERROR);
+    return { angle, power: capped(self, Math.round(ideal * (1 + error))) };
+  }
+  const factor = Math.min(
+    TOSSER_MAX_FACTOR,
+    Math.max(TOSSER_MIN_FACTOR, correction(self, target, lastLanding)),
+  );
+  return { angle: lastAim.angle, power: capped(self, Math.round(lastAim.power * factor)) };
+}
+
+/** How much to scale the Power by, from where the last Projectile ended up, before clamping. */
+function correction(self: Tank, target: Tank, landing: Landing): number {
+  const direction = target.x >= self.x ? 1 : -1;
+  if (landing.kind === "lost") {
+    const targetSide = direction > 0 ? "right" : "left";
+    return landing.side === targetSide ? TOSSER_LOST_FACTOR : TOSSER_MAX_FACTOR;
+  }
+  // On flat ground range grows with speed², hence the square root. Measured horizontally
+  // from the Tosser, in the Target's direction: a hill that stops it short counts as short.
+  const want = Math.abs(target.x - self.x);
+  const got = (landing.x - self.x) * direction;
+  if (got <= 0) return TOSSER_MAX_FACTOR; // landed behind the Tosser
+  return Math.sqrt(want / got);
 }

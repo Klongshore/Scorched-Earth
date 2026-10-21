@@ -356,3 +356,77 @@ describe("Round Targets", () => {
     }
   });
 });
+
+describe("Round Landings", () => {
+  const TOSSER: PlayerSetup = { kind: "computer", personality: "tosser" };
+
+  /** A Round of two Computer Players on flat Terrain at Wind 0, the firer at `firerX`. */
+  function computerScenario(firerX: number, seed = 3) {
+    const round = new Round(1, createPlayers([MORON, MORON]), new Rng(seed));
+    round.wind = 0;
+    round.terrain.flatten(0, FIELD_WIDTH - 1, GROUND);
+    const firer = round.currentTank();
+    const other = round.tanks.find((t) => t !== firer) as Tank;
+    firer.x = firerX;
+    firer.y = GROUND;
+    other.x = firerX < FIELD_WIDTH / 2 ? FIELD_WIDTH - 40 : 40;
+    other.y = GROUND;
+    return { round, firer };
+  }
+
+  /** Override the Computer Player's aim during its pause, then fly until the Projectile ends. */
+  function fireAndFinish(round: Round, firer: Tank, angle: number, power: number): void {
+    firer.angle = angle;
+    firer.power = power;
+    runUntil(round, (r) => r.phase.kind === "flying");
+    runUntil(round, (r) => r.phase.kind !== "flying");
+  }
+
+  it("records where a Computer Player's Projectile hit", () => {
+    const { round, firer } = computerScenario(200);
+    fireAndFinish(round, firer, 90, 100);
+    const landing = round.memoryOf(firer.playerId)?.lastLanding;
+    expect(landing?.kind).toBe("hit");
+    expect(landing?.kind === "hit" && landing.x).toBeCloseTo(200, 5);
+  });
+
+  it("records the side a lost Projectile left by", () => {
+    const right = computerScenario(100);
+    fireAndFinish(right.round, right.firer, 20, 1000);
+    expect(right.round.memoryOf(right.firer.playerId)?.lastLanding).toEqual({
+      kind: "lost",
+      side: "right",
+    });
+
+    const left = computerScenario(540);
+    fireAndFinish(left.round, left.firer, 160, 1000);
+    expect(left.round.memoryOf(left.firer.playerId)?.lastLanding).toEqual({
+      kind: "lost",
+      side: "left",
+    });
+  });
+
+  it("keeps no memory for a Human", () => {
+    const round = new Round(1, createPlayers([HUMAN, TOSSER]), new Rng(1));
+    expect(round.memoryOf(0)).toBeNull();
+  });
+
+  it("starts every Round with no Tosser aim or landing", () => {
+    const players = createPlayers([TOSSER, TOSSER, TOSSER]);
+    const rng = new Rng(8);
+    const first = new Round(1, players, rng);
+    for (let i = 0; i < 3; i++) {
+      runUntil(first, (r) => r.phase.kind === "flying");
+      runUntil(first, (r) => r.phase.kind === "aiming" || r.phase.kind === "over");
+      if (first.phase.kind === "over") break;
+    }
+    const remembered = [0, 1, 2].map((id) => first.memoryOf(id));
+    expect(remembered.some((m) => m?.lastAim && m.lastLanding)).toBe(true);
+
+    const second = new Round(2, players, rng);
+    for (const id of [0, 1, 2]) {
+      if (id === second.currentPlayerId) continue;
+      expect(second.memoryOf(id)).toEqual({ targetId: null, lastAim: null, lastLanding: null });
+    }
+  });
+});

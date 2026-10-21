@@ -11,14 +11,22 @@ import {
   SHOOTER_MIN_ANGLE,
   SHOOTER_POWER_ERROR,
   TICK_SECONDS,
+  TOSSER_ANGLE,
+  TOSSER_FIRST_POWER_ERROR,
+  TOSSER_LOST_FACTOR,
+  TOSSER_MAX_FACTOR,
+  TOSSER_MIN_FACTOR,
 } from "./constants";
 import {
   chooseAim,
   chooseTarget,
   newComputerMemory,
   shooterAim,
+  type Aim,
   type ComputerMemory,
+  type Landing,
 } from "./personalities";
+import { powerToHit } from "./aiming";
 import { createPlayers } from "./players";
 import { launch, stepProjectile } from "./projectile";
 import { Rng } from "./rng";
@@ -131,7 +139,7 @@ function fiveTanks(): Tank[] {
 
 describe("chooseTarget", () => {
   it("starts with no Target", () => {
-    expect(newComputerMemory()).toEqual({ targetId: null });
+    expect(newComputerMemory()).toEqual({ targetId: null, lastAim: null, lastLanding: null });
   });
 
   it("picks a living opponent, never itself or a destroyed Tank", () => {
@@ -162,14 +170,19 @@ describe("chooseTarget", () => {
   it("keeps its Target while it is alive, even when another opponent is closer", () => {
     const tanks = fiveTanks();
     const self = tanks[0] as Tank;
-    const memory: ComputerMemory = { targetId: 4 };
+    const memory: ComputerMemory = {
+      targetId: 4,
+      lastAim: { angle: 45, power: 400 },
+      lastLanding: { kind: "hit", x: 250 },
+    };
+    const kept = structuredClone(memory);
     const rng = new Rng(8);
     const twin = new Rng(8);
     for (let turn = 0; turn < 10; turn++) {
       (tanks[4] as Tank).health -= 5;
       expect(chooseTarget(memory, self, tanks, rng).playerId).toBe(4);
     }
-    expect(memory.targetId).toBe(4);
+    expect(memory).toEqual(kept);
     // Keeping the Target draws nothing from the Rng.
     expect(rng.next()).toBe(twin.next());
   });
@@ -179,12 +192,16 @@ describe("chooseTarget", () => {
     for (let i = 0; i < 50; i++) {
       const tanks = fiveTanks();
       const self = tanks[1] as Tank;
-      const memory: ComputerMemory = { targetId: 3 };
+      const memory: ComputerMemory = {
+        targetId: 3,
+        lastAim: { angle: 45, power: 400 },
+        lastLanding: { kind: "hit", x: 250 },
+      };
       (tanks[3] as Tank).health = 0;
       (tanks[0] as Tank).health = 0;
       const target = chooseTarget(memory, self, tanks, rng);
       expect([2, 4]).toContain(target.playerId);
-      expect(memory.targetId).toBe(target.playerId);
+      expect(memory).toEqual({ targetId: target.playerId, lastAim: null, lastLanding: null });
     }
   });
 
@@ -305,5 +322,186 @@ describe("Shooter Personality", () => {
     const before = tanks.map((t) => ({ ...t }));
     chooseAim("shooter", tanks[0] as Tank, tanks, newComputerMemory(), new Rng(3));
     expect(tanks).toEqual(before);
+  });
+});
+
+describe("Tosser Personality", () => {
+  /** A Tosser at `selfX` whose memory already holds the Tank at `targetX` as its Target. */
+  function tosserAt(selfX: number, targetX: number, health = MAX_HEALTH) {
+    const self = tankAt(0, selfX, health);
+    const target = tankAt(1, targetX);
+    const memory: ComputerMemory = { ...newComputerMemory(), targetId: 1 };
+    return { self, target, tanks: [self, target], memory };
+  }
+
+  /** The Power of a later Turn, after firing `lastPower` that ended up as `lastLanding`. */
+  function correctedPower(
+    selfX: number,
+    targetX: number,
+    lastLanding: Landing,
+    lastPower = 400,
+  ): number {
+    const { self, tanks, memory } = tosserAt(selfX, targetX);
+    const angle = targetX >= selfX ? TOSSER_ANGLE : 180 - TOSSER_ANGLE;
+    memory.lastAim = { angle, power: lastPower };
+    memory.lastLanding = lastLanding;
+    const aim = chooseAim("tosser", self, tanks, memory, new Rng(1));
+    expect(aim.angle).toBe(angle);
+    return aim.power;
+  }
+
+  it("first aims at TOSSER_ANGLE toward its Target, near Shooter's Power and within the cap", () => {
+    const rng = new Rng(9);
+    for (let i = 0; i < 300; i++) {
+      const selfX = rng.int(20, FIELD_WIDTH - 20);
+      const targetX = rng.int(20, FIELD_WIDTH - 20);
+      if (selfX === targetX) continue;
+      const { self, target, tanks, memory } = tosserAt(selfX, targetX, rng.int(1, MAX_HEALTH));
+      const aim = chooseAim("tosser", self, tanks, memory, rng);
+      const angle = targetX > selfX ? TOSSER_ANGLE : 180 - TOSSER_ANGLE;
+      expect(aim.angle).toBe(angle);
+      expect(Number.isInteger(aim.power)).toBe(true);
+      const ideal = powerToHit(self, target, angle) ?? powerCap(self);
+      expect(aim.power).toBeGreaterThanOrEqual(
+        Math.min(powerCap(self), Math.floor(ideal * (1 - TOSSER_FIRST_POWER_ERROR))),
+      );
+      expect(aim.power).toBeLessThanOrEqual(Math.ceil(ideal * (1 + TOSSER_FIRST_POWER_ERROR)));
+      expect(aim.power).toBeLessThanOrEqual(powerCap(self));
+      expect(memory.lastAim).toEqual(aim);
+    }
+  });
+
+  it("lowers its Power after landing past the Target", () => {
+    const factor = Math.sqrt(300 / 380);
+    expect(correctedPower(100, 400, { kind: "hit", x: 480 })).toBe(Math.round(400 * factor));
+    expect(correctedPower(500, 200, { kind: "hit", x: 120 })).toBe(Math.round(400 * factor));
+  });
+
+  it("raises its Power after landing short of the Target", () => {
+    expect(correctedPower(100, 400, { kind: "hit", x: 300 })).toBe(
+      Math.round(400 * Math.sqrt(300 / 200)),
+    );
+    expect(correctedPower(500, 200, { kind: "hit", x: 350 })).toBe(
+      Math.round(400 * Math.sqrt(300 / 150)),
+    );
+  });
+
+  it("clamps its correction to TOSSER_MIN_FACTOR..TOSSER_MAX_FACTOR", () => {
+    expect(correctedPower(100, 400, { kind: "hit", x: 110 })).toBe(400 * TOSSER_MAX_FACTOR);
+    expect(correctedPower(100, 120, { kind: "hit", x: 600 })).toBe(400 * TOSSER_MIN_FACTOR);
+  });
+
+  it("raises its Power by TOSSER_MAX_FACTOR after landing behind itself", () => {
+    expect(correctedPower(300, 500, { kind: "hit", x: 250 })).toBe(400 * TOSSER_MAX_FACTOR);
+    expect(correctedPower(300, 100, { kind: "hit", x: 330 })).toBe(400 * TOSSER_MAX_FACTOR);
+  });
+
+  it("lowers its Power by TOSSER_LOST_FACTOR after a Projectile lost on the Target's side", () => {
+    expect(correctedPower(100, 400, { kind: "lost", side: "right" })).toBe(
+      400 * TOSSER_LOST_FACTOR,
+    );
+    expect(correctedPower(500, 200, { kind: "lost", side: "left" })).toBe(400 * TOSSER_LOST_FACTOR);
+  });
+
+  it("raises its Power by TOSSER_MAX_FACTOR after a Projectile lost on the other side", () => {
+    expect(correctedPower(100, 400, { kind: "lost", side: "left" })).toBe(400 * TOSSER_MAX_FACTOR);
+    expect(correctedPower(500, 200, { kind: "lost", side: "right" })).toBe(400 * TOSSER_MAX_FACTOR);
+  });
+
+  it("never exceeds its Power cap", () => {
+    const { self, tanks, memory } = tosserAt(100, 400, 30);
+    memory.lastAim = { angle: TOSSER_ANGLE, power: 280 };
+    memory.lastLanding = { kind: "hit", x: 150 };
+    expect(chooseAim("tosser", self, tanks, memory, new Rng(1)).power).toBe(powerCap(self));
+  });
+
+  it("remembers the aim it fires, and draws nothing from the Rng on later Turns", () => {
+    const { self, tanks, memory } = tosserAt(100, 400);
+    memory.lastAim = { angle: TOSSER_ANGLE, power: 400 };
+    memory.lastLanding = { kind: "hit", x: 300 };
+    const rng = new Rng(4);
+    const twin = new Rng(4);
+    const aim = chooseAim("tosser", self, tanks, memory, rng);
+    expect(memory.lastAim).toEqual(aim);
+    expect(rng.next()).toBe(twin.next());
+  });
+
+  it("starts over with a fresh guess when its Target changes", () => {
+    const { self, target, memory } = tosserAt(100, 400);
+    const other = tankAt(2, 550);
+    memory.lastAim = { angle: TOSSER_ANGLE, power: 900 };
+    memory.lastLanding = { kind: "hit", x: 200 };
+    target.health = 0;
+    const aim = chooseAim("tosser", self, [self, target, other], memory, new Rng(2));
+    expect(memory.targetId).toBe(2);
+    expect(memory.lastLanding).toBeNull();
+    const ideal = powerToHit(self, other, TOSSER_ANGLE) as number;
+    expect(Math.abs(aim.power - ideal)).toBeLessThanOrEqual(
+      Math.ceil(ideal * TOSSER_FIRST_POWER_ERROR),
+    );
+  });
+
+  it("does not change its Tank or its Target's", () => {
+    const tanks = fiveTanks();
+    const before = tanks.map((t) => ({ ...t }));
+    chooseAim("tosser", tanks[0] as Tank, tanks, newComputerMemory(), new Rng(3));
+    expect(tanks).toEqual(before);
+  });
+
+  describe("convergence on flat Terrain", () => {
+    const TURNS = 4;
+
+    /** Fly `aim` from `self` with real Projectile steps, without detonating. */
+    function fly(self: Tank, target: Tank, aim: Aim, wind: number) {
+      const terrain = flat();
+      const p = launch({ ...self, ...aim }, BABY_MISSILE);
+      for (let i = 0; i < 10_000; i++) {
+        const outcome = stepProjectile(p, wind, terrain, [self, target], TICK_SECONDS);
+        if (outcome.kind !== "flying") return { outcome, x: p.x };
+      }
+      throw new Error("Projectile never finished");
+    }
+
+    const pairs: [number, number][] = [
+      [60, 300],
+      [100, 520],
+      [300, 560],
+      [580, 120],
+      [450, 200],
+      [320, 80],
+    ];
+
+    for (const wind of [-15, 0, 15]) {
+      it(`ends within the Baby Missile's radius of a stationary Target within ${TURNS} Turns at Wind ${wind}`, () => {
+        for (const [selfX, targetX] of pairs) {
+          for (let seed = 0; seed < 20; seed++) {
+            const { self, target, tanks, memory } = tosserAt(selfX, targetX);
+            const rng = new Rng(seed);
+            const c = centre(target);
+            const distances: number[] = [];
+            for (let turn = 0; turn < TURNS; turn++) {
+              const aim = chooseAim("tosser", self, tanks, memory, rng);
+              const { outcome, x } = fly(self, target, aim, wind);
+              if (outcome.kind === "hit") {
+                memory.lastLanding = { kind: "hit", x: outcome.x };
+                distances.push(Math.hypot(outcome.x - c.x, outcome.y - c.y));
+              } else {
+                memory.lastLanding = { kind: "lost", side: x < 0 ? "left" : "right" };
+                distances.push(Infinity);
+              }
+            }
+            const where = `${selfX} to ${targetX}, seed ${seed}: ${distances.map((d) => d.toFixed(1)).join(", ")}`;
+            // Each landing is no further than the one before (once within the radius it may
+            // wobble inside it), and the last is within the Baby Missile's radius.
+            for (let i = 1; i < TURNS; i++) {
+              expect(distances[i], where).toBeLessThanOrEqual(
+                Math.max(distances[i - 1] as number, BABY_MISSILE.radius),
+              );
+            }
+            expect(distances[TURNS - 1], where).toBeLessThanOrEqual(BABY_MISSILE.radius);
+          }
+        }
+      });
+    }
   });
 });

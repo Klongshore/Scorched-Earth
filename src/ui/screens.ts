@@ -21,6 +21,7 @@ export const PLAYER_OPTIONS: readonly { readonly label: string; readonly setup: 
   { label: "Human", setup: { kind: "human" } },
   { label: "Moron", setup: { kind: "computer", personality: "moron" } },
   { label: "Shooter", setup: { kind: "computer", personality: "shooter" } },
+  { label: "Tosser", setup: { kind: "computer", personality: "tosser" } },
 ];
 
 export const DEFAULT_PLAYERS_SETUP: readonly PlayerSetup[] = [

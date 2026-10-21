@@ -65,3 +65,10 @@ export const COMPUTER_THINK_SECONDS = 1.5;
 export const SHOOTER_MIN_ANGLE = 30; // degrees above the horizontal, toward the Target
 export const SHOOTER_MAX_ANGLE = 60;
 export const SHOOTER_POWER_ERROR = 0.05; // ±5%
+
+// Tosser
+export const TOSSER_ANGLE = 45; // degrees above the horizontal, toward the Target
+export const TOSSER_FIRST_POWER_ERROR = 0.25; // ±25%, on its first Turn at a Target
+export const TOSSER_LOST_FACTOR = 0.8; // Power correction after a Projectile lost on the Target's side
+export const TOSSER_MIN_FACTOR = 0.5;
+export const TOSSER_MAX_FACTOR = 1.5;

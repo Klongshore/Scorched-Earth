@@ -197,6 +197,18 @@ describe("Match integration", () => {
     expect(match.results.length).toBe(3);
   });
 
+  it("runs a Match of Tossers, Shooters and Morons to completion purely by ticking", () => {
+    const shooter: PlayerSetup = { kind: "computer", personality: "shooter" };
+    const tosser: PlayerSetup = { kind: "computer", personality: "tosser" };
+    const match = new Match({
+      players: [tosser, shooter, moron, tosser, tosser],
+      rounds: 3,
+      seed: 2024,
+    });
+    playOut(match, 3 * 200_000);
+    expect(match.results.length).toBe(3);
+  });
+
   it("plays a seeded Moron-only Match exactly as before Shooter existed", () => {
     // Pinned before Shooter was added: Morons must draw from the Rng exactly as they always have.
     const match = new Match({ players: [moron, moron, moron, moron], rounds: 3, seed: 77 });

@@ -7,7 +7,7 @@ import {
   WIND_MAX,
 } from "./constants";
 import { detonate } from "./explosion";
-import { chooseAim, newComputerMemory, type ComputerMemory } from "./personalities";
+import { chooseAim, newComputerMemory, type ComputerMemory, type Landing } from "./personalities";
 import { placeTanks } from "./placement";
 import { launch, stepProjectile } from "./projectile";
 import type { Rng } from "./rng";
@@ -110,8 +110,11 @@ export class Round {
         const p = phase.projectile;
         const outcome = stepProjectile(p, this.wind, this.terrain, this.tanks, dt);
         if (outcome.kind === "lost") {
+          // The lost outcome doesn't say which side; p.x is already past that edge.
+          this.recordLanding(p.firedBy, { kind: "lost", side: p.x < 0 ? "left" : "right" });
           this.phase = { kind: "settling" };
         } else if (outcome.kind === "hit") {
+          this.recordLanding(p.firedBy, { kind: "hit", x: outcome.x });
           const explosion = detonate(outcome.x, outcome.y, p.weapon, this.terrain, this.tanks);
           this.phase = { kind: "exploding", explosion };
         }
@@ -160,7 +163,7 @@ export class Round {
         player.personality,
         tank,
         this.tanks,
-        this.memoryOf(player.id),
+        this.requireMemory(player.id),
         this.rng,
       );
       tank.angle = aim.angle;
@@ -177,7 +180,18 @@ export class Round {
     return this.memories.get(playerId)?.targetId ?? null;
   }
 
-  private memoryOf(playerId: number): ComputerMemory {
+  /** What a Computer Player remembers this Round; null for a Human. */
+  memoryOf(playerId: number): Readonly<ComputerMemory> | null {
+    return this.memories.get(playerId) ?? null;
+  }
+
+  /** Remember where a Computer Player's Projectile ended up; a Human's is not recorded. */
+  private recordLanding(playerId: number, landing: Landing): void {
+    const memory = this.memories.get(playerId);
+    if (memory) memory.lastLanding = landing;
+  }
+
+  private requireMemory(playerId: number): ComputerMemory {
     const memory = this.memories.get(playerId);
     if (!memory) throw new Error(`No memory for Computer player ${playerId}`);
     return memory;
