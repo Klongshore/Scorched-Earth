@@ -1,8 +1,8 @@
 import { TANK_HALF_WIDTH, TANK_HEIGHT } from "../sim/constants";
 import { barrelTip, isAlive } from "../sim/tank";
 import type { Terrain } from "../sim/terrain";
-import type { Player, Tank } from "../sim/types";
-import { DIRT_DEEP, DIRT_SURFACE, SKY_BOTTOM, SKY_TOP } from "./palette";
+import type { Player, Projectile, Tank } from "../sim/types";
+import { DIRT_DEEP, DIRT_SURFACE, PROJECTILE_COLOR, SKY_BOTTOM, SKY_TOP } from "./palette";
 
 export class Renderer {
   private readonly context: CanvasRenderingContext2D;
@@ -28,7 +28,12 @@ export class Renderer {
     this.sky.addColorStop(1, SKY_BOTTOM);
   }
 
-  draw(terrain: Terrain, tanks: readonly Tank[], players: readonly Player[]): void {
+  draw(
+    terrain: Terrain,
+    tanks: readonly Tank[],
+    players: readonly Player[],
+    projectile: Projectile | null = null,
+  ): void {
     this.context.fillStyle = this.sky;
     this.context.fillRect(0, 0, this.canvas.width, this.canvas.height);
     if (this.builtTerrain !== terrain || this.builtVersion !== terrain.version) {
@@ -37,6 +42,10 @@ export class Renderer {
     this.context.drawImage(this.terrainCanvas, 0, 0);
     for (const tank of tanks) {
       if (isAlive(tank)) this.drawTank(tank, players[tank.playerId]?.color ?? "#ffffff");
+    }
+    if (projectile) {
+      this.context.fillStyle = PROJECTILE_COLOR;
+      this.context.fillRect(Math.floor(projectile.x) - 1, Math.floor(projectile.y) - 1, 2, 2);
     }
   }
 
