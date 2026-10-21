@@ -1,8 +1,17 @@
-import { TANK_HALF_WIDTH, TANK_HEIGHT } from "../sim/constants";
+import { EXPLOSION_SECONDS, TANK_HALF_WIDTH, TANK_HEIGHT } from "../sim/constants";
+import type { Match } from "../sim/match";
 import { barrelTip, isAlive } from "../sim/tank";
 import type { Terrain } from "../sim/terrain";
-import type { Player, Projectile, Tank } from "../sim/types";
-import { DIRT_DEEP, DIRT_SURFACE, PROJECTILE_COLOR, SKY_BOTTOM, SKY_TOP } from "./palette";
+import type { Explosion, Tank } from "../sim/types";
+import { drawHud } from "./hud";
+import {
+  DIRT_DEEP,
+  DIRT_SURFACE,
+  EXPLOSION_COLORS,
+  PROJECTILE_COLOR,
+  SKY_BOTTOM,
+  SKY_TOP,
+} from "./palette";
 
 export class Renderer {
   private readonly context: CanvasRenderingContext2D;
@@ -28,25 +37,56 @@ export class Renderer {
     this.sky.addColorStop(1, SKY_BOTTOM);
   }
 
-  draw(
-    terrain: Terrain,
-    tanks: readonly Tank[],
-    players: readonly Player[],
-    projectile: Projectile | null = null,
-  ): void {
+  /** Reads the Match and never changes it. The HUD is drawn only while a Round is being played. */
+  draw(match: Match, showHud = true): void {
+    const round = match.round;
+    const terrain = round.terrain;
     this.context.fillStyle = this.sky;
     this.context.fillRect(0, 0, this.canvas.width, this.canvas.height);
     if (this.builtTerrain !== terrain || this.builtVersion !== terrain.version) {
       this.rebuildTerrain(terrain);
     }
     this.context.drawImage(this.terrainCanvas, 0, 0);
-    for (const tank of tanks) {
-      if (isAlive(tank)) this.drawTank(tank, players[tank.playerId]?.color ?? "#ffffff");
+    const phase = round.phase;
+    for (const tank of round.tanks) {
+      if (!isAlive(tank)) continue;
+      const color = match.players[tank.playerId]?.color ?? "#ffffff";
+      this.drawTank(tank, color);
+      if (phase.kind === "aiming" && tank.playerId === round.currentPlayerId) {
+        this.drawMarker(tank, color);
+      }
     }
-    if (projectile) {
+    if (phase.kind === "flying") {
+      const p = phase.projectile;
       this.context.fillStyle = PROJECTILE_COLOR;
-      this.context.fillRect(Math.floor(projectile.x) - 1, Math.floor(projectile.y) - 1, 2, 2);
+      this.context.fillRect(Math.floor(p.x) - 1, Math.floor(p.y) - 1, 2, 2);
+    } else if (phase.kind === "exploding") {
+      this.drawExplosion(phase.explosion);
     }
+    if (showHud) drawHud(this.context, match, this.canvas.width);
+  }
+
+  private drawExplosion(explosion: Explosion): void {
+    const ctx = this.context;
+    const radius = explosion.radius * Math.min(1, explosion.elapsed / (EXPLOSION_SECONDS / 2));
+    ctx.fillStyle =
+      EXPLOSION_COLORS[Math.floor(explosion.elapsed * 30) % EXPLOSION_COLORS.length] ?? "#ffffff";
+    ctx.beginPath();
+    ctx.arc(explosion.x, explosion.y, radius, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  /** Small triangle above the Tank whose Turn it is. */
+  private drawMarker(tank: Tank, color: string): void {
+    const ctx = this.context;
+    const y = tank.y - TANK_HEIGHT - 6;
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.moveTo(tank.x + 0.5 - 3, y - 5);
+    ctx.lineTo(tank.x + 0.5 + 3, y - 5);
+    ctx.lineTo(tank.x + 0.5, y);
+    ctx.closePath();
+    ctx.fill();
   }
 
   private drawTank(tank: Tank, color: string): void {

@@ -105,3 +105,30 @@ describe("generateHills", () => {
     }
   });
 });
+
+describe("settlePass", () => {
+  function floored(): Terrain {
+    const t = new Terrain(20, 30);
+    for (let x = 0; x < 20; x++) for (let y = 20; y < 30; y++) t.set(x, y, true);
+    return t;
+  }
+
+  it("drops a floating cell to rest in the expected number of passes, then reports no movement", () => {
+    const t = floored();
+    t.set(5, 10, true);
+    for (let i = 0; i < 9; i++) expect(t.settlePass()).toBe(true);
+    expect(t.isSolid(5, 19)).toBe(true);
+    expect(t.isSolid(5, 10)).toBe(false);
+    expect(t.settlePass()).toBe(false);
+  });
+
+  it("drops an overhang until it rests on dirt below", () => {
+    const t = floored();
+    for (let x = 3; x <= 6; x++) for (let y = 5; y <= 7; y++) t.set(x, y, true);
+    while (t.settlePass());
+    for (let x = 3; x <= 6; x++) {
+      expect(t.surfaceY(x)).toBe(17);
+      expect(t.isSolid(x, 19)).toBe(true);
+    }
+  });
+});

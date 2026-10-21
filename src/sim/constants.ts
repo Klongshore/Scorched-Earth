@@ -55,5 +55,7 @@ export const DEFAULT_ROUNDS = 10;
 export const MIN_ROUNDS = 1;
 export const MAX_ROUNDS = 99;
 
+export const ROUND_RESULTS_DELAY_SECONDS = 1; // pause after a Round ends before the results screen
+
 // Computer Players
 export const COMPUTER_THINK_SECONDS = 3;

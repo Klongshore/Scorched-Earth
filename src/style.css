@@ -33,3 +33,49 @@ body {
 #overlay:empty {
   display: none;
 }
+
+#overlay {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+#overlay:empty {
+  display: none;
+}
+
+.panel {
+  background: rgba(0, 0, 0, 0.8);
+  border: 2px solid #fff;
+  padding: 16px 32px;
+  text-align: center;
+}
+
+.panel h1,
+.panel h2 {
+  margin: 0 0 12px;
+}
+
+.panel .row {
+  display: block;
+  margin: 8px 0;
+}
+
+.panel table {
+  margin: 8px auto;
+}
+
+.panel td {
+  padding: 2px 12px;
+}
+
+.panel .hint {
+  opacity: 0.8;
+  font-size: 0.85em;
+}
+
+.panel button {
+  margin-top: 8px;
+  font: inherit;
+  padding: 4px 24px;
+}

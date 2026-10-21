@@ -72,6 +72,28 @@ export class Terrain {
     if (changed) this.version++;
   }
 
+  /**
+   * One Settling pass: every solid cell with air directly below moves down one row.
+   * Scanning each column bottom-up lets a whole floating chunk drop 1 px per pass.
+   * Returns true if any cell moved.
+   */
+  settlePass(): boolean {
+    let moved = false;
+    for (let x = 0; x < this.width; x++) {
+      for (let y = this.height - 2; y >= 0; y--) {
+        const index = y * this.width + x;
+        const below = index + this.width;
+        if (this.cells[index] === 1 && this.cells[below] === 0) {
+          this.cells[index] = 0;
+          this.cells[below] = 1;
+          moved = true;
+        }
+      }
+    }
+    if (moved) this.version++;
+    return moved;
+  }
+
   /** Make columns [x0, x1] solid from row y down; clear them above y. Used for Tank pads. */
   flatten(x0: number, x1: number, y: number): void {
     const from = Math.max(0, x0);
