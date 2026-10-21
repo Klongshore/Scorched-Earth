@@ -40,7 +40,11 @@ describe("aimLine (HUD line 1)", () => {
 
 describe("healthLine (HUD line 2)", () => {
   it("shows only the current Player's name and Health while aiming", () => {
-    const match = new Match({ playerKinds: ["human", "human"], rounds: 3, seed: 1 });
+    const match = new Match({
+      players: [{ kind: "human" }, { kind: "human" }],
+      rounds: 3,
+      seed: 1,
+    });
     const { round } = match;
     const current = round.playerOf(round.currentPlayerId);
     const other = match.players.find((p) => p.id !== current.id);
@@ -54,21 +58,36 @@ describe("healthLine (HUD line 2)", () => {
   });
 
   it("still shows the current Player while a Computer Player is thinking", () => {
-    const match = new Match({ playerKinds: ["computer", "computer"], rounds: 1, seed: 1 });
+    const match = new Match({
+      players: [
+        { kind: "computer", personality: "moron" },
+        { kind: "computer", personality: "moron" },
+      ],
+      rounds: 1,
+      seed: 1,
+    });
     const { round } = match;
     expect(round.isComputerThinking).toBe(true);
     expect(healthLine(match)?.text).toContain(round.playerOf(round.currentPlayerId).name);
   });
 
   it("is empty once the Turn's Projectile is fired", () => {
-    const match = new Match({ playerKinds: ["human", "human"], rounds: 3, seed: 1 });
+    const match = new Match({
+      players: [{ kind: "human" }, { kind: "human" }],
+      rounds: 3,
+      seed: 1,
+    });
     match.round.act({ kind: "fire" });
     expect(match.round.phase.kind).toBe("flying");
     expect(healthLine(match)).toBeNull();
   });
 
   it("is empty while Settling and once the Round is over", () => {
-    const match = new Match({ playerKinds: ["human", "human"], rounds: 3, seed: 1 });
+    const match = new Match({
+      players: [{ kind: "human" }, { kind: "human" }],
+      rounds: 3,
+      seed: 1,
+    });
     match.round.phase = { kind: "settling" };
     expect(healthLine(match)).toBeNull();
     match.round.phase = { kind: "over", result: { kind: "draw" } };
