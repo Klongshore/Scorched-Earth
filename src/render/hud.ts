@@ -38,12 +38,11 @@ function aimLine(match: Match): Piece[] {
   const { round, players } = match;
   const player = players[round.currentPlayerId];
   const tank = round.currentTank();
-  const thinking = round.isComputerThinking ? "   (thinking…)" : "";
   return [
     [player?.name ?? "?", player?.color ?? HUD_TEXT],
     [
       `   Angle: ${tank.angle}   Power: ${tank.power}/${powerCap(tank)}` +
-        `   Wind: ${windText(round.wind)}   Round ${round.number}/${match.totalRounds}${thinking}`,
+        `   Wind: ${windText(round.wind)}   Round ${round.number}/${match.totalRounds}`,
       HUD_TEXT,
     ],
   ];
@@ -68,6 +67,12 @@ export function drawHud(ctx: CanvasRenderingContext2D, match: Match): void {
     ctx.fillStyle = player.color;
     ctx.fillRect(x, barTop, Math.round((BAR_WIDTH * health) / MAX_HEALTH), BAR_HEIGHT);
     x += BAR_WIDTH + PLAYER_GAP;
+  }
+  // Line 1 has no room left at 640 px, so the thinking marker sits right-aligned on line 2.
+  if (round.isComputerThinking) {
+    ctx.fillStyle = HUD_TEXT;
+    ctx.textAlign = "right";
+    ctx.fillText("(thinking…)", ctx.canvas.width - LEFT, LINE_2_Y);
   }
   ctx.restore();
 }
