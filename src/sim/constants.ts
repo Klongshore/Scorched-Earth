@@ -60,6 +60,7 @@ export const MAX_ROUNDS = 99;
 
 // Computer Players
 export const COMPUTER_THINK_SECONDS = 1.5;
+export const COMPUTER_THINK_TICKS = Math.round(COMPUTER_THINK_SECONDS / TICK_SECONDS);
 
 // Shooter
 export const SHOOTER_MIN_ANGLE = 30; // degrees above the horizontal, toward the Target

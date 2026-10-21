@@ -61,7 +61,7 @@ describe("Round", () => {
       expect(round.tanks).toHaveLength(2);
       for (const t of round.tanks) expect(t.health).toBe(MAX_HEALTH);
       expect(Math.abs(round.wind)).toBeLessThanOrEqual(WIND_MAX);
-      expect(round.phase).toEqual({ kind: "aiming", thinkRemaining: null });
+      expect(round.phase).toEqual({ kind: "aiming", thinkTicks: null });
       expect([...round.turnOrder].sort()).toEqual([0, 1]);
     }
   });
@@ -210,7 +210,7 @@ describe("Round", () => {
   it("lets a Computer Player fire after its think time", () => {
     const round = new Round(1, createPlayers([MORON, MORON]), new Rng(3));
     expect(round.phase.kind).toBe("aiming");
-    if (round.phase.kind === "aiming") expect(round.phase.thinkRemaining).not.toBeNull();
+    if (round.phase.kind === "aiming") expect(round.phase.thinkTicks).not.toBeNull();
     round.act({ kind: "fire" });
     expect(round.phase.kind).toBe("aiming");
     runUntil(round, (r) => r.phase.kind !== "aiming");

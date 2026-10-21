@@ -1,6 +1,6 @@
 import {
   BABY_MISSILE,
-  COMPUTER_THINK_SECONDS,
+  COMPUTER_THINK_TICKS,
   EXPLOSION_SECONDS,
   FIELD_HEIGHT,
   FIELD_WIDTH,
@@ -18,7 +18,7 @@ import { generateHills } from "./terrainGen";
 import type { Explosion, Player, Projectile, Tank } from "./types";
 
 export type Phase =
-  | { kind: "aiming"; thinkRemaining: number | null } // thinkRemaining is non-null only for Computer Players
+  | { kind: "aiming"; thinkTicks: number | null } // ticks left to think; non-null only for Computer Players
   | { kind: "flying"; projectile: Projectile }
   | { kind: "exploding"; explosion: Explosion }
   | { kind: "settling" }
@@ -38,7 +38,7 @@ export class Round {
   wind: number; // not readonly: tests set it to 0 for predictable shots
   readonly turnOrder: number[]; // playerIds, shuffled once per Round
   currentIndex: number; // index into turnOrder
-  phase: Phase = { kind: "aiming", thinkRemaining: null };
+  phase: Phase = { kind: "aiming", thinkTicks: null };
 
   private readonly players: readonly Player[];
   private readonly rng: Rng;
@@ -71,7 +71,7 @@ export class Round {
 
   /** True while a Computer Player is "thinking": its aim is shown and the shot fires when the timer runs out. */
   get isComputerThinking(): boolean {
-    return this.phase.kind === "aiming" && this.phase.thinkRemaining !== null;
+    return this.phase.kind === "aiming" && this.phase.thinkTicks !== null;
   }
 
   /** Apply a human action. Ignored unless phase is "aiming" and the current Player is human. */
@@ -99,19 +99,16 @@ export class Round {
     const phase = this.phase;
     switch (phase.kind) {
       case "aiming":
-        if (phase.thinkRemaining !== null) {
-          phase.thinkRemaining -= dt;
-          // Within half a tick of zero counts as done: summing dt drifts, and testing <= 0
-          // would sometimes hold the pause one tick longer than COMPUTER_THINK_SECONDS.
-          if (phase.thinkRemaining < dt / 2) this.fire();
+        if (phase.thinkTicks !== null) {
+          phase.thinkTicks -= 1;
+          if (phase.thinkTicks <= 0) this.fire();
         }
         break;
       case "flying": {
         const p = phase.projectile;
         const outcome = stepProjectile(p, this.wind, this.terrain, this.tanks, dt);
         if (outcome.kind === "lost") {
-          // The lost outcome doesn't say which side; p.x is already past that edge.
-          this.recordLanding(p.firedBy, { kind: "lost", side: p.x < 0 ? "left" : "right" });
+          this.recordLanding(p.firedBy, { kind: "lost", side: outcome.side });
           this.phase = { kind: "settling" };
         } else if (outcome.kind === "hit") {
           this.recordLanding(p.firedBy, { kind: "hit", x: outcome.x });
@@ -169,9 +166,9 @@ export class Round {
       tank.angle = aim.angle;
       tank.power = aim.power;
       clampAim(tank);
-      this.phase = { kind: "aiming", thinkRemaining: COMPUTER_THINK_SECONDS };
+      this.phase = { kind: "aiming", thinkTicks: COMPUTER_THINK_TICKS };
     } else {
-      this.phase = { kind: "aiming", thinkRemaining: null };
+      this.phase = { kind: "aiming", thinkTicks: null };
     }
   }
 

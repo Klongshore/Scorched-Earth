@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   BABY_MISSILE,
   COMPUTER_THINK_SECONDS,
+  COMPUTER_THINK_TICKS,
   FIELD_HEIGHT,
   FIELD_WIDTH,
   MAX_ANGLE,
@@ -86,7 +87,7 @@ describe("Computer Turn", () => {
 
     const tank = round.currentTank();
     expect({ angle: tank.angle, power: tank.power }).toEqual(expected);
-    expect(round.phase).toEqual({ kind: "aiming", thinkRemaining: COMPUTER_THINK_SECONDS });
+    expect(round.phase).toEqual({ kind: "aiming", thinkTicks: COMPUTER_THINK_TICKS });
     expect(round.isComputerThinking).toBe(true);
 
     // Human input is ignored during the pause.
@@ -659,7 +660,7 @@ describe("Tosser Personality", () => {
       const p = launch({ ...self, ...aim }, BABY_MISSILE);
       for (let i = 0; i < 10_000; i++) {
         const outcome = stepProjectile(p, wind, terrain, [self, target], TICK_SECONDS);
-        if (outcome.kind !== "flying") return { outcome, x: p.x };
+        if (outcome.kind !== "flying") return outcome;
       }
       throw new Error("Projectile never finished");
     }
@@ -681,12 +682,12 @@ describe("Tosser Personality", () => {
       const distances: number[] = [];
       for (let turn = 0; turn < TURNS; turn++) {
         const aim = chooseAim("tosser", self, tanks, memory, rng);
-        const { outcome, x } = fly(self, target, aim, wind);
+        const outcome = fly(self, target, aim, wind);
         if (outcome.kind === "hit") {
           memory.lastLanding = { kind: "hit", x: outcome.x };
           distances.push(Math.hypot(outcome.x - c.x, outcome.y - c.y));
         } else {
-          memory.lastLanding = { kind: "lost", side: x < 0 ? "left" : "right" };
+          memory.lastLanding = { kind: "lost", side: outcome.side };
           distances.push(Infinity);
         }
       }
