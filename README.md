@@ -9,7 +9,7 @@ Tank standing wins the Round; the Player with the most Round Wins takes the Matc
 
 ## Run it locally
 
-Requires Node.js 20 or later.
+Requires Node.js 24 or later.
 
 ```sh
 npm install
