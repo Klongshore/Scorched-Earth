@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { TICK_SECONDS } from "./constants";
 import { Match, type MatchSetup } from "./match";
 import type { RoundResult } from "./round";
 
@@ -125,5 +126,25 @@ describe("Match", () => {
     expect(b.round.turnOrder).toEqual(a.round.turnOrder);
     expect(b.round.tanks).toEqual(a.round.tanks);
     expect(b.round.terrain.cells).toEqual(a.round.terrain.cells);
+  });
+});
+
+describe("Match integration", () => {
+  it("runs a Computer-vs-Computer, 3-Round Match to completion purely by ticking", () => {
+    const match = new Match({ playerKinds: ["computer", "computer"], rounds: 3, seed: 2024 });
+    const maxTicks = 3 * 200_000;
+    let ticks = 0;
+    while (!match.isOver()) {
+      if (ticks++ >= maxTicks) expect.fail(`Match did not finish within ${maxTicks} ticks`);
+      match.round.tick(TICK_SECONDS);
+      if (match.round.phase.kind === "over") {
+        match.recordRoundResult();
+        if (!match.isOver()) match.startNextRound();
+      }
+    }
+    expect(match.results.length).toBe(3);
+    expect(match.roundWins.reduce((a, b) => a + b, 0)).toBe(
+      match.results.filter((r) => r.kind === "win").length,
+    );
   });
 });

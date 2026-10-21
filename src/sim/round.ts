@@ -7,6 +7,7 @@ import {
   WIND_MAX,
 } from "./constants";
 import { detonate } from "./explosion";
+import { chooseAim } from "./personalities";
 import { placeTanks } from "./placement";
 import { launch, stepProjectile } from "./projectile";
 import type { Rng } from "./rng";
@@ -29,11 +30,6 @@ export type RoundAction =
   | { kind: "adjustAngle"; delta: number }
   | { kind: "adjustPower"; delta: number }
   | { kind: "fire" };
-
-/** Stub Computer Player aim until the Moron Personality exists (Milestone 8). */
-function chooseAim(): { angle: number; power: number } {
-  return { angle: 90, power: 0 };
-}
 
 export class Round {
   readonly number: number; // 1-based
@@ -66,6 +62,11 @@ export class Round {
 
   currentTank(): Tank {
     return this.tankOf(this.currentPlayerId);
+  }
+
+  /** True while a Computer Player is "thinking": its aim is shown and the shot fires when the timer runs out. */
+  get isComputerThinking(): boolean {
+    return this.phase.kind === "aiming" && this.phase.thinkRemaining !== null;
   }
 
   /** Apply a human action. Ignored unless phase is "aiming" and the current Player is human. */
@@ -147,7 +148,8 @@ export class Round {
     const player = this.playerOf(this.currentPlayerId);
     if (player.kind === "computer") {
       const tank = this.currentTank();
-      const aim = chooseAim();
+      if (!player.personality) throw new Error(`Computer player ${player.id} has no Personality`);
+      const aim = chooseAim(player.personality, tank, this.rng);
       tank.angle = aim.angle;
       tank.power = aim.power;
       clampAim(tank);
