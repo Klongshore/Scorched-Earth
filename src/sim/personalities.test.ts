@@ -10,12 +10,14 @@ import {
   SHOOTER_MAX_ANGLE,
   SHOOTER_MIN_ANGLE,
   SHOOTER_POWER_ERROR,
+  TANK_HALF_WIDTH,
   TICK_SECONDS,
   TOSSER_ANGLE,
   TOSSER_FIRST_POWER_ERROR,
   TOSSER_LOST_FACTOR,
   TOSSER_MAX_FACTOR,
   TOSSER_MIN_FACTOR,
+  WIND_MAX,
 } from "./constants";
 import {
   chooseAim,
@@ -151,7 +153,7 @@ describe("chooseTarget", () => {
       for (const t of tanks) if (t !== self && rng.next() < 0.5) t.health = 0;
       if (!tanks.some((t) => t !== self && t.health > 0)) continue;
       const memory = newComputerMemory();
-      const target = chooseTarget(memory, self, tanks, rng) as Tank;
+      const target = chooseTarget(memory, self, tanks, rng, "shooter") as Tank;
       expect(target).not.toBe(self);
       expect(target.health).toBeGreaterThan(0);
       expect(memory.targetId).toBe(target.playerId);
@@ -164,7 +166,7 @@ describe("chooseTarget", () => {
     const rng = new Rng(4);
     const picked = new Set<number>();
     for (let i = 0; i < 200; i++)
-      picked.add((chooseTarget(newComputerMemory(), self, tanks, rng) as Tank).playerId);
+      picked.add((chooseTarget(newComputerMemory(), self, tanks, rng, "shooter") as Tank).playerId);
     expect([...picked].sort()).toEqual([0, 1, 3, 4]);
   });
 
@@ -181,7 +183,7 @@ describe("chooseTarget", () => {
     const twin = new Rng(8);
     for (let turn = 0; turn < 10; turn++) {
       (tanks[4] as Tank).health -= 5;
-      expect(chooseTarget(memory, self, tanks, rng)?.playerId).toBe(4);
+      expect(chooseTarget(memory, self, tanks, rng, "shooter")?.playerId).toBe(4);
     }
     expect(memory).toEqual(kept);
     // Keeping the Target draws nothing from the Rng.
@@ -200,7 +202,7 @@ describe("chooseTarget", () => {
       };
       (tanks[3] as Tank).health = 0;
       (tanks[0] as Tank).health = 0;
-      const target = chooseTarget(memory, self, tanks, rng) as Tank;
+      const target = chooseTarget(memory, self, tanks, rng, "shooter") as Tank;
       expect([2, 4]).toContain(target.playerId);
       expect(memory).toEqual({ targetId: target.playerId, lastAim: null, lastLanding: null });
     }
@@ -209,7 +211,9 @@ describe("chooseTarget", () => {
   it("throws when no opponent is alive", () => {
     const tanks = fiveTanks();
     for (const t of tanks.slice(1)) t.health = 0;
-    expect(() => chooseTarget(newComputerMemory(), tanks[0] as Tank, tanks, new Rng(1))).toThrow();
+    expect(() =>
+      chooseTarget(newComputerMemory(), tanks[0] as Tank, tanks, new Rng(1), "shooter"),
+    ).toThrow();
   });
 
   it("switches to a reachable living opponent once its Target is out of reach", () => {
@@ -225,7 +229,7 @@ describe("chooseTarget", () => {
         lastAim: { angle: 45, power: 300 },
         lastLanding: { kind: "hit", x: 300 },
       };
-      const target = chooseTarget(memory, self, tanks, rng);
+      const target = chooseTarget(memory, self, tanks, rng, "shooter");
       expect(target?.playerId).toBe(1);
       expect(memory).toEqual({ targetId: 1, lastAim: null, lastLanding: null });
     }
@@ -240,30 +244,72 @@ describe("chooseTarget", () => {
       lastAim: { angle: 45, power: 50 },
       lastLanding: { kind: "hit", x: 320 },
     };
-    expect(chooseTarget(memory, self, tanks, new Rng(1))).toBeNull();
+    expect(chooseTarget(memory, self, tanks, new Rng(1), "shooter")).toBeNull();
     expect(memory).toEqual(newComputerMemory());
   });
 });
 
+/** Every integer Angle in the Shooter's band, toward `target`. */
+function shooterBand(self: Tank, target: Tank): number[] {
+  const angles: number[] = [];
+  for (let a = SHOOTER_MIN_ANGLE; a <= SHOOTER_MAX_ANGLE; a++) {
+    angles.push(target.x >= self.x ? a : 180 - a);
+  }
+  return angles;
+}
+
+/** Whether `angle` needs a Power within `self`'s cap to hit `target`. */
+function feasible(self: Tank, target: Tank, angle: number): boolean {
+  const power = powerToHit(self, target, angle);
+  return power !== null && power <= powerCap(self);
+}
+
 describe("isReachable", () => {
-  it("is true when the Power to hit at 45° is within the Power cap", () => {
-    const self = tankAt(0, 100, 60);
-    const near = tankAt(1, 400);
-    const needed = powerToHit(self, near, 45) as number;
-    expect(isReachable(self, near)).toBe(needed <= powerCap(self));
-    expect(isReachable(self, near)).toBe(true);
-    expect(isReachable({ ...self, health: Math.floor((needed - 1) / 10) }, near)).toBe(false);
-  });
+  for (const personality of ["shooter", "tosser"] as const) {
+    it(`is true for a ${personality} exactly when some Angle in the Shooter's band hits within its Power cap`, () => {
+      const rng = new Rng(31);
+      let reachable = 0;
+      for (let i = 0; i < 2000; i++) {
+        const self = tankAt(
+          0,
+          rng.int(20, FIELD_WIDTH - 20),
+          rng.int(1, MAX_HEALTH),
+          rng.int(200, 460),
+        );
+        const target = tankAt(1, rng.int(20, FIELD_WIDTH - 20), MAX_HEALTH, rng.int(200, 460));
+        const expected = shooterBand(self, target).some((a) => feasible(self, target, a));
+        expect(isReachable(self, target, personality)).toBe(expected);
+        if (expected) reachable++;
+      }
+      expect(reachable).toBeGreaterThan(0);
+      expect(reachable).toBeLessThan(2000);
+    });
+  }
 
-  it("aims at 45° toward the Target, on either side", () => {
-    const self = tankAt(0, 320, 60);
-    expect(isReachable(self, tankAt(1, 60))).toBe(isReachable(self, tankAt(1, 580)));
-    expect(isReachable(self, tankAt(1, 60))).toBe(true);
-  });
-
-  it("is false for a Target no Power can reach at 45°", () => {
+  it("counts a Target that only Angles other than 45° can hit within the Power cap", () => {
+    // Close and well above: on or above the 45° line, but a steeper Angle clears it.
     const self = tankAt(0, 300);
-    expect(isReachable(self, tankAt(1, 302, MAX_HEALTH, GROUND - 200))).toBe(false);
+    const target = tankAt(1, 340, MAX_HEALTH, GROUND - 50);
+    expect(powerToHit(self, target, 45)).toBeNull();
+    expect(feasible(self, target, SHOOTER_MAX_ANGLE)).toBe(true);
+    expect(isReachable(self, target, "shooter")).toBe(true);
+    expect(isReachable(self, target, "tosser")).toBe(true);
+  });
+
+  it("aims toward the Target, on either side", () => {
+    const self = tankAt(0, 320, 60);
+    expect(isReachable(self, tankAt(1, 60), "shooter")).toBe(true);
+    expect(isReachable(self, tankAt(1, 580), "shooter")).toBe(true);
+    expect(isReachable(self, tankAt(1, 60), "tosser")).toBe(true);
+  });
+
+  it("is false for a Target no Angle in the band can reach", () => {
+    const self = tankAt(0, 300);
+    const above = tankAt(1, 302, MAX_HEALTH, GROUND - 200);
+    expect(isReachable(self, above, "shooter")).toBe(false);
+    expect(isReachable(self, above, "tosser")).toBe(false);
+    const weak = tankAt(0, 30, 5);
+    expect(isReachable(weak, tankAt(1, 610), "shooter")).toBe(false);
   });
 });
 
@@ -380,22 +426,64 @@ describe("Shooter Personality", () => {
     }
   });
 
-  it("falls back to the Power cap for a Target well above the barrel's line", () => {
-    const self = tankAt(0, 300, 70);
-    const target = tankAt(1, 320, MAX_HEALTH, GROUND - 200);
-    const rng = new Rng(6);
+  it("only fires an Angle whose Power to hit is within its cap, and that Power before error", () => {
+    const rng = new Rng(12);
+    let checked = 0;
+    for (let i = 0; i < 2000; i++) {
+      const self = tankAt(0, rng.int(20, FIELD_WIDTH - 20), rng.int(1, MAX_HEALTH));
+      const target = tankAt(1, rng.int(20, FIELD_WIDTH - 20));
+      if (!isReachable(self, target, "shooter")) continue;
+      const aim = shooterAim(self, target, rng, 0);
+      expect(feasible(self, target, aim.angle)).toBe(true);
+      expect(aim.power).toBe(powerToHit(self, target, aim.angle));
+      checked++;
+    }
+    expect(checked).toBeGreaterThan(100);
+  });
+
+  it("with no error, hits any Target it can reach, even when damaged", () => {
+    const rng = new Rng(14);
+    let checked = 0;
+    for (let i = 0; i < 400; i++) {
+      const selfX = rng.int(20, FIELD_WIDTH - 20);
+      const targetX = rng.int(20, FIELD_WIDTH - 20);
+      if (Math.abs(selfX - targetX) < 2 * TANK_HALF_WIDTH) continue;
+      const self = tankAt(0, selfX, rng.int(1, MAX_HEALTH));
+      const target = tankAt(1, targetX);
+      if (!isReachable(self, target, "shooter")) continue;
+      const hit = landing(self, target, shooterAim(self, target, rng, 0));
+      const c = centre(target);
+      expect(Math.hypot(hit.x - c.x, hit.y - c.y)).toBeLessThanOrEqual(BABY_MISSILE.radius);
+      checked++;
+    }
+    expect(checked).toBeGreaterThan(50);
+
+    // At 66 Health the Tank at 600 is in reach from 30 only at Angles near 45°.
+    const self = tankAt(0, 30, 66);
+    const target = tankAt(1, 600);
     for (let i = 0; i < 50; i++) {
-      expect(shooterAim(self, target, rng, 0).power).toBe(powerCap(self));
-      const power = shooterAim(self, target, rng).power;
-      expect(power).toBeLessThanOrEqual(powerCap(self));
-      expect(power).toBeGreaterThanOrEqual(Math.floor(powerCap(self) * (1 - SHOOTER_POWER_ERROR)));
+      const hit = landing(self, target, shooterAim(self, target, rng, 0));
+      const c = centre(target);
+      expect(Math.hypot(hit.x - c.x, hit.y - c.y)).toBeLessThanOrEqual(BABY_MISSILE.radius);
     }
   });
 
-  it("fires at its Power cap when damaged too badly to reach", () => {
+  it("picks among the Angles in its band that can hit, not just one", () => {
+    // At 66 Health only Angles near 45° reach the Tank at 600 from 30.
+    const self = tankAt(0, 30, 66);
+    const target = tankAt(1, 600);
+    const usable = shooterBand(self, target).filter((a) => feasible(self, target, a));
+    expect(usable.length).toBeGreaterThan(1);
+    expect(usable.length).toBeLessThan(SHOOTER_MAX_ANGLE - SHOOTER_MIN_ANGLE + 1);
+    const rng = new Rng(6);
+    const picked = new Set<number>();
+    for (let i = 0; i < 500; i++) picked.add(shooterAim(self, target, rng, 0).angle);
+    expect([...picked].sort((a, b) => a - b)).toEqual(usable);
+  });
+
+  it("refuses to aim at a Target it cannot reach", () => {
     const self = tankAt(0, 30, 5);
-    const target = tankAt(1, 610);
-    expect(shooterAim(self, target, new Rng(1), 0).power).toBe(powerCap(self));
+    expect(() => shooterAim(self, tankAt(1, 610), new Rng(1))).toThrow();
   });
 
   it("does not change its Tank or its Target's", () => {
@@ -433,24 +521,56 @@ describe("Tosser Personality", () => {
 
   it("first aims at TOSSER_ANGLE toward its Target, near Shooter's Power and within the cap", () => {
     const rng = new Rng(9);
+    let checked = 0;
     for (let i = 0; i < 300; i++) {
       const selfX = rng.int(20, FIELD_WIDTH - 20);
       const targetX = rng.int(20, FIELD_WIDTH - 20);
       if (selfX === targetX) continue;
       const { self, target, tanks, memory } = tosserAt(selfX, targetX, rng.int(1, MAX_HEALTH));
-      if (!isReachable(self, target)) continue; // aims like a Moron instead
-      const aim = chooseAim("tosser", self, tanks, memory, rng);
       const angle = targetX > selfX ? TOSSER_ANGLE : 180 - TOSSER_ANGLE;
+      if (!feasible(self, target, angle)) continue; // covered by the next test
+      const aim = chooseAim("tosser", self, tanks, memory, rng);
       expect(aim.angle).toBe(angle);
       expect(Number.isInteger(aim.power)).toBe(true);
-      const ideal = powerToHit(self, target, angle) ?? powerCap(self);
+      const ideal = powerToHit(self, target, angle) as number;
       expect(aim.power).toBeGreaterThanOrEqual(
         Math.min(powerCap(self), Math.floor(ideal * (1 - TOSSER_FIRST_POWER_ERROR))),
       );
       expect(aim.power).toBeLessThanOrEqual(Math.ceil(ideal * (1 + TOSSER_FIRST_POWER_ERROR)));
       expect(aim.power).toBeLessThanOrEqual(powerCap(self));
       expect(memory.lastAim).toEqual(aim);
+      checked++;
     }
+    expect(checked).toBeGreaterThan(100);
+  });
+
+  it("first aims at the Angle in the Shooter's band nearest TOSSER_ANGLE that can hit, when TOSSER_ANGLE can't", () => {
+    // Close and well above: TOSSER_ANGLE is on or above the line to it, steeper Angles clear it.
+    const { self, target, tanks, memory } = tosserAt(300, 340);
+    target.y = GROUND - 50;
+    expect(feasible(self, target, TOSSER_ANGLE)).toBe(false);
+    const nearest = shooterBand(self, target)
+      .filter((a) => feasible(self, target, a))
+      .sort((a, b) => Math.abs(a - TOSSER_ANGLE) - Math.abs(b - TOSSER_ANGLE))[0] as number;
+    const aim = chooseAim("tosser", self, tanks, memory, new Rng(3));
+    expect(aim.angle).toBe(nearest);
+    const ideal = powerToHit(self, target, nearest) as number;
+    expect(Math.abs(aim.power - ideal)).toBeLessThanOrEqual(
+      Math.ceil(ideal * TOSSER_FIRST_POWER_ERROR),
+    );
+  });
+
+  it("starts over with a fresh guess once its kept Angle needs more than its Power cap", () => {
+    // Damaged to 66 Health, TOSSER_ANGLE still reaches the Tank at 600 from 30, but 30° does not.
+    const { self, target, tanks, memory } = tosserAt(30, 600, 66);
+    expect(feasible(self, target, SHOOTER_MIN_ANGLE)).toBe(false);
+    expect(feasible(self, target, TOSSER_ANGLE)).toBe(true);
+    memory.lastAim = { angle: SHOOTER_MIN_ANGLE, power: powerCap(self) };
+    memory.lastLanding = { kind: "hit", x: 400 };
+    const aim = chooseAim("tosser", self, tanks, memory, new Rng(5));
+    expect(aim.angle).toBe(TOSSER_ANGLE);
+    expect(memory.lastAim).toEqual(aim);
+    expect(memory.targetId).toBe(1);
   });
 
   it("lowers its Power after landing past the Target", () => {
@@ -553,37 +673,66 @@ describe("Tosser Personality", () => {
       [320, 80],
     ];
 
+    /** Play TURNS Turns at a stationary Target; how far from its centre each one ended up. */
+    function playTurns(selfX: number, targetX: number, wind: number, seed: number): number[] {
+      const { self, target, tanks, memory } = tosserAt(selfX, targetX);
+      const rng = new Rng(seed);
+      const c = centre(target);
+      const distances: number[] = [];
+      for (let turn = 0; turn < TURNS; turn++) {
+        const aim = chooseAim("tosser", self, tanks, memory, rng);
+        const { outcome, x } = fly(self, target, aim, wind);
+        if (outcome.kind === "hit") {
+          memory.lastLanding = { kind: "hit", x: outcome.x };
+          distances.push(Math.hypot(outcome.x - c.x, outcome.y - c.y));
+        } else {
+          memory.lastLanding = { kind: "lost", side: x < 0 ? "left" : "right" };
+          distances.push(Infinity);
+        }
+      }
+      return distances;
+    }
+
+    /**
+     * Each landing is no further than the one before (once within the radius it may wobble
+     * inside it), and the last is within the Baby Missile's radius.
+     */
+    function expectConverges(distances: number[], where: string): void {
+      const label = `${where}: ${distances.map((d) => d.toFixed(1)).join(", ")}`;
+      for (let i = 1; i < TURNS; i++) {
+        expect(distances[i], label).toBeLessThanOrEqual(
+          Math.max(distances[i - 1] as number, BABY_MISSILE.radius),
+        );
+      }
+      expect(distances[TURNS - 1], label).toBeLessThanOrEqual(BABY_MISSILE.radius);
+    }
+
     for (const wind of [-15, 0, 15]) {
       it(`ends within the Baby Missile's radius of a stationary Target within ${TURNS} Turns at Wind ${wind}`, () => {
         for (const [selfX, targetX] of pairs) {
           for (let seed = 0; seed < 20; seed++) {
-            const { self, target, tanks, memory } = tosserAt(selfX, targetX);
-            const rng = new Rng(seed);
-            const c = centre(target);
-            const distances: number[] = [];
-            for (let turn = 0; turn < TURNS; turn++) {
-              const aim = chooseAim("tosser", self, tanks, memory, rng);
-              const { outcome, x } = fly(self, target, aim, wind);
-              if (outcome.kind === "hit") {
-                memory.lastLanding = { kind: "hit", x: outcome.x };
-                distances.push(Math.hypot(outcome.x - c.x, outcome.y - c.y));
-              } else {
-                memory.lastLanding = { kind: "lost", side: x < 0 ? "left" : "right" };
-                distances.push(Infinity);
-              }
-            }
-            const where = `${selfX} to ${targetX}, seed ${seed}: ${distances.map((d) => d.toFixed(1)).join(", ")}`;
-            // Each landing is no further than the one before (once within the radius it may
-            // wobble inside it), and the last is within the Baby Missile's radius.
-            for (let i = 1; i < TURNS; i++) {
-              expect(distances[i], where).toBeLessThanOrEqual(
-                Math.max(distances[i - 1] as number, BABY_MISSILE.radius),
-              );
-            }
-            expect(distances[TURNS - 1], where).toBeLessThanOrEqual(BABY_MISSILE.radius);
+            expectConverges(
+              playTurns(selfX, targetX, wind, seed),
+              `${selfX} to ${targetX}, seed ${seed}`,
+            );
           }
         }
       });
     }
+
+    it(`also converges against the strongest headwind, Wind ±${WIND_MAX} from the Target`, () => {
+      // A headwind this strong slows the Projectile but, at the Tosser's Angles on flat ground,
+      // never turns it back: it still lands short on the Target's side, so the usual
+      // correction from a short landing applies.
+      for (const [selfX, targetX] of pairs) {
+        const wind = targetX > selfX ? -WIND_MAX : WIND_MAX;
+        for (let seed = 0; seed < 20; seed++) {
+          expectConverges(
+            playTurns(selfX, targetX, wind, seed),
+            `${selfX} to ${targetX}, Wind ${wind}, seed ${seed}`,
+          );
+        }
+      }
+    });
   });
 });
