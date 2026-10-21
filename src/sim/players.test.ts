@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { MAX_PLAYERS } from "./constants";
-import { PLAYER_COLORS, createPlayers } from "./players";
+import { PLAYER_COLORS, createPlayers, playerLook } from "./players";
 import type { PlayerSetup } from "./types";
 
 describe("Player colours", () => {
@@ -20,5 +20,18 @@ describe("Player colours", () => {
     expect(players.map((p) => p.name)).toEqual(
       Array.from({ length: MAX_PLAYERS }, (_, i) => `Player ${i + 1}`),
     );
+  });
+});
+
+describe("playerLook", () => {
+  it("gives the name and colour createPlayers uses, for every Player", () => {
+    const setups: PlayerSetup[] = Array.from({ length: MAX_PLAYERS }, () => ({ kind: "human" }));
+    for (const player of createPlayers(setups)) {
+      expect(playerLook(player.id)).toEqual({ name: player.name, color: player.color });
+    }
+  });
+
+  it("refuses a Player beyond MAX_PLAYERS", () => {
+    expect(() => playerLook(MAX_PLAYERS)).toThrow();
   });
 });

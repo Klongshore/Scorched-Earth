@@ -7,7 +7,7 @@ import {
   MIN_ROUNDS,
 } from "../sim/constants";
 import type { Match } from "../sim/match";
-import { createPlayers } from "../sim/players";
+import { playerLook } from "../sim/players";
 import type { Player, PlayerSetup } from "../sim/types";
 
 /** What the Setup screen chooses; the Game adds the seed to make a MatchSetup. */
@@ -93,10 +93,24 @@ function panel(overlay: HTMLElement, ...children: Node[]): void {
   overlay.replaceChildren(box);
 }
 
-function playerName(player: Player): HTMLElement {
+function playerName(player: Pick<Player, "name" | "color">): HTMLElement {
   const span = el("span", player.name);
   span.style.color = player.color;
   return span;
+}
+
+/**
+ * A submit handler that reads the form with `read` and passes the result to `start`, at most
+ * once. If `read` throws, nothing has started and the next submit tries again.
+ */
+export function startOnce<T>(read: () => T, start: (choice: T) => void): () => void {
+  let started = false;
+  return () => {
+    if (started) return;
+    const choice = read();
+    started = true;
+    start(choice);
+  };
 }
 
 /**
@@ -125,9 +139,7 @@ export function showSetup(
   const rows = el("div", undefined, "players");
   let selects: HTMLSelectElement[] = [];
   const showRows = (optionValues: readonly string[]): void => {
-    // Only the names and colours matter here; the dropdowns hold the actual choices.
-    const players = createPlayers(optionValues.map(() => ({ kind: "human" })));
-    const labels = players.map((player, i) => {
+    const labels = optionValues.map((_, i) => {
       const label = el("label");
       const select = el("select");
       select.name = `player${i + 1}`;
@@ -137,7 +149,7 @@ export function showSetup(
         option.selected = option.value === optionValues[i];
         select.append(option);
       }
-      label.append(playerName(player), select);
+      label.append(playerName(playerLook(i)), select);
       return { label, select };
     });
     selects = labels.map((l) => l.select);
@@ -168,17 +180,17 @@ export function showSetup(
   start.autofocus = true;
   form.append(roundsLabel, start);
 
-  let started = false;
-  const submit = (): void => {
-    if (started) return;
-    started = true;
-    const choice = setupChoiceFrom(
-      selects.map((s) => s.value),
-      rounds.value,
-    );
-    rounds.value = String(choice.rounds);
-    onStart(choice);
-  };
+  const submit = startOnce(
+    () =>
+      setupChoiceFrom(
+        selects.map((s) => s.value),
+        rounds.value,
+      ),
+    (choice) => {
+      rounds.value = String(choice.rounds);
+      onStart(choice);
+    },
+  );
   form.addEventListener("submit", (event) => {
     event.preventDefault();
     submit();

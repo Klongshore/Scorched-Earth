@@ -16,6 +16,7 @@ import {
   optionValue,
   resizePlayerChoices,
   setupChoiceFrom,
+  startOnce,
 } from "./screens";
 
 describe("Player choices on the Setup screen", () => {
@@ -144,5 +145,36 @@ describe("clampRounds", () => {
     expect(clampRounds("")).toBe(DEFAULT_ROUNDS);
     expect(clampRounds("abc")).toBe(DEFAULT_ROUNDS);
     expect(clampRounds(NaN)).toBe(DEFAULT_ROUNDS);
+  });
+});
+
+describe("Starting the Match from the Setup screen", () => {
+  it("starts once, however often Start is pressed", () => {
+    const started: number[] = [];
+    const submit = startOnce(
+      () => 3,
+      (n) => started.push(n),
+    );
+    submit();
+    submit();
+    expect(started).toEqual([3]);
+  });
+
+  it("stays usable when reading the form fails, and starts on the next good read", () => {
+    let fail = true;
+    const started: string[] = [];
+    const submit = startOnce(
+      () => {
+        if (fail) throw new Error("bad form");
+        return "ok";
+      },
+      (choice) => started.push(choice),
+    );
+    expect(submit).toThrow("bad form");
+    expect(started).toEqual([]);
+    fail = false;
+    submit();
+    submit();
+    expect(started).toEqual(["ok"]);
   });
 });

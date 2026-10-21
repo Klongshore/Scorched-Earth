@@ -14,17 +14,19 @@ export const PLAYER_COLORS = [
   "#a0ff80", // lime
 ] as const;
 
+/** The name and colour of the Player with this id. */
+export function playerLook(id: number): Pick<Player, "name" | "color"> {
+  const color = PLAYER_COLORS[id];
+  if (color === undefined) throw new Error(`No colour for Player ${id + 1}`);
+  return { name: `Player ${id + 1}`, color };
+}
+
 /** One Player per setup, in order; a Computer Player takes its setup's Personality. */
 export function createPlayers(setups: readonly PlayerSetup[]): Player[] {
-  return setups.map((setup, id) => {
-    const color = PLAYER_COLORS[id];
-    if (color === undefined) throw new Error(`No colour for Player ${id + 1}`);
-    return {
-      id,
-      name: `Player ${id + 1}`,
-      color,
-      kind: setup.kind,
-      personality: setup.kind === "computer" ? setup.personality : null,
-    };
-  });
+  return setups.map((setup, id) => ({
+    id,
+    ...playerLook(id),
+    kind: setup.kind,
+    personality: setup.kind === "computer" ? setup.personality : null,
+  }));
 }
