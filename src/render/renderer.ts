@@ -1,8 +1,15 @@
-import { TANK_HALF_WIDTH, TANK_HEIGHT } from "../sim/constants";
+import { EXPLOSION_SECONDS, TANK_HALF_WIDTH, TANK_HEIGHT } from "../sim/constants";
 import { barrelTip, isAlive } from "../sim/tank";
 import type { Terrain } from "../sim/terrain";
-import type { Player, Projectile, Tank } from "../sim/types";
-import { DIRT_DEEP, DIRT_SURFACE, PROJECTILE_COLOR, SKY_BOTTOM, SKY_TOP } from "./palette";
+import type { Explosion, Player, Projectile, Tank } from "../sim/types";
+import {
+  DIRT_DEEP,
+  DIRT_SURFACE,
+  EXPLOSION_COLORS,
+  PROJECTILE_COLOR,
+  SKY_BOTTOM,
+  SKY_TOP,
+} from "./palette";
 
 export class Renderer {
   private readonly context: CanvasRenderingContext2D;
@@ -33,6 +40,7 @@ export class Renderer {
     tanks: readonly Tank[],
     players: readonly Player[],
     projectile: Projectile | null = null,
+    explosion: Explosion | null = null,
   ): void {
     this.context.fillStyle = this.sky;
     this.context.fillRect(0, 0, this.canvas.width, this.canvas.height);
@@ -47,6 +55,17 @@ export class Renderer {
       this.context.fillStyle = PROJECTILE_COLOR;
       this.context.fillRect(Math.floor(projectile.x) - 1, Math.floor(projectile.y) - 1, 2, 2);
     }
+    if (explosion) this.drawExplosion(explosion);
+  }
+
+  private drawExplosion(explosion: Explosion): void {
+    const ctx = this.context;
+    const grow = Math.min(1, explosion.elapsed / (EXPLOSION_SECONDS / 2));
+    ctx.fillStyle =
+      EXPLOSION_COLORS[Math.floor(explosion.elapsed * 30) % EXPLOSION_COLORS.length] ?? "#ffffff";
+    ctx.beginPath();
+    ctx.arc(explosion.x, explosion.y, explosion.radius * grow, 0, Math.PI * 2);
+    ctx.fill();
   }
 
   private drawTank(tank: Tank, color: string): void {

@@ -1,11 +1,19 @@
 import { Renderer } from "./render/renderer";
 import { installScaling } from "./render/scale";
-import { BABY_MISSILE, FIELD_HEIGHT, FIELD_WIDTH, TICK_SECONDS, WIND_MAX } from "./sim/constants";
+import {
+  BABY_MISSILE,
+  EXPLOSION_SECONDS,
+  FIELD_HEIGHT,
+  FIELD_WIDTH,
+  TICK_SECONDS,
+  WIND_MAX,
+} from "./sim/constants";
+import { detonate } from "./sim/explosion";
 import { placeTanks } from "./sim/placement";
 import { createPlayers } from "./sim/players";
 import { launch, stepProjectile } from "./sim/projectile";
 import { Rng } from "./sim/rng";
-import type { Projectile } from "./sim/types";
+import type { Explosion, Projectile } from "./sim/types";
 import { generateHills } from "./sim/terrainGen";
 
 const canvas = document.querySelector<HTMLCanvasElement>("#field");
@@ -30,12 +38,13 @@ const wind = rng.range(-WIND_MAX, WIND_MAX);
 
 // Temporary dev driver: Space fires the first Tank, Left/Right adjust its Angle.
 let projectile: Projectile | null = null;
+let explosion: Explosion | null = null;
 window.addEventListener("keydown", (e) => {
   const tank = tanks[0];
   if (!tank) return;
   if (e.key === "ArrowLeft") tank.angle = Math.min(180, tank.angle + 1);
   else if (e.key === "ArrowRight") tank.angle = Math.max(0, tank.angle - 1);
-  else if (e.key === " " && !projectile) projectile = launch(tank, BABY_MISSILE);
+  else if (e.key === " " && !projectile && !explosion) projectile = launch(tank, BABY_MISSILE);
 });
 
 const renderer = new Renderer(canvas);
@@ -46,14 +55,19 @@ function frame(now: number): void {
   last = now;
   while (accumulator >= TICK_SECONDS) {
     accumulator -= TICK_SECONDS;
-    if (
-      projectile &&
-      stepProjectile(projectile, wind, terrain, tanks, TICK_SECONDS).kind !== "flying"
-    ) {
-      projectile = null;
+    if (projectile) {
+      const outcome = stepProjectile(projectile, wind, terrain, tanks, TICK_SECONDS);
+      if (outcome.kind === "hit") {
+        // Damage and carving happen once, at impact; the animation only advances elapsed.
+        explosion = detonate(outcome.x, outcome.y, projectile.weapon, terrain, tanks);
+      }
+      if (outcome.kind !== "flying") projectile = null;
+    } else if (explosion) {
+      explosion.elapsed += TICK_SECONDS;
+      if (explosion.elapsed >= EXPLOSION_SECONDS) explosion = null;
     }
   }
-  renderer.draw(terrain, tanks, players, projectile);
+  renderer.draw(terrain, tanks, players, projectile, explosion);
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
