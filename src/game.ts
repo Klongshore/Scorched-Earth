@@ -142,7 +142,7 @@ export class Game {
     if (this.screen !== "setup") return;
     this.submitSetup = null;
     this.match = new Match({
-      playerKinds: choice.playerKinds,
+      players: choice.players,
       rounds: choice.rounds,
       seed: this.options.seed ?? Date.now() >>> 0,
     });

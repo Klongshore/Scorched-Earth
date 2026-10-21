@@ -11,7 +11,7 @@ import type { Projectile, Tank, Weapon } from "./types";
 
 export type ProjectileOutcome =
   | { kind: "flying" }
-  | { kind: "lost" } // left through the left or right side
+  | { kind: "lost"; side: "left" | "right" } // left through that side of the field
   | { kind: "hit"; x: number; y: number }; // touched Terrain, the floor, or a living Tank
 
 /** Spawns at the barrel tip. y points down, so upward velocity is negative. */
@@ -46,7 +46,8 @@ export function stepProjectile(
   for (let i = 0; i < n; i++) {
     p.x += dx / n;
     p.y += dy / n;
-    if (p.x < 0 || p.x >= FIELD_WIDTH) return { kind: "lost" };
+    if (p.x < 0) return { kind: "lost", side: "left" };
+    if (p.x >= FIELD_WIDTH) return { kind: "lost", side: "right" };
     if (p.y < 0) continue; // the top of the field is open
     if (tanks.some((t) => hitTest(t, p.x, p.y)) || terrain.isSolid(p.x, p.y)) {
       return { kind: "hit", x: p.x, y: Math.min(p.y, FIELD_HEIGHT - 1) };

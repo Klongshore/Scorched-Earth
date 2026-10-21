@@ -1,10 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { TICK_SECONDS } from "./constants";
+import { MAX_PLAYERS, MIN_PLAYERS, TICK_SECONDS } from "./constants";
 import { Match, type MatchSetup } from "./match";
 import type { RoundResult } from "./round";
+import type { PlayerSetup } from "./types";
+
+const human: PlayerSetup = { kind: "human" };
+const moron: PlayerSetup = { kind: "computer", personality: "moron" };
 
 function newMatch(overrides: Partial<MatchSetup> = {}): Match {
-  return new Match({ playerKinds: ["human", "human"], rounds: 3, seed: 1, ...overrides });
+  return new Match({ players: [human, human], rounds: 3, seed: 1, ...overrides });
 }
 
 /** Force the current Round to end with `result`, record it, and start the next Round if any. */
@@ -19,13 +23,22 @@ const draw: RoundResult = { kind: "draw" };
 
 describe("Match", () => {
   it("creates the Players and Round 1", () => {
-    const match = newMatch({ playerKinds: ["human", "computer"] });
+    const match = newMatch({ players: [human, moron] });
     expect(match.players.map((p) => p.kind)).toEqual(["human", "computer"]);
+    expect(match.players.map((p) => p.personality)).toEqual([null, "moron"]);
     expect(match.totalRounds).toBe(3);
     expect(match.roundWins).toEqual([0, 0]);
     expect(match.results).toEqual([]);
     expect(match.round.number).toBe(1);
     expect(match.isOver()).toBe(false);
+  });
+
+  it("creates one Player per setup, in order, with that setup's kind and Personality", () => {
+    const match = newMatch({ players: [moron, human] });
+    expect(match.players.map((p) => [p.id, p.name, p.kind, p.personality])).toEqual([
+      [0, "Player 1", "computer", "moron"],
+      [1, "Player 2", "human", null],
+    ]);
   });
 
   it("rejects Round counts outside 1..99", () => {
@@ -34,6 +47,16 @@ describe("Match", () => {
     expect(() => newMatch({ rounds: 1.5 })).toThrow();
     expect(() => newMatch({ rounds: 1 })).not.toThrow();
     expect(() => newMatch({ rounds: 99 })).not.toThrow();
+  });
+
+  it("rejects Player counts outside 2..10", () => {
+    const players = (n: number): PlayerSetup[] => Array.from({ length: n }, () => human);
+    expect(() => newMatch({ players: players(MIN_PLAYERS - 1) })).toThrow(/Players/);
+    expect(() => newMatch({ players: players(MAX_PLAYERS + 1) })).toThrow(/Players/);
+    expect(() => newMatch({ players: players(MIN_PLAYERS) })).not.toThrow();
+    expect(() => newMatch({ players: players(MAX_PLAYERS) })).not.toThrow();
+    expect(MIN_PLAYERS).toBe(2);
+    expect(MAX_PLAYERS).toBe(10);
   });
 
   it("tallies Round Wins and Draws", () => {
@@ -129,22 +152,94 @@ describe("Match", () => {
   });
 });
 
-describe("Match integration", () => {
-  it("runs a Computer-vs-Computer, 3-Round Match to completion purely by ticking", () => {
-    const match = new Match({ playerKinds: ["computer", "computer"], rounds: 3, seed: 2024 });
-    const maxTicks = 3 * 200_000;
-    let ticks = 0;
-    while (!match.isOver()) {
-      if (ticks++ >= maxTicks) expect.fail(`Match did not finish within ${maxTicks} ticks`);
-      match.round.tick(TICK_SECONDS);
-      if (match.round.phase.kind === "over") {
-        match.recordRoundResult();
-        if (!match.isOver()) match.startNextRound();
-      }
+/** Tick a Match to completion, recording each Round, failing past maxTicks. */
+function playOut(match: Match, maxTicks: number): number {
+  let ticks = 0;
+  while (!match.isOver()) {
+    if (ticks++ >= maxTicks) expect.fail(`Match did not finish within ${maxTicks} ticks`);
+    match.round.tick(TICK_SECONDS);
+    if (match.round.phase.kind === "over") {
+      match.recordRoundResult();
+      if (!match.isOver()) match.startNextRound();
     }
+  }
+  return ticks;
+}
+
+describe("Match integration", () => {
+  it("runs a 10-Moron, 2-Round Match to completion purely by ticking", () => {
+    const players = Array.from({ length: MAX_PLAYERS }, () => moron);
+    const match = new Match({ players, rounds: 2, seed: 2024 });
+    playOut(match, 2 * 200_000);
+    expect(match.results.length).toBe(2);
+    expect(match.standings()).toHaveLength(MAX_PLAYERS);
+  });
+
+  it("runs a Computer-vs-Computer, 3-Round Match to completion purely by ticking", () => {
+    const match = new Match({ players: [moron, moron], rounds: 3, seed: 2024 });
+    playOut(match, 3 * 200_000);
     expect(match.results.length).toBe(3);
     expect(match.roundWins.reduce((a, b) => a + b, 0)).toBe(
       match.results.filter((r) => r.kind === "win").length,
     );
+  });
+
+  it("runs a Match of Shooters and Morons to completion purely by ticking", () => {
+    const shooter: PlayerSetup = { kind: "computer", personality: "shooter" };
+    const match = new Match({
+      players: [shooter, moron, shooter, shooter, moron],
+      rounds: 3,
+      seed: 2024,
+    });
+    playOut(match, 3 * 200_000);
+    expect(match.results.length).toBe(3);
+  });
+
+  it("runs a Match of Tossers, Shooters and Morons to completion purely by ticking", () => {
+    const shooter: PlayerSetup = { kind: "computer", personality: "shooter" };
+    const tosser: PlayerSetup = { kind: "computer", personality: "tosser" };
+    const match = new Match({
+      players: [tosser, shooter, moron, tosser, tosser],
+      rounds: 3,
+      seed: 2024,
+    });
+    playOut(match, 3 * 200_000);
+    expect(match.results.length).toBe(3);
+  });
+
+  describe("1-Round Matches of 10 Computer Players finish within the tick budget", () => {
+    const shooter: PlayerSetup = { kind: "computer", personality: "shooter" };
+    const tosser: PlayerSetup = { kind: "computer", personality: "tosser" };
+    const lineups: Record<string, PlayerSetup[]> = {
+      Shooters: Array.from({ length: MAX_PLAYERS }, () => shooter),
+      Tossers: Array.from({ length: MAX_PLAYERS }, () => tosser),
+      "a mix": Array.from(
+        { length: MAX_PLAYERS },
+        (_, i) => [shooter, tosser, moron][i % 3] as PlayerSetup,
+      ),
+    };
+    for (const [name, players] of Object.entries(lineups)) {
+      it(`of ${name}, across 40 seeds`, () => {
+        for (let seed = 1; seed <= 40; seed++) {
+          const match = new Match({ players, rounds: 1, seed });
+          playOut(match, 200_000);
+          expect(match.results.length).toBe(1);
+        }
+      });
+    }
+  });
+
+  it("plays a seeded Moron-only Match exactly as before Shooter existed", () => {
+    // Pinned before Shooter was added: Morons must draw from the Rng exactly as they always have.
+    const match = new Match({ players: [moron, moron, moron, moron], rounds: 3, seed: 77 });
+    const ticks = playOut(match, 3 * 200_000);
+    expect(ticks).toBe(75560);
+    expect(match.results).toEqual([win(2), win(0), win(2)]);
+    expect(match.round.tanks).toEqual([
+      { playerId: 0, x: 256, y: 480, angle: 89, power: 70, health: 0 },
+      { playerId: 1, x: 80, y: 362, angle: 93, power: 0, health: 0 },
+      { playerId: 2, x: 531, y: 429, angle: 153, power: 123, health: 49 },
+      { playerId: 3, x: 425, y: 480, angle: 5, power: 352, health: 0 },
+    ]);
   });
 });

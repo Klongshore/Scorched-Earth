@@ -50,7 +50,7 @@ A Personality that calculates the Angle and Power to hit its Target, ignoring Wi
 A Personality that starts with a rough guess at its Target and, each Turn, corrects its Power based on where its last Projectile landed.
 
 **Target**:
-The enemy Tank a Computer Player is currently aiming at, kept until that Tank is destroyed.
+The enemy Tank a Computer Player is currently aiming at, kept until that Tank is destroyed or can no longer be reached.
 _Avoid_: Enemy, victim
 
 **Tank**:

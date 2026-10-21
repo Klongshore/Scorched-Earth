@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
+  COMPUTER_THINK_SECONDS,
   FIELD_WIDTH,
   MAX_ANGLE,
   MAX_HEALTH,
+  MAX_PLAYERS,
   MIN_POWER,
   POWER_PER_HEALTH,
   TICK_SECONDS,
@@ -12,12 +14,15 @@ import { createPlayers } from "./players";
 import { Rng } from "./rng";
 import { Round, type RoundAction } from "./round";
 import { isSupported } from "./tank";
-import type { Tank } from "./types";
+import type { PlayerSetup, Tank } from "./types";
+
+const HUMAN: PlayerSetup = { kind: "human" };
+const MORON: PlayerSetup = { kind: "computer", personality: "moron" };
 
 const GROUND = 400;
 
 function newRound(seed = 1): Round {
-  return new Round(1, createPlayers(["human", "human"]), new Rng(seed));
+  return new Round(1, createPlayers([HUMAN, HUMAN]), new Rng(seed));
 }
 
 function runUntil(round: Round, predicate: (r: Round) => boolean, maxTicks = 20000): void {
@@ -56,7 +61,7 @@ describe("Round", () => {
       expect(round.tanks).toHaveLength(2);
       for (const t of round.tanks) expect(t.health).toBe(MAX_HEALTH);
       expect(Math.abs(round.wind)).toBeLessThanOrEqual(WIND_MAX);
-      expect(round.phase).toEqual({ kind: "aiming", thinkRemaining: null });
+      expect(round.phase).toEqual({ kind: "aiming", thinkTicks: null });
       expect([...round.turnOrder].sort()).toEqual([0, 1]);
     }
   });
@@ -190,13 +195,238 @@ describe("Round", () => {
     expect(a.terrain.cells).toEqual(b.terrain.cells);
   });
 
+  it("pauses a Computer Player for COMPUTER_THINK_SECONDS worth of ticks before it fires", () => {
+    const round = new Round(1, createPlayers([MORON, MORON]), new Rng(3));
+    let ticks = 0;
+    while (round.phase.kind === "aiming") {
+      round.tick(TICK_SECONDS);
+      ticks++;
+      if (ticks > 10_000) expect.fail("Computer Player never fired");
+    }
+    expect(round.phase.kind).toBe("flying");
+    expect(ticks).toBe(Math.round(COMPUTER_THINK_SECONDS / TICK_SECONDS));
+  });
+
   it("lets a Computer Player fire after its think time", () => {
-    const round = new Round(1, createPlayers(["computer", "computer"]), new Rng(3));
+    const round = new Round(1, createPlayers([MORON, MORON]), new Rng(3));
     expect(round.phase.kind).toBe("aiming");
-    if (round.phase.kind === "aiming") expect(round.phase.thinkRemaining).not.toBeNull();
+    if (round.phase.kind === "aiming") expect(round.phase.thinkTicks).not.toBeNull();
     round.act({ kind: "fire" });
     expect(round.phase.kind).toBe("aiming");
     runUntil(round, (r) => r.phase.kind !== "aiming");
     expect(round.phase.kind).toBe("flying");
+  });
+});
+
+describe("Round with 10 Players", () => {
+  const tenHumans = (seed = 1): Round =>
+    new Round(1, createPlayers(Array.from({ length: MAX_PLAYERS }, () => HUMAN)), new Rng(seed));
+
+  /** End the current Turn without firing: nothing needs Settling, so it ends on the next tick. */
+  function endTurn(round: Round): void {
+    round.phase = { kind: "settling" };
+    runUntil(round, (r) => r.phase.kind === "aiming" || r.phase.kind === "over");
+  }
+
+  it("starts with one full-Health Tank per Player", () => {
+    const round = tenHumans();
+    expect(round.tanks.map((t) => t.playerId)).toEqual([...Array(MAX_PLAYERS).keys()]);
+    for (const t of round.tanks) expect(t.health).toBe(MAX_HEALTH);
+  });
+
+  it("holds every Player exactly once in the Turn order", () => {
+    for (let seed = 1; seed <= 10; seed++) {
+      const order = tenHumans(seed).turnOrder;
+      expect(order).toHaveLength(MAX_PLAYERS);
+      expect([...order].sort((a, b) => a - b)).toEqual([...Array(MAX_PLAYERS).keys()]);
+    }
+  });
+
+  it("gives every living Player a Turn in order, skipping destroyed Tanks", () => {
+    const round = tenHumans();
+    const order = round.turnOrder;
+    const dead = new Set([order[1], order[2], order[5], order[9]]);
+    for (const id of dead) round.tankOf(id as number).health = 0;
+
+    const seen: number[] = [round.currentPlayerId];
+    for (let i = 0; i < 6; i++) {
+      endTurn(round);
+      seen.push(round.currentPlayerId);
+    }
+    const living = order.filter((id) => !dead.has(id));
+    expect(seen).toEqual([...living, living[0]]);
+  });
+
+  it("ends in a Round Win once only one Tank survives", () => {
+    const round = tenHumans();
+    const survivor = round.turnOrder[4] as number;
+    for (const t of round.tanks) if (t.playerId !== survivor) t.health = 0;
+    endTurn(round);
+    expect(round.phase).toEqual({ kind: "over", result: { kind: "win", playerId: survivor } });
+  });
+
+  it("keeps going while two Tanks survive", () => {
+    const round = tenHumans();
+    const [a, b] = [round.turnOrder[3] as number, round.turnOrder[7] as number];
+    for (const t of round.tanks) if (t.playerId !== a && t.playerId !== b) t.health = 0;
+    endTurn(round);
+    expect(round.phase.kind).toBe("aiming");
+    expect([a, b]).toContain(round.currentPlayerId);
+  });
+
+  it("ends in a Draw when no Tank survives", () => {
+    const round = tenHumans();
+    for (const t of round.tanks) t.health = 0;
+    endTurn(round);
+    expect(round.phase).toEqual({ kind: "over", result: { kind: "draw" } });
+  });
+});
+
+describe("Round Targets", () => {
+  const SHOOTER: PlayerSetup = { kind: "computer", personality: "shooter" };
+
+  /** End the current Turn without firing: nothing needs Settling, so it ends on the next tick. */
+  function endTurn(round: Round): void {
+    round.phase = { kind: "settling" };
+    runUntil(round, (r) => r.phase.kind === "aiming" || r.phase.kind === "over");
+  }
+
+  function untilTurnOf(round: Round, playerId: number): void {
+    for (let i = 0; i < 20; i++) {
+      if (round.currentPlayerId === playerId) return;
+      endTurn(round);
+    }
+    expect.fail(`Player ${playerId} never got a Turn`);
+  }
+
+  it("gives a Computer Player no Target before its first Turn, and a Human none at all", () => {
+    const round = new Round(1, createPlayers([HUMAN, SHOOTER, SHOOTER, SHOOTER]), new Rng(12));
+    for (const id of [1, 2, 3]) {
+      if (id !== round.currentPlayerId) expect(round.targetOf(id)).toBeNull();
+    }
+    expect(round.targetOf(0)).toBeNull();
+  });
+
+  it("keeps a Shooter's Target across Turns while it is alive", () => {
+    const round = new Round(1, createPlayers([SHOOTER, HUMAN, HUMAN, HUMAN]), new Rng(31));
+    untilTurnOf(round, 0);
+    const target = round.targetOf(0);
+    expect(target).not.toBeNull();
+    expect(target).not.toBe(0);
+    for (let cycle = 0; cycle < 3; cycle++) {
+      endTurn(round);
+      untilTurnOf(round, 0);
+      expect(round.targetOf(0)).toBe(target);
+    }
+  });
+
+  it("picks a new living Target once the Target's Tank is destroyed", () => {
+    const round = new Round(1, createPlayers([SHOOTER, HUMAN, HUMAN, HUMAN]), new Rng(31));
+    untilTurnOf(round, 0);
+    const first = round.targetOf(0) as number;
+    round.tankOf(first).health = 0;
+    endTurn(round);
+    untilTurnOf(round, 0);
+    const second = round.targetOf(0);
+    expect(second).not.toBeNull();
+    expect([first, 0]).not.toContain(second);
+    expect(round.tankOf(second as number).health).toBeGreaterThan(0);
+  });
+
+  it("starts every Round with no Target", () => {
+    const players = createPlayers([SHOOTER, SHOOTER, SHOOTER]);
+    const rng = new Rng(8);
+    const first = new Round(1, players, rng);
+    for (let i = 0; i < 3; i++) endTurn(first);
+    for (const id of [0, 1, 2]) expect(first.targetOf(id)).not.toBeNull();
+    const second = new Round(2, players, rng);
+    for (const id of [0, 1, 2]) {
+      if (id !== second.currentPlayerId) expect(second.targetOf(id)).toBeNull();
+    }
+  });
+
+  it("aims a Shooter toward its Target as its Turn begins", () => {
+    for (let seed = 1; seed <= 20; seed++) {
+      const round = new Round(1, createPlayers([SHOOTER, SHOOTER, SHOOTER]), new Rng(seed));
+      const self = round.currentTank();
+      const target = round.tankOf(round.targetOf(self.playerId) as number);
+      expect(target).not.toBe(self);
+      expect(self.angle < 90).toBe(target.x > self.x);
+      expect(self.power).toBeLessThanOrEqual(self.health * POWER_PER_HEALTH);
+    }
+  });
+});
+
+describe("Round Landings", () => {
+  const TOSSER: PlayerSetup = { kind: "computer", personality: "tosser" };
+
+  /** A Round of two Computer Players on flat Terrain at Wind 0, the firer at `firerX`. */
+  function computerScenario(firerX: number, seed = 3) {
+    const round = new Round(1, createPlayers([MORON, MORON]), new Rng(seed));
+    round.wind = 0;
+    round.terrain.flatten(0, FIELD_WIDTH - 1, GROUND);
+    const firer = round.currentTank();
+    const other = round.tanks.find((t) => t !== firer) as Tank;
+    firer.x = firerX;
+    firer.y = GROUND;
+    other.x = firerX < FIELD_WIDTH / 2 ? FIELD_WIDTH - 40 : 40;
+    other.y = GROUND;
+    return { round, firer };
+  }
+
+  /** Override the Computer Player's aim during its pause, then fly until the Projectile ends. */
+  function fireAndFinish(round: Round, firer: Tank, angle: number, power: number): void {
+    firer.angle = angle;
+    firer.power = power;
+    runUntil(round, (r) => r.phase.kind === "flying");
+    runUntil(round, (r) => r.phase.kind !== "flying");
+  }
+
+  it("records where a Computer Player's Projectile hit", () => {
+    const { round, firer } = computerScenario(200);
+    fireAndFinish(round, firer, 90, 100);
+    const landing = round.memoryOf(firer.playerId)?.lastLanding;
+    expect(landing?.kind).toBe("hit");
+    expect(landing?.kind === "hit" && landing.x).toBeCloseTo(200, 5);
+  });
+
+  it("records the side a lost Projectile left by", () => {
+    const right = computerScenario(100);
+    fireAndFinish(right.round, right.firer, 20, 1000);
+    expect(right.round.memoryOf(right.firer.playerId)?.lastLanding).toEqual({
+      kind: "lost",
+      side: "right",
+    });
+
+    const left = computerScenario(540);
+    fireAndFinish(left.round, left.firer, 160, 1000);
+    expect(left.round.memoryOf(left.firer.playerId)?.lastLanding).toEqual({
+      kind: "lost",
+      side: "left",
+    });
+  });
+
+  it("keeps no memory for a Human", () => {
+    const round = new Round(1, createPlayers([HUMAN, TOSSER]), new Rng(1));
+    expect(round.memoryOf(0)).toBeNull();
+  });
+
+  it("starts every Round with no Tosser aim or landing", () => {
+    const players = createPlayers([TOSSER, TOSSER, TOSSER]);
+    const rng = new Rng(8);
+    const first = new Round(1, players, rng);
+    for (let i = 0; i < 3; i++) {
+      runUntil(first, (r) => r.phase.kind === "flying");
+      runUntil(first, (r) => r.phase.kind === "aiming" || r.phase.kind === "over");
+      if (first.phase.kind === "over") break;
+    }
+    const remembered = [0, 1, 2].map((id) => first.memoryOf(id));
+    expect(remembered.some((m) => m?.lastAim && m.lastLanding)).toBe(true);
+
+    const second = new Round(2, players, rng);
+    for (const id of [0, 1, 2]) {
+      if (id === second.currentPlayerId) continue;
+      expect(second.memoryOf(id)).toEqual({ targetId: null, lastAim: null, lastLanding: null });
+    }
   });
 });

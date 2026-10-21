@@ -1,13 +1,13 @@
 import {
   BABY_MISSILE,
-  COMPUTER_THINK_SECONDS,
+  COMPUTER_THINK_TICKS,
   EXPLOSION_SECONDS,
   FIELD_HEIGHT,
   FIELD_WIDTH,
   WIND_MAX,
 } from "./constants";
 import { detonate } from "./explosion";
-import { chooseAim } from "./personalities";
+import { chooseAim, newComputerMemory, type ComputerMemory, type Landing } from "./personalities";
 import { placeTanks } from "./placement";
 import { launch, stepProjectile } from "./projectile";
 import type { Rng } from "./rng";
@@ -18,7 +18,7 @@ import { generateHills } from "./terrainGen";
 import type { Explosion, Player, Projectile, Tank } from "./types";
 
 export type Phase =
-  | { kind: "aiming"; thinkRemaining: number | null } // thinkRemaining is non-null only for Computer Players
+  | { kind: "aiming"; thinkTicks: number | null } // ticks left to think; non-null only for Computer Players
   | { kind: "flying"; projectile: Projectile }
   | { kind: "exploding"; explosion: Explosion }
   | { kind: "settling" }
@@ -38,15 +38,20 @@ export class Round {
   wind: number; // not readonly: tests set it to 0 for predictable shots
   readonly turnOrder: number[]; // playerIds, shuffled once per Round
   currentIndex: number; // index into turnOrder
-  phase: Phase = { kind: "aiming", thinkRemaining: null };
+  phase: Phase = { kind: "aiming", thinkTicks: null };
 
   private readonly players: readonly Player[];
   private readonly rng: Rng;
+  /** One per Computer Player, keyed by playerId; fresh every Round. */
+  private readonly memories = new Map<number, ComputerMemory>();
 
   constructor(number: number, players: readonly Player[], rng: Rng) {
     this.number = number;
     this.players = players;
     this.rng = rng;
+    for (const p of players) {
+      if (p.kind === "computer") this.memories.set(p.id, newComputerMemory());
+    }
     const playerIds = players.map((p) => p.id);
     this.terrain = generateHills(rng, FIELD_WIDTH, FIELD_HEIGHT);
     this.tanks = placeTanks(rng, this.terrain, playerIds);
@@ -66,7 +71,7 @@ export class Round {
 
   /** True while a Computer Player is "thinking": its aim is shown and the shot fires when the timer runs out. */
   get isComputerThinking(): boolean {
-    return this.phase.kind === "aiming" && this.phase.thinkRemaining !== null;
+    return this.phase.kind === "aiming" && this.phase.thinkTicks !== null;
   }
 
   /** Apply a human action. Ignored unless phase is "aiming" and the current Player is human. */
@@ -94,17 +99,19 @@ export class Round {
     const phase = this.phase;
     switch (phase.kind) {
       case "aiming":
-        if (phase.thinkRemaining !== null) {
-          phase.thinkRemaining -= dt;
-          if (phase.thinkRemaining <= 0) this.fire();
+        if (phase.thinkTicks !== null) {
+          phase.thinkTicks -= 1;
+          if (phase.thinkTicks <= 0) this.fire();
         }
         break;
       case "flying": {
         const p = phase.projectile;
         const outcome = stepProjectile(p, this.wind, this.terrain, this.tanks, dt);
         if (outcome.kind === "lost") {
+          this.recordLanding(p.firedBy, { kind: "lost", side: outcome.side });
           this.phase = { kind: "settling" };
         } else if (outcome.kind === "hit") {
+          this.recordLanding(p.firedBy, { kind: "hit", x: outcome.x });
           const explosion = detonate(outcome.x, outcome.y, p.weapon, this.terrain, this.tanks);
           this.phase = { kind: "exploding", explosion };
         }
@@ -149,14 +156,45 @@ export class Round {
     if (player.kind === "computer") {
       const tank = this.currentTank();
       if (!player.personality) throw new Error(`Computer player ${player.id} has no Personality`);
-      const aim = chooseAim(player.personality, tank, this.rng);
+      const aim = chooseAim(
+        player.personality,
+        tank,
+        this.tanks,
+        this.requireMemory(player.id),
+        this.rng,
+      );
       tank.angle = aim.angle;
       tank.power = aim.power;
       clampAim(tank);
-      this.phase = { kind: "aiming", thinkRemaining: COMPUTER_THINK_SECONDS };
+      this.phase = { kind: "aiming", thinkTicks: COMPUTER_THINK_TICKS };
     } else {
-      this.phase = { kind: "aiming", thinkRemaining: null };
+      this.phase = { kind: "aiming", thinkTicks: null };
     }
+  }
+
+  /**
+   * The playerId of a Computer Player's Target this Round; null before it picks one, while no
+   * opponent is within its reach, or for a Human.
+   */
+  targetOf(playerId: number): number | null {
+    return this.memories.get(playerId)?.targetId ?? null;
+  }
+
+  /** What a Computer Player remembers this Round; null for a Human. */
+  memoryOf(playerId: number): Readonly<ComputerMemory> | null {
+    return this.memories.get(playerId) ?? null;
+  }
+
+  /** Remember where a Computer Player's Projectile ended up; a Human's is not recorded. */
+  private recordLanding(playerId: number, landing: Landing): void {
+    const memory = this.memories.get(playerId);
+    if (memory) memory.lastLanding = landing;
+  }
+
+  private requireMemory(playerId: number): ComputerMemory {
+    const memory = this.memories.get(playerId);
+    if (!memory) throw new Error(`No memory for Computer player ${playerId}`);
+    return memory;
   }
 
   tankOf(playerId: number): Tank {

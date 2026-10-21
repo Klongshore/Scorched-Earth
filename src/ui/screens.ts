@@ -1,15 +1,67 @@
-import { DEFAULT_ROUNDS, MAX_ROUNDS, MIN_ROUNDS } from "../sim/constants";
+import {
+  DEFAULT_PLAYERS,
+  DEFAULT_ROUNDS,
+  MAX_PLAYERS,
+  MAX_ROUNDS,
+  MIN_PLAYERS,
+  MIN_ROUNDS,
+} from "../sim/constants";
 import type { Match } from "../sim/match";
-import { createPlayers } from "../sim/players";
-import type { Player, PlayerKind } from "../sim/types";
+import { playerLook } from "../sim/players";
+import type { Player, PlayerSetup } from "../sim/types";
 
 /** What the Setup screen chooses; the Game adds the seed to make a MatchSetup. */
 export interface SetupChoice {
-  readonly playerKinds: readonly PlayerKind[];
+  readonly players: readonly PlayerSetup[]; // one per Player, in order
   readonly rounds: number;
 }
 
-export const DEFAULT_PLAYER_KINDS: readonly PlayerKind[] = ["human", "computer"];
+/** The choices each Player's dropdown offers, in display order. */
+export const PLAYER_OPTIONS: readonly { readonly label: string; readonly setup: PlayerSetup }[] = [
+  { label: "Human", setup: { kind: "human" } },
+  { label: "Moron", setup: { kind: "computer", personality: "moron" } },
+  { label: "Shooter", setup: { kind: "computer", personality: "shooter" } },
+  { label: "Tosser", setup: { kind: "computer", personality: "tosser" } },
+];
+
+export const DEFAULT_PLAYERS_SETUP: readonly PlayerSetup[] = [
+  { kind: "human" },
+  { kind: "computer", personality: "moron" },
+];
+
+/** What a row added by raising the Player count starts as. */
+const ADDED_PLAYER_SETUP: PlayerSetup = { kind: "computer", personality: "moron" };
+
+/** The Player counts the Setup screen offers: MIN_PLAYERS..MAX_PLAYERS. */
+export const PLAYER_COUNTS: readonly number[] = Array.from(
+  { length: MAX_PLAYERS - MIN_PLAYERS + 1 },
+  (_, i) => MIN_PLAYERS + i,
+);
+
+/**
+ * The dropdown values after changing the Player count to `count`: rows are removed from
+ * the end, or added at the end as Moron, and the remaining rows keep their choices.
+ */
+export function resizePlayerChoices(optionValues: readonly string[], count: number): string[] {
+  const added = optionValue(ADDED_PLAYER_SETUP);
+  return Array.from({ length: count }, (_, i) => optionValues[i] ?? added);
+}
+
+/** The dropdown value for a setup: "human", or the Computer Player's Personality. */
+export function optionValue(setup: PlayerSetup): string {
+  return setup.kind === "human" ? "human" : setup.personality;
+}
+
+function setupFromOption(value: string): PlayerSetup {
+  const option = PLAYER_OPTIONS.find((o) => optionValue(o.setup) === value);
+  if (!option) throw new Error(`Unknown Player choice: ${value}`);
+  return option.setup;
+}
+
+/** Turn the form's dropdown values (one per Player, in order) and Rounds box into a choice. */
+export function setupChoiceFrom(optionValues: readonly string[], rounds: string): SetupChoice {
+  return { players: optionValues.map(setupFromOption), rounds: clampRounds(rounds) };
+}
 
 const CONTROLS_REMINDER = "←/→ Angle   ↑/↓ Power (Shift ×10)   Space Fire";
 
@@ -41,10 +93,24 @@ function panel(overlay: HTMLElement, ...children: Node[]): void {
   overlay.replaceChildren(box);
 }
 
-function playerName(player: Player): HTMLElement {
+function playerName(player: Pick<Player, "name" | "color">): HTMLElement {
   const span = el("span", player.name);
   span.style.color = player.color;
   return span;
+}
+
+/**
+ * A submit handler that reads the form with `read` and passes the result to `start`, at most
+ * once. If `read` throws, nothing has started and the next submit tries again.
+ */
+export function startOnce<T>(read: () => T, start: (choice: T) => void): () => void {
+  let started = false;
+  return () => {
+    if (started) return;
+    const choice = read();
+    started = true;
+    start(choice);
+  };
 }
 
 /**
@@ -57,21 +123,44 @@ export function showSetup(
 ): () => void {
   const form = el("form");
   form.noValidate = true; // invalid Round counts are clamped, not rejected
-  const players = createPlayers(DEFAULT_PLAYER_KINDS);
-  const selects = players.map((player, i) => {
-    const label = el("label");
-    const select = el("select");
-    select.name = `player${i + 1}`;
-    for (const kind of ["human", "computer"] as const) {
-      const option = el("option", kind === "human" ? "Human" : "Computer");
-      option.value = kind;
-      option.selected = kind === DEFAULT_PLAYER_KINDS[i];
-      select.append(option);
-    }
-    label.append(playerName(player), select);
-    form.append(label);
-    return select;
+
+  const countLabel = el("label");
+  const count = el("select");
+  count.name = "players";
+  for (const n of PLAYER_COUNTS) {
+    const option = el("option", String(n));
+    option.value = String(n);
+    option.selected = n === DEFAULT_PLAYERS;
+    count.append(option);
+  }
+  countLabel.append(el("span", "Players"), count);
+
+  // One row per Player: their name in their colour and a dropdown of PLAYER_OPTIONS.
+  const rows = el("div", undefined, "players");
+  let selects: HTMLSelectElement[] = [];
+  const showRows = (optionValues: readonly string[]): void => {
+    const labels = optionValues.map((_, i) => {
+      const label = el("label");
+      const select = el("select");
+      select.name = `player${i + 1}`;
+      for (const { label: text, setup } of PLAYER_OPTIONS) {
+        const option = el("option", text);
+        option.value = optionValue(setup);
+        option.selected = option.value === optionValues[i];
+        select.append(option);
+      }
+      label.append(playerName(playerLook(i)), select);
+      return { label, select };
+    });
+    selects = labels.map((l) => l.select);
+    rows.replaceChildren(...labels.map((l) => l.label));
+  };
+  showRows(resizePlayerChoices(DEFAULT_PLAYERS_SETUP.map(optionValue), DEFAULT_PLAYERS));
+  count.addEventListener("change", () => {
+    const values = selects.map((s) => s.value);
+    showRows(resizePlayerChoices(values, Number(count.value)));
   });
+  form.append(countLabel, rows);
 
   const roundsLabel = el("label");
   const rounds = el("input");
@@ -91,14 +180,17 @@ export function showSetup(
   start.autofocus = true;
   form.append(roundsLabel, start);
 
-  let started = false;
-  const submit = (): void => {
-    if (started) return;
-    started = true;
-    const value = clampRounds(rounds.value);
-    rounds.value = String(value);
-    onStart({ playerKinds: selects.map((s) => s.value as PlayerKind), rounds: value });
-  };
+  const submit = startOnce(
+    () =>
+      setupChoiceFrom(
+        selects.map((s) => s.value),
+        rounds.value,
+      ),
+    (choice) => {
+      rounds.value = String(choice.rounds);
+      onStart(choice);
+    },
+  );
   form.addEventListener("submit", (event) => {
     event.preventDefault();
     submit();

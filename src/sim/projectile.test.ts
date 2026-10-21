@@ -69,9 +69,11 @@ describe("projectile", () => {
     );
   });
 
-  it("is lost when fired off the side", () => {
-    const p = launch(tank({ x: 630, angle: 0 }), BABY_MISSILE);
-    expect(flyUntilDone(p, 0, flat(), []).kind).toBe("lost");
+  it("is lost when fired off the side, and says which side", () => {
+    const right = launch(tank({ x: 630, angle: 0 }), BABY_MISSILE);
+    expect(flyUntilDone(right, 0, flat(), [])).toEqual({ kind: "lost", side: "right" });
+    const left = launch(tank({ x: 10, angle: 180 }), BABY_MISSILE);
+    expect(flyUntilDone(left, 0, flat(), [])).toEqual({ kind: "lost", side: "left" });
   });
 
   it("does not tunnel through a 1-px wall at high speed", () => {
