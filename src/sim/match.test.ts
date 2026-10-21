@@ -153,7 +153,7 @@ describe("Match", () => {
 });
 
 /** Tick a Match to completion, recording each Round, failing past maxTicks. */
-function playOut(match: Match, maxTicks: number): void {
+function playOut(match: Match, maxTicks: number): number {
   let ticks = 0;
   while (!match.isOver()) {
     if (ticks++ >= maxTicks) expect.fail(`Match did not finish within ${maxTicks} ticks`);
@@ -163,6 +163,7 @@ function playOut(match: Match, maxTicks: number): void {
       if (!match.isOver()) match.startNextRound();
     }
   }
+  return ticks;
 }
 
 describe("Match integration", () => {
@@ -181,5 +182,32 @@ describe("Match integration", () => {
     expect(match.roundWins.reduce((a, b) => a + b, 0)).toBe(
       match.results.filter((r) => r.kind === "win").length,
     );
+  });
+
+  it("runs a Match of Shooters and Morons to completion purely by ticking", () => {
+    const shooter: PlayerSetup = { kind: "computer", personality: "shooter" };
+    const match = new Match({
+      players: [shooter, moron, shooter, shooter, moron],
+      rounds: 3,
+      // Not 2024: in that Match's Round 2, two damaged Shooters end up out of each other's
+      // reach and fire at their Power caps forever.
+      seed: 2025,
+    });
+    playOut(match, 3 * 200_000);
+    expect(match.results.length).toBe(3);
+  });
+
+  it("plays a seeded Moron-only Match exactly as before Shooter existed", () => {
+    // Pinned before Shooter was added: Morons must draw from the Rng exactly as they always have.
+    const match = new Match({ players: [moron, moron, moron, moron], rounds: 3, seed: 77 });
+    const ticks = playOut(match, 3 * 200_000);
+    expect(ticks).toBe(75560);
+    expect(match.results).toEqual([win(2), win(0), win(2)]);
+    expect(match.round.tanks).toEqual([
+      { playerId: 0, x: 256, y: 480, angle: 89, power: 70, health: 0 },
+      { playerId: 1, x: 80, y: 362, angle: 93, power: 0, health: 0 },
+      { playerId: 2, x: 531, y: 429, angle: 153, power: 123, health: 49 },
+      { playerId: 3, x: 425, y: 480, angle: 5, power: 352, health: 0 },
+    ]);
   });
 });

@@ -7,7 +7,7 @@ import {
   WIND_MAX,
 } from "./constants";
 import { detonate } from "./explosion";
-import { chooseAim } from "./personalities";
+import { chooseAim, newComputerMemory, type ComputerMemory } from "./personalities";
 import { placeTanks } from "./placement";
 import { launch, stepProjectile } from "./projectile";
 import type { Rng } from "./rng";
@@ -42,11 +42,16 @@ export class Round {
 
   private readonly players: readonly Player[];
   private readonly rng: Rng;
+  /** One per Computer Player, keyed by playerId; fresh every Round. */
+  private readonly memories = new Map<number, ComputerMemory>();
 
   constructor(number: number, players: readonly Player[], rng: Rng) {
     this.number = number;
     this.players = players;
     this.rng = rng;
+    for (const p of players) {
+      if (p.kind === "computer") this.memories.set(p.id, newComputerMemory());
+    }
     const playerIds = players.map((p) => p.id);
     this.terrain = generateHills(rng, FIELD_WIDTH, FIELD_HEIGHT);
     this.tanks = placeTanks(rng, this.terrain, playerIds);
@@ -151,7 +156,13 @@ export class Round {
     if (player.kind === "computer") {
       const tank = this.currentTank();
       if (!player.personality) throw new Error(`Computer player ${player.id} has no Personality`);
-      const aim = chooseAim(player.personality, tank, this.rng);
+      const aim = chooseAim(
+        player.personality,
+        tank,
+        this.tanks,
+        this.memoryOf(player.id),
+        this.rng,
+      );
       tank.angle = aim.angle;
       tank.power = aim.power;
       clampAim(tank);
@@ -159,6 +170,17 @@ export class Round {
     } else {
       this.phase = { kind: "aiming", thinkRemaining: null };
     }
+  }
+
+  /** The playerId of a Computer Player's Target this Round; null before it picks one, or for a Human. */
+  targetOf(playerId: number): number | null {
+    return this.memories.get(playerId)?.targetId ?? null;
+  }
+
+  private memoryOf(playerId: number): ComputerMemory {
+    const memory = this.memories.get(playerId);
+    if (!memory) throw new Error(`No memory for Computer player ${playerId}`);
+    return memory;
   }
 
   tankOf(playerId: number): Tank {

@@ -60,3 +60,8 @@ export const MAX_ROUNDS = 99;
 
 // Computer Players
 export const COMPUTER_THINK_SECONDS = 1.5;
+
+// Shooter
+export const SHOOTER_MIN_ANGLE = 30; // degrees above the horizontal, toward the Target
+export const SHOOTER_MAX_ANGLE = 60;
+export const SHOOTER_POWER_ERROR = 0.05; // ±5%

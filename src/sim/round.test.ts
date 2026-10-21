@@ -281,3 +281,78 @@ describe("Round with 10 Players", () => {
     expect(round.phase).toEqual({ kind: "over", result: { kind: "draw" } });
   });
 });
+
+describe("Round Targets", () => {
+  const SHOOTER: PlayerSetup = { kind: "computer", personality: "shooter" };
+
+  /** End the current Turn without firing: nothing needs Settling, so it ends on the next tick. */
+  function endTurn(round: Round): void {
+    round.phase = { kind: "settling" };
+    runUntil(round, (r) => r.phase.kind === "aiming" || r.phase.kind === "over");
+  }
+
+  function untilTurnOf(round: Round, playerId: number): void {
+    for (let i = 0; i < 20; i++) {
+      if (round.currentPlayerId === playerId) return;
+      endTurn(round);
+    }
+    expect.fail(`Player ${playerId} never got a Turn`);
+  }
+
+  it("gives a Computer Player no Target before its first Turn, and a Human none at all", () => {
+    const round = new Round(1, createPlayers([HUMAN, SHOOTER, SHOOTER, SHOOTER]), new Rng(12));
+    for (const id of [1, 2, 3]) {
+      if (id !== round.currentPlayerId) expect(round.targetOf(id)).toBeNull();
+    }
+    expect(round.targetOf(0)).toBeNull();
+  });
+
+  it("keeps a Shooter's Target across Turns while it is alive", () => {
+    const round = new Round(1, createPlayers([SHOOTER, HUMAN, HUMAN, HUMAN]), new Rng(31));
+    untilTurnOf(round, 0);
+    const target = round.targetOf(0);
+    expect(target).not.toBeNull();
+    expect(target).not.toBe(0);
+    for (let cycle = 0; cycle < 3; cycle++) {
+      endTurn(round);
+      untilTurnOf(round, 0);
+      expect(round.targetOf(0)).toBe(target);
+    }
+  });
+
+  it("picks a new living Target once the Target's Tank is destroyed", () => {
+    const round = new Round(1, createPlayers([SHOOTER, HUMAN, HUMAN, HUMAN]), new Rng(31));
+    untilTurnOf(round, 0);
+    const first = round.targetOf(0) as number;
+    round.tankOf(first).health = 0;
+    endTurn(round);
+    untilTurnOf(round, 0);
+    const second = round.targetOf(0);
+    expect(second).not.toBeNull();
+    expect([first, 0]).not.toContain(second);
+    expect(round.tankOf(second as number).health).toBeGreaterThan(0);
+  });
+
+  it("starts every Round with no Target", () => {
+    const players = createPlayers([SHOOTER, SHOOTER, SHOOTER]);
+    const rng = new Rng(8);
+    const first = new Round(1, players, rng);
+    for (let i = 0; i < 3; i++) endTurn(first);
+    for (const id of [0, 1, 2]) expect(first.targetOf(id)).not.toBeNull();
+    const second = new Round(2, players, rng);
+    for (const id of [0, 1, 2]) {
+      if (id !== second.currentPlayerId) expect(second.targetOf(id)).toBeNull();
+    }
+  });
+
+  it("aims a Shooter toward its Target as its Turn begins", () => {
+    for (let seed = 1; seed <= 20; seed++) {
+      const round = new Round(1, createPlayers([SHOOTER, SHOOTER, SHOOTER]), new Rng(seed));
+      const self = round.currentTank();
+      const target = round.tankOf(round.targetOf(self.playerId) as number);
+      expect(target).not.toBe(self);
+      expect(self.angle < 90).toBe(target.x > self.x);
+      expect(self.power).toBeLessThanOrEqual(self.health * POWER_PER_HEALTH);
+    }
+  });
+});

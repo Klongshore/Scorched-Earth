@@ -19,11 +19,21 @@ import {
 } from "./screens";
 
 describe("Player choices on the Setup screen", () => {
-  it("offers Human and Moron", () => {
-    expect(PLAYER_OPTIONS.map((o) => o.label)).toEqual(["Human", "Moron"]);
+  it("offers Human, Moron and Shooter", () => {
+    expect(PLAYER_OPTIONS.map((o) => o.label)).toEqual(["Human", "Moron", "Shooter"]);
     expect(PLAYER_OPTIONS.map((o) => o.setup)).toEqual([
       { kind: "human" },
       { kind: "computer", personality: "moron" },
+      { kind: "computer", personality: "shooter" },
+    ]);
+  });
+
+  it("starts a Match with the chosen Shooters", () => {
+    const shooter = optionValue({ kind: "computer", personality: "shooter" });
+    expect(setupChoiceFrom(["human", shooter, shooter], "2").players).toEqual([
+      { kind: "human" },
+      { kind: "computer", personality: "shooter" },
+      { kind: "computer", personality: "shooter" },
     ]);
   });
 
