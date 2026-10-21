@@ -10,7 +10,6 @@ const LINE_2_Y = 30;
 const LEFT = 8;
 const BAR_WIDTH = 50;
 const BAR_HEIGHT = 8;
-const PLAYER_GAP = 24;
 
 type Piece = readonly [text: string, color: string];
 
@@ -50,8 +49,26 @@ export function aimLine(match: Match): Piece[] {
   ];
 }
 
+export interface HealthLine {
+  text: string;
+  color: string;
+  health: number;
+}
+
+/**
+ * HUD line 2: only the current Player's name and Health, and only while they are aiming.
+ * Every Tank's Health is drawn above the Tank itself, so the HUD never lists every Player.
+ */
+export function healthLine(match: Match): HealthLine | null {
+  const { round } = match;
+  if (round.phase.kind !== "aiming") return null;
+  const player = round.playerOf(round.currentPlayerId);
+  const { health } = round.currentTank();
+  return { text: `${player.name}: ${health}`, color: player.color, health };
+}
+
 export function drawHud(ctx: CanvasRenderingContext2D, match: Match): void {
-  const { round, players } = match;
+  const { round } = match;
   ctx.save();
   ctx.fillStyle = HUD_STRIP;
   ctx.fillRect(0, 0, ctx.canvas.width, STRIP_HEIGHT);
@@ -59,16 +76,14 @@ export function drawHud(ctx: CanvasRenderingContext2D, match: Match): void {
 
   drawRun(ctx, aimLine(match), LEFT, LINE_1_Y);
 
-  let x = LEFT;
-  for (const player of players) {
-    const { health } = round.tankOf(player.id);
-    x = drawRun(ctx, [[`${player.name}: ${health} `, player.color]], x, LINE_2_Y);
+  const line2 = healthLine(match);
+  if (line2) {
+    const x = drawRun(ctx, [[`${line2.text} `, line2.color]], LEFT, LINE_2_Y);
     const barTop = LINE_2_Y - BAR_HEIGHT;
     ctx.fillStyle = HUD_BAR_BACKGROUND;
     ctx.fillRect(x, barTop, BAR_WIDTH, BAR_HEIGHT);
-    ctx.fillStyle = player.color;
-    ctx.fillRect(x, barTop, Math.round((BAR_WIDTH * health) / MAX_HEALTH), BAR_HEIGHT);
-    x += BAR_WIDTH + PLAYER_GAP;
+    ctx.fillStyle = line2.color;
+    ctx.fillRect(x, barTop, Math.round((BAR_WIDTH * line2.health) / MAX_HEALTH), BAR_HEIGHT);
   }
   // Line 1 has no room left at 640 px, so the thinking marker sits right-aligned on line 2.
   if (round.isComputerThinking) {

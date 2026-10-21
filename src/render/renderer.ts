@@ -1,4 +1,4 @@
-import { EXPLOSION_SECONDS, TANK_HALF_WIDTH, TANK_HEIGHT } from "../sim/constants";
+import { BARREL_LENGTH, EXPLOSION_SECONDS, TANK_HALF_WIDTH, TANK_HEIGHT } from "../sim/constants";
 import { barrelTip, isAlive } from "../sim/tank";
 import type { Terrain } from "../sim/terrain";
 import type { Explosion, Tank } from "../sim/types";
@@ -16,6 +16,8 @@ import {
 
 const TURN_MARKER_GAP = 6;
 const TURN_MARKER_SIZE = 4;
+const TANK_HEALTH_FONT = "10px monospace";
+const TANK_HEALTH_GAP = 2; // px from the tip of a barrel at 90° to the Health baseline
 
 export class Renderer {
   private readonly context: CanvasRenderingContext2D;
@@ -57,7 +59,10 @@ export class Renderer {
     }
     this.context.drawImage(this.terrainCanvas, 0, 0);
     for (const tank of tanks) {
-      if (isAlive(tank)) this.drawTank(tank, round.playerOf(tank.playerId).color);
+      if (!isAlive(tank)) continue;
+      const { color } = round.playerOf(tank.playerId);
+      this.drawTank(tank, color);
+      this.drawTankHealth(tank, color);
     }
     if (phase.kind === "aiming") this.drawTurnMarker(round.currentTank());
     if (phase.kind === "flying") {
@@ -81,6 +86,18 @@ export class Renderer {
     ctx.lineTo(cx + TURN_MARKER_SIZE, tipY - TURN_MARKER_SIZE);
     ctx.closePath();
     ctx.fill();
+  }
+
+  /** The Tank's Health, centred above it and high enough that a barrel at 90° never covers it. */
+  private drawTankHealth(tank: Tank, color: string): void {
+    const ctx = this.context;
+    ctx.save();
+    ctx.font = TANK_HEALTH_FONT;
+    ctx.textAlign = "center";
+    ctx.fillStyle = color;
+    const baseline = tank.y - TANK_HEIGHT - BARREL_LENGTH - TANK_HEALTH_GAP;
+    ctx.fillText(String(tank.health), tank.x + 0.5, baseline);
+    ctx.restore();
   }
 
   private drawExplosion(explosion: Explosion): void {
