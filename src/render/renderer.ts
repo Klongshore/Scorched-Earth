@@ -1,15 +1,20 @@
 import { EXPLOSION_SECONDS, TANK_HALF_WIDTH, TANK_HEIGHT } from "../sim/constants";
 import { barrelTip, isAlive } from "../sim/tank";
 import type { Terrain } from "../sim/terrain";
-import type { Explosion, Player, Projectile, Tank } from "../sim/types";
+import type { Explosion, Tank } from "../sim/types";
+import { drawHud, type MatchView } from "./hud";
 import {
   DIRT_DEEP,
   DIRT_SURFACE,
   EXPLOSION_COLORS,
+  HUD_TEXT,
   PROJECTILE_COLOR,
   SKY_BOTTOM,
   SKY_TOP,
 } from "./palette";
+
+const TURN_MARKER_GAP = 6;
+const TURN_MARKER_SIZE = 4;
 
 export class Renderer {
   private readonly context: CanvasRenderingContext2D;
@@ -35,13 +40,10 @@ export class Renderer {
     this.sky.addColorStop(1, SKY_BOTTOM);
   }
 
-  draw(
-    terrain: Terrain,
-    tanks: readonly Tank[],
-    players: readonly Player[],
-    projectile: Projectile | null = null,
-    explosion: Explosion | null = null,
-  ): void {
+  /** Draw the Match's current Round and the HUD. Reads state only; never changes it. */
+  draw(match: MatchView): void {
+    const { round, players } = match;
+    const { terrain, tanks, phase } = round;
     this.context.fillStyle = this.sky;
     this.context.fillRect(0, 0, this.canvas.width, this.canvas.height);
     if (this.builtTerrain !== terrain || this.builtVersion !== terrain.version) {
@@ -51,11 +53,28 @@ export class Renderer {
     for (const tank of tanks) {
       if (isAlive(tank)) this.drawTank(tank, players[tank.playerId]?.color ?? "#ffffff");
     }
-    if (projectile) {
+    if (phase.kind === "aiming") this.drawTurnMarker(round.currentTank());
+    if (phase.kind === "flying") {
+      const { projectile } = phase;
       this.context.fillStyle = PROJECTILE_COLOR;
       this.context.fillRect(Math.floor(projectile.x) - 1, Math.floor(projectile.y) - 1, 2, 2);
     }
-    if (explosion) this.drawExplosion(explosion);
+    if (phase.kind === "exploding") this.drawExplosion(phase.explosion);
+    drawHud(this.context, match);
+  }
+
+  /** A small triangle 6 px above the current Player's Tank while aiming. */
+  private drawTurnMarker(tank: Tank): void {
+    const ctx = this.context;
+    const tipY = tank.y - TANK_HEIGHT - TURN_MARKER_GAP;
+    const cx = tank.x + 0.5;
+    ctx.fillStyle = HUD_TEXT;
+    ctx.beginPath();
+    ctx.moveTo(cx, tipY);
+    ctx.lineTo(cx - TURN_MARKER_SIZE, tipY - TURN_MARKER_SIZE);
+    ctx.lineTo(cx + TURN_MARKER_SIZE, tipY - TURN_MARKER_SIZE);
+    ctx.closePath();
+    ctx.fill();
   }
 
   private drawExplosion(explosion: Explosion): void {
