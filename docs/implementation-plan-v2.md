@@ -200,6 +200,8 @@ Note that the barrel tip depends on the Angle, so compute it with `barrelTip` af
 
 ### 4.2 Shooter in `chooseAim`
 
+> **Superseded during implementation (#34 and code review):** a Target is reachable only if some Angle the Personality fires hits it within the Power cap. The Shooter picks at random among those Angles, never falls back to its cap, and a Computer Player with no reachable opponent fires like a Moron that Turn. Steps 2, 3 and 5 below describe the original plan.
+
 1. `target = chooseTarget(...)`.
 2. Pick an Angle pointing toward the Target: `base = rng.int(SHOOTER_MIN_ANGLE, SHOOTER_MAX_ANGLE)`; use `base` if the Target is to the right, `180 − base` if to the left.
 3. `ideal = powerToHit(self, target, angle)`. If it is `null`, use `powerCap(self)`.
