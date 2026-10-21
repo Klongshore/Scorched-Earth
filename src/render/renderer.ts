@@ -49,7 +49,7 @@ export class Renderer {
 
   /** Draw the Match's current Round and the HUD. Reads state only; never changes it. */
   draw(match: Match): void {
-    const { round, players } = match;
+    const { round } = match;
     const { terrain, tanks, phase } = round;
     this.drawBackdrop();
     if (this.builtTerrain !== terrain || this.builtVersion !== terrain.version) {
@@ -57,7 +57,7 @@ export class Renderer {
     }
     this.context.drawImage(this.terrainCanvas, 0, 0);
     for (const tank of tanks) {
-      if (isAlive(tank)) this.drawTank(tank, players[tank.playerId]?.color ?? "#ffffff");
+      if (isAlive(tank)) this.drawTank(tank, round.playerOf(tank.playerId).color);
     }
     if (phase.kind === "aiming") this.drawTurnMarker(round.currentTank());
     if (phase.kind === "flying") {

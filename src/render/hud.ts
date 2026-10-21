@@ -34,17 +34,19 @@ function drawRun(
   return x;
 }
 
-function aimLine(match: Match): Piece[] {
-  const { round, players } = match;
-  const player = players[round.currentPlayerId];
+/**
+ * HUD line 1. The current Player's name, Angle and Power show only while they are aiming,
+ * so a finished shot or a finished Round never looks like a live Turn.
+ */
+export function aimLine(match: Match): Piece[] {
+  const { round } = match;
+  const status = `Wind: ${windText(round.wind)}   Round ${round.number}/${match.totalRounds}`;
+  if (round.phase.kind !== "aiming") return [[status, HUD_TEXT]];
+  const player = round.playerOf(round.currentPlayerId);
   const tank = round.currentTank();
   return [
-    [player?.name ?? "?", player?.color ?? HUD_TEXT],
-    [
-      `   Angle: ${tank.angle}   Power: ${tank.power}/${powerCap(tank)}` +
-        `   Wind: ${windText(round.wind)}   Round ${round.number}/${match.totalRounds}`,
-      HUD_TEXT,
-    ],
+    [player.name, player.color],
+    [`   Angle: ${tank.angle}   Power: ${tank.power}/${powerCap(tank)}   ${status}`, HUD_TEXT],
   ];
 }
 
@@ -59,7 +61,7 @@ export function drawHud(ctx: CanvasRenderingContext2D, match: Match): void {
 
   let x = LEFT;
   for (const player of players) {
-    const health = round.tanks.find((t) => t.playerId === player.id)?.health ?? 0;
+    const { health } = round.tankOf(player.id);
     x = drawRun(ctx, [[`${player.name}: ${health} `, player.color]], x, LINE_2_Y);
     const barTop = LINE_2_Y - BAR_HEIGHT;
     ctx.fillStyle = HUD_BAR_BACKGROUND;

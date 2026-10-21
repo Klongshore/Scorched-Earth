@@ -28,9 +28,10 @@ function isFormControl(target: EventTarget | null): boolean {
 
 /**
  * Translate keydown events into Round actions. Each event, including OS auto-repeat,
- * is one step, except Space, which fires once per press. Arrow keys and Space are left
- * alone while a form control has focus, so the overlay screens stay keyboard-usable;
- * Enter always confirms. Returns a detach function.
+ * is one step, except Space and Enter, which act once per press (so holding Enter cannot
+ * skip through the overlay screens). Arrow keys and Space are left alone while a form
+ * control has focus, so the overlay screens stay keyboard-usable; Enter always confirms.
+ * Returns a detach function.
  */
 export function attachKeyboard(
   target: Window,
@@ -40,7 +41,7 @@ export function attachKeyboard(
   const onKeyDown = (event: KeyboardEvent): void => {
     if (event.key === "Enter") {
       event.preventDefault();
-      onConfirm();
+      if (!event.repeat) onConfirm();
       return;
     }
     if (isFormControl(event.target)) return;

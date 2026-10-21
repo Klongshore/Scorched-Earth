@@ -159,13 +159,13 @@ export class Round {
     }
   }
 
-  private tankOf(playerId: number): Tank {
+  tankOf(playerId: number): Tank {
     const tank = this.tanks.find((t) => t.playerId === playerId);
     if (!tank) throw new Error(`No Tank for player ${playerId}`);
     return tank;
   }
 
-  private playerOf(playerId: number): Player {
+  playerOf(playerId: number): Player {
     const player = this.players.find((p) => p.id === playerId);
     if (!player) throw new Error(`No player ${playerId}`);
     return player;

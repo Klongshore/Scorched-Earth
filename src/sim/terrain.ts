@@ -5,6 +5,13 @@ export class Terrain {
   readonly cells: Uint8Array;
   /** Incremented on every change, so the renderer knows when to redraw. */
   version = 0;
+  /**
+   * Columns [unsettledFrom, unsettledTo] may hold dirt with air below it. Every edit widens the
+   * range; settlePass scans only these columns and narrows the range to the ones still moving.
+   * Empty when unsettledFrom > unsettledTo.
+   */
+  private unsettledFrom = Infinity;
+  private unsettledTo = -Infinity;
 
   constructor(width: number, height: number) {
     this.width = width;
@@ -29,6 +36,12 @@ export class Terrain {
     if (this.cells[index] === value) return;
     this.cells[index] = value;
     this.version++;
+    this.markUnsettled(x, x);
+  }
+
+  private markUnsettled(x0: number, x1: number): void {
+    this.unsettledFrom = Math.min(this.unsettledFrom, x0);
+    this.unsettledTo = Math.max(this.unsettledTo, x1);
   }
 
   /** Topmost solid row in column x, or height if the column is empty. */
@@ -69,7 +82,10 @@ export class Terrain {
         }
       }
     }
-    if (changed) this.version++;
+    if (changed) {
+      this.version++;
+      this.markUnsettled(x0, x1);
+    }
   }
 
   /** Make columns [x0, x1] solid from row y down; clear them above y. Used for Tank pads. */
@@ -88,27 +104,40 @@ export class Terrain {
         }
       }
     }
-    if (changed) this.version++;
+    if (changed) {
+      this.version++;
+      this.markUnsettled(from, to);
+    }
   }
 
   /**
    * One Settling pass: every solid cell with air directly below moves down one row.
    * Each column is scanned from row height-2 up to row 0, so a whole floating chunk drops 1 px per pass.
-   * Returns true if any cell moved.
+   * Only columns edited since they last came to rest are scanned; a column that moves nothing is
+   * at rest, since dirt only moves straight down. Returns true if any cell moved.
    */
   settlePass(): boolean {
     const w = this.width;
-    let moved = false;
-    for (let x = 0; x < w; x++) {
+    let from = Infinity;
+    let to = -Infinity;
+    for (let x = Math.max(0, this.unsettledFrom); x <= Math.min(w - 1, this.unsettledTo); x++) {
+      let columnMoved = false;
       for (let y = this.height - 2; y >= 0; y--) {
         const index = y * w + x;
         if (this.cells[index] === 1 && this.cells[index + w] === 0) {
           this.cells[index] = 0;
           this.cells[index + w] = 1;
-          moved = true;
+          columnMoved = true;
         }
       }
+      if (columnMoved) {
+        from = Math.min(from, x);
+        to = Math.max(to, x);
+      }
     }
+    this.unsettledFrom = from;
+    this.unsettledTo = to;
+    const moved = from <= to;
     if (moved) this.version++;
     return moved;
   }

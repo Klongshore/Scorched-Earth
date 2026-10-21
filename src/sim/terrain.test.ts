@@ -122,6 +122,26 @@ describe("Terrain.settlePass", () => {
   });
 });
 
+describe("Terrain.settlePass after edits", () => {
+  it("brings undercut hills fully to rest", () => {
+    const t = generateHills(new Rng(3), FIELD_WIDTH, FIELD_HEIGHT);
+    expect(t.settlePass()).toBe(false);
+    // Undercut the hills so dirt is left hanging, then let it settle.
+    t.carveCircle(200, t.surfaceY(200) + 30, 20);
+    t.carveCircle(500, t.surfaceY(500) + 25, 15);
+    let passes = 0;
+    while (t.settlePass()) passes++;
+    expect(passes).toBeGreaterThan(0);
+    let floating = 0;
+    for (let x = 0; x < FIELD_WIDTH; x++) {
+      for (let y = 0; y < FIELD_HEIGHT - 1; y++) {
+        if (t.isSolid(x, y) && !t.isSolid(x, y + 1)) floating++;
+      }
+    }
+    expect(floating).toBe(0);
+  });
+});
+
 describe("generateHills", () => {
   it("is deterministic per seed and differs between seeds", () => {
     const a = generateHills(new Rng(7), FIELD_WIDTH, FIELD_HEIGHT);

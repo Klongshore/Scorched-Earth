@@ -80,6 +80,14 @@ describe("attachKeyboard", () => {
     expect(k.actions).toEqual([]);
   });
 
+  it("confirms once per Enter press, ignoring auto-repeat", () => {
+    const k = setup();
+    k.press("Enter");
+    expect(k.press("Enter", { repeat: true })).toBe(true);
+    k.press("Enter", { repeat: true });
+    expect(k.confirms()).toBe(1);
+  });
+
   it("prevents default only for handled keys", () => {
     const k = setup();
     for (const key of ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", " ", "Enter"]) {
