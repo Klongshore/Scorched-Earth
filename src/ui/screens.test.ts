@@ -1,11 +1,20 @@
 import { describe, expect, it } from "vitest";
-import { DEFAULT_ROUNDS, MAX_ROUNDS, MIN_ROUNDS } from "../sim/constants";
+import {
+  DEFAULT_PLAYERS,
+  DEFAULT_ROUNDS,
+  MAX_PLAYERS,
+  MAX_ROUNDS,
+  MIN_PLAYERS,
+  MIN_ROUNDS,
+} from "../sim/constants";
 import { createPlayers } from "../sim/players";
 import {
   DEFAULT_PLAYERS_SETUP,
+  PLAYER_COUNTS,
   PLAYER_OPTIONS,
   clampRounds,
   optionValue,
+  resizePlayerChoices,
   setupChoiceFrom,
 } from "./screens";
 
@@ -49,6 +58,47 @@ describe("Player choices on the Setup screen", () => {
       if (player.kind === "human") expect(player.personality).toBeNull();
       else expect(player.personality).not.toBeNull();
     }
+  });
+});
+
+describe("Player count on the Setup screen", () => {
+  const human = optionValue({ kind: "human" });
+  const moron = optionValue({ kind: "computer", personality: "moron" });
+
+  it("offers 2 to 10 Players, defaulting to 2", () => {
+    expect(PLAYER_COUNTS).toEqual([2, 3, 4, 5, 6, 7, 8, 9, 10]);
+    expect(PLAYER_COUNTS[0]).toBe(MIN_PLAYERS);
+    expect(PLAYER_COUNTS.at(-1)).toBe(MAX_PLAYERS);
+    expect(DEFAULT_PLAYERS_SETUP).toHaveLength(DEFAULT_PLAYERS);
+  });
+
+  it("adds Moron rows at the end when raised, keeping existing choices", () => {
+    const five = resizePlayerChoices([moron, human], 5);
+    expect(five).toEqual([moron, human, moron, moron, moron]);
+  });
+
+  it("removes rows from the end when lowered, keeping the first choices", () => {
+    const five = [human, moron, human, human, moron];
+    expect(resizePlayerChoices(five, 3)).toEqual([human, moron, human]);
+  });
+
+  it("goes from 2 to 5 rows and back to 3 keeping the first 3 choices", () => {
+    const start = DEFAULT_PLAYERS_SETUP.map(optionValue);
+    const five = resizePlayerChoices(start, 5);
+    expect(five).toHaveLength(5);
+    const edited = [five[0], five[1], human, five[3], five[4]] as string[];
+    expect(resizePlayerChoices(edited, 3)).toEqual([human, moron, human]);
+  });
+
+  it("starts a 10-Player Match with every choice in order", () => {
+    const values = resizePlayerChoices([human, human], MAX_PLAYERS);
+    const choice = setupChoiceFrom(values, "1");
+    expect(choice.players).toHaveLength(MAX_PLAYERS);
+    expect(choice.players.slice(0, 3)).toEqual([
+      { kind: "human" },
+      { kind: "human" },
+      { kind: "computer", personality: "moron" },
+    ]);
   });
 });
 

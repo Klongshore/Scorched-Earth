@@ -1,11 +1,11 @@
-import { MAX_ROUNDS, MIN_ROUNDS } from "./constants";
+import { MAX_PLAYERS, MAX_ROUNDS, MIN_PLAYERS, MIN_ROUNDS } from "./constants";
 import { createPlayers } from "./players";
 import { Rng } from "./rng";
 import { Round, type RoundResult } from "./round";
 import type { Player, PlayerSetup } from "./types";
 
 export interface MatchSetup {
-  readonly players: readonly PlayerSetup[]; // one per Player, length 2 for now
+  readonly players: readonly PlayerSetup[]; // one per Player, MIN_PLAYERS..MAX_PLAYERS
   readonly rounds: number; // MIN_ROUNDS..MAX_ROUNDS
   readonly seed: number;
 }
@@ -22,6 +22,10 @@ export class Match {
 
   constructor(setup: MatchSetup) {
     const { rounds } = setup;
+    const count = setup.players.length;
+    if (count < MIN_PLAYERS || count > MAX_PLAYERS) {
+      throw new Error(`Players must number ${MIN_PLAYERS}..${MAX_PLAYERS}, got ${count}`);
+    }
     if (!Number.isInteger(rounds) || rounds < MIN_ROUNDS || rounds > MAX_ROUNDS) {
       throw new Error(`Rounds must be an integer in ${MIN_ROUNDS}..${MAX_ROUNDS}, got ${rounds}`);
     }

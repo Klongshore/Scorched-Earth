@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
+  COMPUTER_THINK_SECONDS,
   FIELD_WIDTH,
   MAX_ANGLE,
   MAX_HEALTH,
+  MAX_PLAYERS,
   MIN_POWER,
   POWER_PER_HEALTH,
   TICK_SECONDS,
@@ -193,6 +195,18 @@ describe("Round", () => {
     expect(a.terrain.cells).toEqual(b.terrain.cells);
   });
 
+  it("pauses a Computer Player for COMPUTER_THINK_SECONDS worth of ticks before it fires", () => {
+    const round = new Round(1, createPlayers([MORON, MORON]), new Rng(3));
+    let ticks = 0;
+    while (round.phase.kind === "aiming") {
+      round.tick(TICK_SECONDS);
+      ticks++;
+      if (ticks > 10_000) expect.fail("Computer Player never fired");
+    }
+    expect(round.phase.kind).toBe("flying");
+    expect(ticks).toBe(Math.round(COMPUTER_THINK_SECONDS / TICK_SECONDS));
+  });
+
   it("lets a Computer Player fire after its think time", () => {
     const round = new Round(1, createPlayers([MORON, MORON]), new Rng(3));
     expect(round.phase.kind).toBe("aiming");
@@ -201,5 +215,69 @@ describe("Round", () => {
     expect(round.phase.kind).toBe("aiming");
     runUntil(round, (r) => r.phase.kind !== "aiming");
     expect(round.phase.kind).toBe("flying");
+  });
+});
+
+describe("Round with 10 Players", () => {
+  const tenHumans = (seed = 1): Round =>
+    new Round(1, createPlayers(Array.from({ length: MAX_PLAYERS }, () => HUMAN)), new Rng(seed));
+
+  /** End the current Turn without firing: nothing needs Settling, so it ends on the next tick. */
+  function endTurn(round: Round): void {
+    round.phase = { kind: "settling" };
+    runUntil(round, (r) => r.phase.kind === "aiming" || r.phase.kind === "over");
+  }
+
+  it("starts with one full-Health Tank per Player", () => {
+    const round = tenHumans();
+    expect(round.tanks.map((t) => t.playerId)).toEqual([...Array(MAX_PLAYERS).keys()]);
+    for (const t of round.tanks) expect(t.health).toBe(MAX_HEALTH);
+  });
+
+  it("holds every Player exactly once in the Turn order", () => {
+    for (let seed = 1; seed <= 10; seed++) {
+      const order = tenHumans(seed).turnOrder;
+      expect(order).toHaveLength(MAX_PLAYERS);
+      expect([...order].sort((a, b) => a - b)).toEqual([...Array(MAX_PLAYERS).keys()]);
+    }
+  });
+
+  it("gives every living Player a Turn in order, skipping destroyed Tanks", () => {
+    const round = tenHumans();
+    const order = round.turnOrder;
+    const dead = new Set([order[1], order[2], order[5], order[9]]);
+    for (const id of dead) round.tankOf(id as number).health = 0;
+
+    const seen: number[] = [round.currentPlayerId];
+    for (let i = 0; i < 6; i++) {
+      endTurn(round);
+      seen.push(round.currentPlayerId);
+    }
+    const living = order.filter((id) => !dead.has(id));
+    expect(seen).toEqual([...living, living[0]]);
+  });
+
+  it("ends in a Round Win once only one Tank survives", () => {
+    const round = tenHumans();
+    const survivor = round.turnOrder[4] as number;
+    for (const t of round.tanks) if (t.playerId !== survivor) t.health = 0;
+    endTurn(round);
+    expect(round.phase).toEqual({ kind: "over", result: { kind: "win", playerId: survivor } });
+  });
+
+  it("keeps going while two Tanks survive", () => {
+    const round = tenHumans();
+    const [a, b] = [round.turnOrder[3] as number, round.turnOrder[7] as number];
+    for (const t of round.tanks) if (t.playerId !== a && t.playerId !== b) t.health = 0;
+    endTurn(round);
+    expect(round.phase.kind).toBe("aiming");
+    expect([a, b]).toContain(round.currentPlayerId);
+  });
+
+  it("ends in a Draw when no Tank survives", () => {
+    const round = tenHumans();
+    for (const t of round.tanks) t.health = 0;
+    endTurn(round);
+    expect(round.phase).toEqual({ kind: "over", result: { kind: "draw" } });
   });
 });

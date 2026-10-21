@@ -1,4 +1,11 @@
-import { DEFAULT_ROUNDS, MAX_ROUNDS, MIN_ROUNDS } from "../sim/constants";
+import {
+  DEFAULT_PLAYERS,
+  DEFAULT_ROUNDS,
+  MAX_PLAYERS,
+  MAX_ROUNDS,
+  MIN_PLAYERS,
+  MIN_ROUNDS,
+} from "../sim/constants";
 import type { Match } from "../sim/match";
 import { createPlayers } from "../sim/players";
 import type { Player, PlayerSetup } from "../sim/types";
@@ -19,6 +26,24 @@ export const DEFAULT_PLAYERS_SETUP: readonly PlayerSetup[] = [
   { kind: "human" },
   { kind: "computer", personality: "moron" },
 ];
+
+/** What a row added by raising the Player count starts as. */
+const ADDED_PLAYER_SETUP: PlayerSetup = { kind: "computer", personality: "moron" };
+
+/** The Player counts the Setup screen offers: MIN_PLAYERS..MAX_PLAYERS. */
+export const PLAYER_COUNTS: readonly number[] = Array.from(
+  { length: MAX_PLAYERS - MIN_PLAYERS + 1 },
+  (_, i) => MIN_PLAYERS + i,
+);
+
+/**
+ * The dropdown values after changing the Player count to `count`: rows are removed from
+ * the end, or added at the end as Moron, and the remaining rows keep their choices.
+ */
+export function resizePlayerChoices(optionValues: readonly string[], count: number): string[] {
+  const added = optionValue(ADDED_PLAYER_SETUP);
+  return Array.from({ length: count }, (_, i) => optionValues[i] ?? added);
+}
 
 /** The dropdown value for a setup: "human", or the Computer Player's Personality. */
 export function optionValue(setup: PlayerSetup): string {
@@ -82,22 +107,46 @@ export function showSetup(
 ): () => void {
   const form = el("form");
   form.noValidate = true; // invalid Round counts are clamped, not rejected
-  const players = createPlayers(DEFAULT_PLAYERS_SETUP);
-  const selects = players.map((player, i) => {
-    const label = el("label");
-    const select = el("select");
-    select.name = `player${i + 1}`;
-    const defaultSetup = DEFAULT_PLAYERS_SETUP[i];
-    for (const { label: text, setup } of PLAYER_OPTIONS) {
-      const option = el("option", text);
-      option.value = optionValue(setup);
-      option.selected = defaultSetup !== undefined && option.value === optionValue(defaultSetup);
-      select.append(option);
-    }
-    label.append(playerName(player), select);
-    form.append(label);
-    return select;
+
+  const countLabel = el("label");
+  const count = el("select");
+  count.name = "players";
+  for (const n of PLAYER_COUNTS) {
+    const option = el("option", String(n));
+    option.value = String(n);
+    option.selected = n === DEFAULT_PLAYERS;
+    count.append(option);
+  }
+  countLabel.append(el("span", "Players"), count);
+
+  // One row per Player: their name in their colour and a dropdown of PLAYER_OPTIONS.
+  const rows = el("div", undefined, "players");
+  let selects: HTMLSelectElement[] = [];
+  const showRows = (optionValues: readonly string[]): void => {
+    // Only the names and colours matter here; the dropdowns hold the actual choices.
+    const players = createPlayers(optionValues.map(() => ({ kind: "human" })));
+    const labels = players.map((player, i) => {
+      const label = el("label");
+      const select = el("select");
+      select.name = `player${i + 1}`;
+      for (const { label: text, setup } of PLAYER_OPTIONS) {
+        const option = el("option", text);
+        option.value = optionValue(setup);
+        option.selected = option.value === optionValues[i];
+        select.append(option);
+      }
+      label.append(playerName(player), select);
+      return { label, select };
+    });
+    selects = labels.map((l) => l.select);
+    rows.replaceChildren(...labels.map((l) => l.label));
+  };
+  showRows(resizePlayerChoices(DEFAULT_PLAYERS_SETUP.map(optionValue), DEFAULT_PLAYERS));
+  count.addEventListener("change", () => {
+    const values = selects.map((s) => s.value);
+    showRows(resizePlayerChoices(values, Number(count.value)));
   });
+  form.append(countLabel, rows);
 
   const roundsLabel = el("label");
   const rounds = el("input");

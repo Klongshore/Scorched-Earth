@@ -51,9 +51,12 @@ export const PLACEMENT_EDGE_MARGIN = 24;
 export const PLACEMENT_MAX_JITTER = 40;
 
 // Match
+export const MIN_PLAYERS = 2;
+export const MAX_PLAYERS = 10;
+export const DEFAULT_PLAYERS = 2;
 export const DEFAULT_ROUNDS = 10;
 export const MIN_ROUNDS = 1;
 export const MAX_ROUNDS = 99;
 
 // Computer Players
-export const COMPUTER_THINK_SECONDS = 3;
+export const COMPUTER_THINK_SECONDS = 1.5;

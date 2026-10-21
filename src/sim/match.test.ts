@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { TICK_SECONDS } from "./constants";
+import { MAX_PLAYERS, MIN_PLAYERS, TICK_SECONDS } from "./constants";
 import { Match, type MatchSetup } from "./match";
 import type { RoundResult } from "./round";
 import type { PlayerSetup } from "./types";
@@ -47,6 +47,16 @@ describe("Match", () => {
     expect(() => newMatch({ rounds: 1.5 })).toThrow();
     expect(() => newMatch({ rounds: 1 })).not.toThrow();
     expect(() => newMatch({ rounds: 99 })).not.toThrow();
+  });
+
+  it("rejects Player counts outside 2..10", () => {
+    const players = (n: number): PlayerSetup[] => Array.from({ length: n }, () => human);
+    expect(() => newMatch({ players: players(MIN_PLAYERS - 1) })).toThrow(/Players/);
+    expect(() => newMatch({ players: players(MAX_PLAYERS + 1) })).toThrow(/Players/);
+    expect(() => newMatch({ players: players(MIN_PLAYERS) })).not.toThrow();
+    expect(() => newMatch({ players: players(MAX_PLAYERS) })).not.toThrow();
+    expect(MIN_PLAYERS).toBe(2);
+    expect(MAX_PLAYERS).toBe(10);
   });
 
   it("tallies Round Wins and Draws", () => {
@@ -142,19 +152,31 @@ describe("Match", () => {
   });
 });
 
+/** Tick a Match to completion, recording each Round, failing past maxTicks. */
+function playOut(match: Match, maxTicks: number): void {
+  let ticks = 0;
+  while (!match.isOver()) {
+    if (ticks++ >= maxTicks) expect.fail(`Match did not finish within ${maxTicks} ticks`);
+    match.round.tick(TICK_SECONDS);
+    if (match.round.phase.kind === "over") {
+      match.recordRoundResult();
+      if (!match.isOver()) match.startNextRound();
+    }
+  }
+}
+
 describe("Match integration", () => {
+  it("runs a 10-Moron, 2-Round Match to completion purely by ticking", () => {
+    const players = Array.from({ length: MAX_PLAYERS }, () => moron);
+    const match = new Match({ players, rounds: 2, seed: 2024 });
+    playOut(match, 2 * 200_000);
+    expect(match.results.length).toBe(2);
+    expect(match.standings()).toHaveLength(MAX_PLAYERS);
+  });
+
   it("runs a Computer-vs-Computer, 3-Round Match to completion purely by ticking", () => {
     const match = new Match({ players: [moron, moron], rounds: 3, seed: 2024 });
-    const maxTicks = 3 * 200_000;
-    let ticks = 0;
-    while (!match.isOver()) {
-      if (ticks++ >= maxTicks) expect.fail(`Match did not finish within ${maxTicks} ticks`);
-      match.round.tick(TICK_SECONDS);
-      if (match.round.phase.kind === "over") {
-        match.recordRoundResult();
-        if (!match.isOver()) match.startNextRound();
-      }
-    }
+    playOut(match, 3 * 200_000);
     expect(match.results.length).toBe(3);
     expect(match.roundWins.reduce((a, b) => a + b, 0)).toBe(
       match.results.filter((r) => r.kind === "win").length,
