@@ -29,7 +29,7 @@ _Avoid_: Tie, stalemate
 ### Participants
 
 **Player**:
-A participant who takes Turns across the whole Match, human or computer. Owns a single Tank in each Round.
+A participant who takes Turns across the whole Match, human or computer. Owns a single Tank in each Round. A Match has 2 to 10 Players, each fighting for themselves.
 _Avoid_: User, opponent, team
 
 **Computer Player**:
@@ -37,8 +37,21 @@ A Player whose Turns are decided by an AI Personality rather than a human.
 _Avoid_: Bot, CPU, AI player
 
 **Personality**:
-The named strategy a Computer Player uses to aim and fire (e.g. Moron, Shooter).
+The named strategy a Computer Player uses to aim and fire: Moron, Shooter or Tosser.
 _Avoid_: Difficulty, AI level
+
+**Moron**:
+A Personality that fires at a random Angle and a random Power.
+
+**Shooter**:
+A Personality that calculates the Angle and Power to hit its Target, ignoring Wind and anything in the way, then adds a little random error.
+
+**Tosser**:
+A Personality that starts with a rough guess at its Target and, each Turn, corrects its Power based on where its last Projectile landed.
+
+**Target**:
+The enemy Tank a Computer Player is currently aiming at, kept until that Tank is destroyed.
+_Avoid_: Enemy, victim
 
 **Tank**:
 A Player's unit on the field during one Round, with a position, Health, Angle and Power.
