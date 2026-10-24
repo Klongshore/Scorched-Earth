@@ -1,3 +1,5 @@
+import type { Weapon, WeaponName } from "./types";
+
 // Field
 export const FIELD_WIDTH = 640;
 export const FIELD_HEIGHT = 480;
@@ -33,7 +35,19 @@ export const PAD_HALF_WIDTH = 10; // flattened ground each side of a Tank
 export const TANK_FALL_PIXELS_PER_TICK = 2;
 
 // Weapons
-export const BABY_MISSILE = { name: "Baby Missile", radius: 20, maxDamage: 30 } as const;
+/** Every Weapon, in Shop order. */
+export const WEAPONS: readonly Weapon[] = [
+  { name: "Baby Missile", kind: "blast", bundle: null, price: 0, radius: 20, maxDamage: 30 },
+];
+
+/** The Weapon with this name; throws for a name not in WEAPONS. */
+export function weaponNamed(name: WeaponName): Weapon {
+  const weapon = WEAPONS.find((w) => w.name === name);
+  if (!weapon) throw new Error(`No Weapon named ${name}`);
+  return weapon;
+}
+
+export const BABY_MISSILE = weaponNamed("Baby Missile");
 
 // Explosion and Settling
 export const EXPLOSION_SECONDS = 0.5;

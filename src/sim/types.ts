@@ -21,11 +21,34 @@ export interface Tank {
   health: number; // integer 0..100
 }
 
-export interface Weapon {
-  readonly name: string;
+export type WeaponName =
+  | "Baby Missile"
+  | "Missile"
+  | "Baby Nuke"
+  | "Nuke"
+  | "MIRV"
+  | "Funky Bomb"
+  | "Baby Roller"
+  | "Roller"
+  | "Heavy Roller"
+  | "Dirt Clod"
+  | "Dirt Ball"
+  | "Ton of Dirt";
+
+interface WeaponBase {
+  readonly name: WeaponName;
   readonly radius: number;
-  readonly maxDamage: number;
+  readonly bundle: number | null; // null only for the Baby Missile: never bought, never used up
+  readonly price: number; // per Bundle
 }
+
+/** A Weapon, keyed on how it behaves. */
+export type Weapon =
+  | (WeaponBase & { readonly kind: "blast"; readonly maxDamage: number })
+  | (WeaponBase & { readonly kind: "mirv"; readonly maxDamage: number }) // splits at the top of its arc
+  | (WeaponBase & { readonly kind: "funky"; readonly maxDamage: number }) // scatters bomblets on landing
+  | (WeaponBase & { readonly kind: "roller"; readonly maxDamage: number })
+  | (WeaponBase & { readonly kind: "dirt" }); // adds dirt, damages no one
 
 export interface Projectile {
   x: number;
