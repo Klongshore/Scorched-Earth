@@ -102,20 +102,42 @@ _Avoid_: Map, level, ground
 Unsupported dirt, and any Tank resting on it, falling straight down after an Explosion until it rests.
 _Avoid_: Collapse, gravity
 
+### Defence
+
+**Shield**:
+An Item raised around a Tank for the rest of a Round, absorbing Explosion damage before Health until its Shield Strength runs out (Shield, Heavy Shield).
+_Avoid_: Armour, barrier, force field
+
+**Shield Strength**:
+How much Explosion damage a raised Shield can still absorb; it is gone at 0.
+_Avoid_: Energy, charge, shield HP
+
+**Parachute**:
+An Item that opens by itself when a Tank falls far enough to take Fall Damage, and spares it that Fall Damage.
+_Avoid_: Chute
+
+**Fall Damage**:
+Damage a Tank takes for falling further than a safe distance during Settling.
+_Avoid_: Impact damage, crash damage
+
 ### Economy
 
 **Money**:
-What a Player spends in the Shop, kept for the whole Match. Earned by damaging and destroying other Tanks and by Round Wins; harming your own Tank earns nothing. It never decides the Match: only Round Wins do.
+What a Player spends in the Shop, kept for the whole Match. Earned by damaging and destroying other Tanks, whether by Explosion or during Settling, and by Round Wins; harming your own Tank earns nothing. It never decides the Match: only Round Wins do.
 _Avoid_: Cash, credits, gold, score
 
 **Shop**:
-Where Players buy Weapons, open before every Round, including the first.
+Where Players buy Weapons and Items, open before every Round, including the first.
 _Avoid_: Store, market
 
 **Inventory**:
-The Weapons a Player owns and how many of each, kept from Round to Round for the whole Match. Firing a Weapon uses one up, except the Baby Missile, which every Player always has without limit.
+The Weapons and Items a Player owns and how many of each, kept from Round to Round for the whole Match. Firing a Weapon uses one up, except the Baby Missile, which every Player always has without limit.
 _Avoid_: Ammo, arsenal, stock
 
+**Item**:
+Something sold in the Shop that is not a Weapon: a Shield or a Parachute.
+_Avoid_: Accessory, gear, equipment, power-up
+
 **Bundle**:
-The fixed number of one Weapon bought in a single purchase at the Shop, for a fixed price.
+The fixed number of one Weapon or Item bought in a single purchase at the Shop, for a fixed price.
 _Avoid_: Pack, lot
