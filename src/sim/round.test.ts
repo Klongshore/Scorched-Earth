@@ -10,14 +10,18 @@ import {
   MAX_PLAYERS,
   MIN_POWER,
   POWER_PER_HEALTH,
+  ROLLER_MAX_SECONDS,
+  ROLLER_SPEED,
+  TANK_HEIGHT,
   TICK_SECONDS,
   WIND_MAX,
+  weaponNamed,
 } from "./constants";
 import { createPlayers } from "./players";
 import { Rng } from "./rng";
 import { Round, emptyLoadout, type RoundAction } from "./round";
 import { isSupported } from "./tank";
-import type { PlayerSetup, Tank } from "./types";
+import type { Explosion, PlayerSetup, Tank } from "./types";
 
 const HUMAN: PlayerSetup = { kind: "human" };
 const MORON: PlayerSetup = { kind: "computer", personality: "moron" };
@@ -624,5 +628,153 @@ describe("Round Landings", () => {
       if (id === second.currentPlayerId) continue;
       expect(second.memoryOf(id)).toEqual({ targetId: null, lastAim: null, lastLanding: null });
     }
+  });
+});
+
+describe("Round Rollers", () => {
+  const ROLLER = weaponNamed("Roller");
+
+  /**
+   * A Round of two Humans at Wind 0 on Terrain whose surface row in column x is surface(x), with
+   * the current Player's Tank at column firerX and the other at otherX.
+   */
+  function rollerScenario(surface: (x: number) => number, firerX: number, otherX: number) {
+    const round = newRound();
+    round.wind = 0;
+    for (let x = 0; x < FIELD_WIDTH; x++) round.terrain.flatten(x, x, surface(x));
+    const firer = round.currentTank();
+    const other = round.tanks.find((t) => t !== firer) as Tank;
+    firer.x = firerX;
+    firer.y = surface(firerX);
+    other.x = otherX;
+    other.y = surface(otherX);
+    return { round, firer, other };
+  }
+
+  /** Drop a Roller fired by the current Player from (x, y) with sideways speed vx. */
+  function drop(round: Round, x: number, y: number, vx = 0): void {
+    const projectile = { x, y, vx, vy: 0, weapon: ROLLER, firedBy: round.currentPlayerId };
+    round.phase = { kind: "resolving", projectiles: [projectile], explosions: [] };
+  }
+
+  /** Run until the Turn ends, returning every Explosion seen on the way. */
+  function explosionsUntilTurnEnds(round: Round): Explosion[] {
+    const seen = new Set<Explosion>();
+    runUntil(round, (r) => {
+      if (r.phase.kind === "resolving") for (const e of r.phase.explosions) seen.add(e);
+      return r.phase.kind === "aiming" || r.phase.kind === "over";
+    });
+    return [...seen];
+  }
+
+  it("rolls to the bottom of a V-shaped valley and explodes there", () => {
+    const { round } = rollerScenario((x) => 400 - Math.abs(x - 320), 40, 600);
+    drop(round, 250.5, 100);
+    const explosions = explosionsUntilTurnEnds(round);
+    expect(explosions).toHaveLength(1);
+    expect(explosions[0]?.x).toBeCloseTo(320.5, 0);
+    expect(explosions[0]?.y).toBeGreaterThan(395);
+    // It went down the slope, not back up the near side.
+    expect(round.terrain.isSolid(320, 405)).toBe(false);
+  });
+
+  it("explodes on touching a Tank it rolls toward", () => {
+    const { round, other } = rollerScenario(() => GROUND, 40, 300);
+    drop(round, 250.5, 300, 10);
+    const explosions = explosionsUntilTurnEnds(round);
+    expect(explosions).toHaveLength(1);
+    expect(explosions[0]?.x).toBeGreaterThanOrEqual(other.x - 8);
+    expect(explosions[0]?.x).toBeLessThanOrEqual(other.x - 6);
+    expect(other.health).toBeLessThan(MAX_HEALTH);
+  });
+
+  it("is lost off a slope down to the field's edge, with no Explosion and no earnings", () => {
+    const slope = (x: number): number => (x < 320 ? 200 + Math.floor((320 - x) / 2) : 200);
+    const { round } = rollerScenario(slope, 400, 600);
+    const version = round.terrain.version;
+    drop(round, 200.5, 100);
+    expect(explosionsUntilTurnEnds(round)).toEqual([]);
+    expect(round.earnings).toEqual([0, 0]);
+    for (const t of round.tanks) expect(t.health).toBe(MAX_HEALTH);
+    expect(round.terrain.version).toBe(version);
+  });
+
+  it("explodes at once on hitting a Tank in mid-air", () => {
+    const { round, firer, other } = rollerScenario(() => GROUND, 40, 300);
+    drop(round, 300.5, 200);
+    const explosions = explosionsUntilTurnEnds(round);
+    expect(explosions).toHaveLength(1);
+    expect(explosions[0]?.x).toBeCloseTo(300.5, 5);
+    expect(explosions[0]?.y).toBeLessThan(GROUND - TANK_HEIGHT + 1);
+    expect(other.health).toBeLessThan(MAX_HEALTH);
+    expect(round.earnings[firer.playerId]).toBeGreaterThan(0);
+  });
+
+  it("explodes after the maximum rolling time on a long flat plain", () => {
+    const { round } = rollerScenario(() => GROUND, 20, 620);
+    drop(round, 60.5, GROUND - 2, 1);
+    const explosions = explosionsUntilTurnEnds(round);
+    expect(explosions).toHaveLength(1);
+    const expected = 60.5 + ROLLER_SPEED * ROLLER_MAX_SECONDS;
+    expect(Math.abs((explosions[0]?.x ?? 0) - expected)).toBeLessThan(3);
+  });
+
+  it("rolls the way it was moving on level ground", () => {
+    const { round } = rollerScenario(() => GROUND, 580, 620);
+    drop(round, 540.5, GROUND - 2, -1);
+    const [explosion] = explosionsUntilTurnEnds(round);
+    const expected = 540.5 - ROLLER_SPEED * ROLLER_MAX_SECONDS;
+    expect(Math.abs((explosion?.x ?? 0) - expected)).toBeLessThan(3);
+  });
+
+  it("is fired from the Inventory like any Weapon", () => {
+    const { round, firer } = rollerScenario(() => GROUND, 100, 600);
+    round.inventoryOf(firer.playerId).add("Roller", 5);
+    round.act({ kind: "cycleWeapon", delta: 1 });
+    expect(round.currentWeapon().name).toBe("Roller");
+    firer.angle = 0;
+    firer.power = 100;
+    round.act({ kind: "fire" });
+    expect(round.inventoryOf(firer.playerId).count("Roller")).toBe(4);
+    const explosions = explosionsUntilTurnEnds(round);
+    expect(explosions).toHaveLength(1);
+    expect(explosions[0]?.radius).toBe(ROLLER.radius);
+  });
+
+  it("leaves a Tosser remembering where it first touched down, not where it stopped", () => {
+    const TOSSER: PlayerSetup = { kind: "computer", personality: "tosser" };
+    const players = createPlayers([TOSSER, TOSSER]);
+    const loadout = emptyLoadout(players);
+    for (const inventory of loadout.inventories) inventory.add("Roller", 5);
+    loadout.chosenWeapons.fill("Roller");
+    const round = new Round(1, players, new Rng(3), loadout);
+    round.wind = 0;
+    round.terrain.flatten(0, FIELD_WIDTH - 1, GROUND);
+    const firer = round.currentTank();
+    const other = round.tanks.find((t) => t !== firer) as Tank;
+    firer.x = 100;
+    firer.y = GROUND;
+    other.x = 600;
+    other.y = GROUND;
+    firer.angle = 60;
+    firer.power = 300;
+    runUntil(round, (r) => r.phase.kind === "resolving");
+    expect(round.currentWeapon().name).toBe("Roller");
+
+    const seen: { touchdown?: number; explodedAt?: number } = {};
+    runUntil(round, (r) => {
+      if (r.phase.kind !== "resolving") return true;
+      const [p] = r.phase.projectiles;
+      if (p?.rolling && seen.touchdown === undefined) seen.touchdown = p.x;
+      const [e] = r.phase.explosions;
+      if (e) seen.explodedAt = e.x;
+      return false;
+    });
+    const { touchdown, explodedAt } = seen;
+    if (touchdown === undefined || explodedAt === undefined) return expect.fail("expected a roll");
+    expect(explodedAt - touchdown).toBeGreaterThan(50);
+    const landing = round.memoryOf(firer.playerId)?.lastLanding;
+    expect(landing?.kind).toBe("hit");
+    expect(Math.abs((landing?.kind === "hit" ? landing.x : 0) - touchdown)).toBeLessThanOrEqual(1);
   });
 });

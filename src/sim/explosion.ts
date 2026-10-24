@@ -6,6 +6,7 @@ import type { Explosion, ExplosionHit, Tank, Weapon } from "./types";
 export function damageAt(weapon: Weapon, distance: number): number {
   switch (weapon.kind) {
     case "blast":
+    case "roller":
       if (distance >= weapon.radius) return 0;
       return Math.round(weapon.maxDamage * (1 - distance / weapon.radius));
     default:

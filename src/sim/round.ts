@@ -12,9 +12,10 @@ import { moneyEarned } from "./money";
 import { chooseAim, newComputerMemory, type ComputerMemory, type Landing } from "./personalities";
 import { placeTanks } from "./placement";
 import { launch, stepProjectile } from "./projectile";
+import { startRolling, stepRolling } from "./roller";
 import type { Rng } from "./rng";
 import { settleTick } from "./settling";
-import { clampAim, isAlive } from "./tank";
+import { clampAim, hitTest, isAlive } from "./tank";
 import type { Terrain } from "./terrain";
 import { generateHills } from "./terrainGen";
 import type { Explosion, Player, Projectile, Tank, Weapon, WeaponName } from "./types";
@@ -197,6 +198,13 @@ export class Round {
 
     const flying = projectiles.splice(0);
     for (const p of flying) {
+      if (p.rolling) {
+        // A rolling Roller already had its landing recorded where it first touched down.
+        const roll = stepRolling(p, this.terrain, this.tanks, dt);
+        if (roll.kind === "rolling") projectiles.push(p);
+        else if (roll.kind === "explode") explosions.push(this.explode(p, roll.x, roll.y));
+        continue;
+      }
       const outcome = stepProjectile(p, this.wind, this.terrain, this.tanks, dt);
       if (outcome.kind === "flying") {
         projectiles.push(p);
@@ -204,11 +212,22 @@ export class Round {
         this.recordLanding(p.firedBy, { kind: "lost", side: outcome.side });
       } else {
         this.recordLanding(p.firedBy, { kind: "hit", x: outcome.x });
-        const explosion = detonate(outcome.x, outcome.y, p.weapon, this.terrain, this.tanks);
-        this.earn(p.firedBy, moneyEarned(explosion, p.firedBy));
-        explosions.push(explosion);
+        const onTank = this.tanks.some((t) => hitTest(t, outcome.x, outcome.y));
+        if (p.weapon.kind === "roller" && !onTank) {
+          startRolling(p, outcome.x, outcome.y, this.terrain);
+          projectiles.push(p);
+        } else {
+          explosions.push(this.explode(p, outcome.x, outcome.y));
+        }
       }
     }
+  }
+
+  /** Detonate a Projectile's Weapon at (x, y), crediting its firer's earnings. */
+  private explode(p: Projectile, x: number, y: number): Explosion {
+    const explosion = detonate(x, y, p.weapon, this.terrain, this.tanks);
+    this.earn(p.firedBy, moneyEarned(explosion, p.firedBy));
+    return explosion;
   }
 
   private endTurn(): void {

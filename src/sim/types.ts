@@ -57,6 +57,8 @@ export interface Projectile {
   vy: number;
   readonly weapon: Weapon;
   readonly firedBy: number; // playerId
+  /** Set once a Roller has touched Terrain: which way it rolls and how long it has rolled. */
+  rolling?: { direction: -1 | 1; seconds: number } | null;
 }
 
 /** What an Explosion did to one Tank it damaged. */

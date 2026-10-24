@@ -61,8 +61,16 @@ uses one up, except the Baby Missile, which every Player always has without limi
 | Missile      | 5      | $1,875  | 30 px        | 50                   |
 | Baby Nuke    | 3      | $10,000 | 45 px        | 70                   |
 | Nuke         | 1      | $12,000 | 75 px        | 100                  |
+| Baby Roller  | 10     | $5,000  | 20 px        | 30                   |
+| Roller       | 5      | $6,000  | 30 px        | 50                   |
+| Heavy Roller | 2      | $6,750  | 45 px        | 70                   |
 
 Damage falls off from the centre of the Explosion to nothing at its edge.
+
+**Rollers** fly like any Weapon, but on touching the ground they roll downhill (on level ground,
+the way they were already moving) and explode when they reach a dip or a wall, touch a Tank, or
+have rolled for 8 seconds. A Roller that hits a Tank in mid-air explodes at once, and one that
+rolls off the side of the field is lost.
 
 ## Run it locally
 

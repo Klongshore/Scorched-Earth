@@ -41,6 +41,9 @@ export const WEAPONS: readonly Weapon[] = [
   { name: "Missile", kind: "blast", bundle: 5, price: 1875, radius: 30, maxDamage: 50 },
   { name: "Baby Nuke", kind: "blast", bundle: 3, price: 10_000, radius: 45, maxDamage: 70 },
   { name: "Nuke", kind: "blast", bundle: 1, price: 12_000, radius: 75, maxDamage: 100 },
+  { name: "Baby Roller", kind: "roller", bundle: 10, price: 5_000, radius: 20, maxDamage: 30 },
+  { name: "Roller", kind: "roller", bundle: 5, price: 6_000, radius: 30, maxDamage: 50 },
+  { name: "Heavy Roller", kind: "roller", bundle: 2, price: 6_750, radius: 45, maxDamage: 70 },
 ];
 
 /** The Weapon with this name; throws for a name not in WEAPONS. */
@@ -51,6 +54,10 @@ export function weaponNamed(name: WeaponName): Weapon {
 }
 
 export const BABY_MISSILE = weaponNamed("Baby Missile");
+
+// Rollers
+export const ROLLER_SPEED = 60; // px/s along the surface
+export const ROLLER_MAX_SECONDS = 8; // explodes where it is after rolling this long
 
 // Explosion and Settling
 export const EXPLOSION_SECONDS = 0.5;
