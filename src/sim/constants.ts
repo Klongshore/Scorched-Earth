@@ -38,6 +38,9 @@ export const TANK_FALL_PIXELS_PER_TICK = 2;
 /** Every Weapon, in Shop order. */
 export const WEAPONS: readonly Weapon[] = [
   { name: "Baby Missile", kind: "blast", bundle: null, price: 0, radius: 20, maxDamage: 30 },
+  { name: "Missile", kind: "blast", bundle: 5, price: 1875, radius: 30, maxDamage: 50 },
+  { name: "Baby Nuke", kind: "blast", bundle: 3, price: 10_000, radius: 45, maxDamage: 70 },
+  { name: "Nuke", kind: "blast", bundle: 1, price: 12_000, radius: 75, maxDamage: 100 },
 ];
 
 /** The Weapon with this name; throws for a name not in WEAPONS. */

@@ -109,6 +109,25 @@ describe("attachKeyboard", () => {
     expect(k.confirms()).toBe(3);
   });
 
+  it("steps through Weapons with Tab and back with Shift+Tab", () => {
+    const k = setup();
+    expect(k.press("Tab")).toBe(true);
+    expect(k.press("Tab", { shiftKey: true })).toBe(true);
+    expect(k.actions).toEqual([
+      { kind: "cycleWeapon", delta: 1 },
+      { kind: "cycleWeapon", delta: -1 },
+    ]);
+  });
+
+  it("leaves Tab to a focused form control, so it still moves focus", () => {
+    const k = setup();
+    for (const tagName of ["SELECT", "INPUT", "BUTTON"]) {
+      expect(k.press("Tab", { target: { tagName } })).toBe(false);
+      expect(k.press("Tab", { shiftKey: true, target: { tagName } })).toBe(false);
+    }
+    expect(k.actions).toEqual([]);
+  });
+
   it("detach removes the listener", () => {
     const k = setup();
     k.detach();

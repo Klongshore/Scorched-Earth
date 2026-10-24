@@ -7,6 +7,7 @@ import {
   clearOverlay,
   showRoundResults,
   showSetup,
+  showShop,
   showStandings,
   type SetupChoice,
 } from "./ui/screens";
@@ -84,7 +85,7 @@ export class FrameLoop {
 }
 
 /** The screens the app moves between. */
-type Screen = "setup" | "round" | "roundResults" | "standings";
+type Screen = "setup" | "shop" | "round" | "roundResults" | "standings";
 
 export type GameOptions = {
   /** Seed every Match with this instead of the wall clock, to reproduce a Match. */
@@ -98,6 +99,8 @@ export class Game {
   /** Seconds of simulation left before Round results appear, counted once the Round is over. */
   private resultsDelay = ROUND_RESULTS_DELAY_SECONDS;
   private submitSetup: (() => void) | null = null;
+  /** The Shop screen's Enter handler, while a Human is shopping. */
+  private confirmShop: (() => void) | null = null;
   private accumulator = 0;
   private detachKeyboard: (() => void) | null = null;
   private readonly loop: FrameLoop;
@@ -146,7 +149,25 @@ export class Game {
       rounds: choice.rounds,
       seed: this.options.seed ?? Date.now() >>> 0,
     });
-    this.beginRound();
+    this.shopOrPlay();
+  }
+
+  /** Show the Shop to the next Human who still has to shop, or begin the Round once all are done. */
+  private shopOrPlay(): void {
+    const match = this.match;
+    if (!match) return;
+    const shopper = match.currentShopper;
+    if (shopper === null) {
+      this.confirmShop = null;
+      this.beginRound();
+      return;
+    }
+    this.screen = "shop";
+    this.confirmShop = showShop(this.overlay, match, () => {
+      if (this.match !== match || this.screen !== "shop") return;
+      match.finishShopping(shopper);
+      this.shopOrPlay();
+    });
   }
 
   private beginRound(): void {
@@ -157,7 +178,7 @@ export class Game {
   }
 
   private onAction(action: RoundAction): void {
-    if (this.screen === "round") this.match?.round.act(action);
+    if (this.screen === "round") this.match?.round?.act(action);
   }
 
   private onConfirm(): void {
@@ -166,6 +187,9 @@ export class Game {
       case "setup":
         this.submitSetup?.();
         break;
+      case "shop":
+        this.confirmShop?.();
+        break;
       case "roundResults":
         if (!match) break;
         if (match.isOver()) {
@@ -173,7 +197,7 @@ export class Game {
           showStandings(this.overlay, match);
         } else {
           match.startNextRound();
-          this.beginRound();
+          this.shopOrPlay();
         }
         break;
       case "standings":
@@ -186,6 +210,7 @@ export class Game {
 
   private tick(match: Match, dt: number): void {
     const { round } = match;
+    if (!round || match.stage.kind !== "playing") return;
     round.tick(dt);
     if (this.screen !== "round" || round.phase.kind !== "over") return;
     if (match.results.length < round.number) match.recordRoundResult();

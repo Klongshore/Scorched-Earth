@@ -1,7 +1,7 @@
 import { ANGLE_STEP, POWER_STEP, POWER_STEP_FAST } from "../sim/constants";
 import type { RoundAction } from "../sim/round";
 
-/** Map a key press to an aiming action, or null if the key does not aim. */
+/** Map a key press to an aiming or Weapon-choosing action, or null if the key does neither. */
 function aimActionFor(event: KeyboardEvent): RoundAction | null {
   const powerStep = event.shiftKey ? POWER_STEP_FAST : POWER_STEP;
   switch (event.key) {
@@ -13,6 +13,8 @@ function aimActionFor(event: KeyboardEvent): RoundAction | null {
       return { kind: "adjustPower", delta: powerStep };
     case "ArrowDown":
       return { kind: "adjustPower", delta: -powerStep };
+    case "Tab":
+      return { kind: "cycleWeapon", delta: event.shiftKey ? -1 : 1 };
     default:
       return null;
   }
@@ -29,7 +31,7 @@ function isFormControl(target: EventTarget | null): boolean {
 /**
  * Translate keydown events into Round actions. Each event, including OS auto-repeat,
  * is one step, except Space and Enter, which act once per press (so holding Enter cannot
- * skip through the overlay screens). Arrow keys and Space are left alone while a form
+ * skip through the overlay screens). Arrow keys, Tab and Space are left alone while a form
  * control has focus, so the overlay screens stay keyboard-usable; Enter always confirms.
  * Returns a detach function.
  */
