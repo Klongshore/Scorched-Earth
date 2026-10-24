@@ -158,6 +158,18 @@ describe("landTanks", () => {
     expect(t.health).toBe(MAX_HEALTH - fallDamage(drop));
   });
 
+  it("ignores a raised Shield: full Fall Damage to Health, Shield Strength unchanged", () => {
+    const terrain = flat();
+    const t = tank({ shield: { name: "Heavy Shield", strength: 100 } });
+    terrain.carveCircle(t.x, GROUND + 25, 30);
+    settle(terrain, [t]);
+    const drop = t.y - GROUND;
+    expect(fallDamage(drop)).toBeGreaterThan(0);
+    landTanks(terrain, [t]);
+    expect(t.health).toBe(MAX_HEALTH - fallDamage(drop));
+    expect(t.shield).toEqual({ name: "Heavy Shield", strength: 100 });
+  });
+
   it("does no damage for a drop within FALL_SAFE_PIXELS", () => {
     const terrain = flat();
     const t = tank();

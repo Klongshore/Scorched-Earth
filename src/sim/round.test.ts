@@ -326,6 +326,41 @@ describe("Round earnings", () => {
     expect(round.earnings[other.playerId]).toBe(0);
   });
 
+  it("pays nothing for damage a Shield absorbs, only for the Health removed past it", () => {
+    const shot = (strength: number) => {
+      const { round, firer, other } = scenario(300, 300 + BARREL_LENGTH + 2);
+      other.y = GROUND - 1;
+      other.shield = { name: "Shield", strength };
+      firer.angle = 0;
+      firer.power = 0;
+      round.act({ kind: "fire" });
+      runUntil(round, settled);
+      return { round, firer, other };
+    };
+    // The same 25-damage hit as above, fully absorbed: no Health lost, no Money.
+    const full = shot(50);
+    expect(full.other.health).toBe(MAX_HEALTH);
+    expect(full.other.shield?.strength).toBe(25);
+    expect(full.round.earnings[full.firer.playerId]).toBe(0);
+    // Partly absorbed: 10 to the Shield (dropping it), 15 to Health, paid for the 15.
+    const part = shot(10);
+    expect(part.other.shield).toBeNull();
+    expect(part.other.health).toBe(MAX_HEALTH - 15);
+    expect(part.round.earnings[part.firer.playerId]).toBe(MONEY_PER_DAMAGE * 15);
+  });
+
+  it("pays Fall Damage to a shielded Tank in full, the Shield untouched", () => {
+    const { round, firer, other } = scenario(150, 500);
+    other.shield = { name: "Heavy Shield", strength: 100 };
+    round.terrain.carveCircle(other.x, other.y + 15, 20);
+    round.phase = { kind: "settling" };
+    runUntil(round, settled);
+    const lost = MAX_HEALTH - other.health;
+    expect(lost).toBeGreaterThan(0);
+    expect(other.shield?.strength).toBe(100);
+    expect(round.earnings[firer.playerId]).toBe(MONEY_PER_DAMAGE * lost);
+  });
+
   it("pays $500 + $2,000 for destroying a 10-Health Tank", () => {
     const { round, firer, other } = scenario(300, 312);
     other.health = 10;
