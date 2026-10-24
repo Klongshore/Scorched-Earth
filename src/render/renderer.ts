@@ -1,5 +1,11 @@
-import { BARREL_LENGTH, EXPLOSION_SECONDS, TANK_HALF_WIDTH, TANK_HEIGHT } from "../sim/constants";
-import { barrelTip, isAlive } from "../sim/tank";
+import {
+  BARREL_LENGTH,
+  EXPLOSION_SECONDS,
+  forSaleNamed,
+  TANK_HALF_WIDTH,
+  TANK_HEIGHT,
+} from "../sim/constants";
+import { centre, barrelTip, isAlive } from "../sim/tank";
 import type { Terrain } from "../sim/terrain";
 import type { Explosion, Tank } from "../sim/types";
 import type { Match } from "../sim/match";
@@ -19,6 +25,10 @@ const TURN_MARKER_GAP = 6;
 const TURN_MARKER_SIZE = 4;
 const TANK_HEALTH_FONT = "10px monospace";
 const TANK_HEALTH_GAP = 2; // px from the tip of a barrel at 90° to the Health baseline
+const SHIELD_RADIUS = 14; // px from the Tank centre to the Shield bubble
+const SHIELD_LINE_WIDTH = 1;
+const SHIELD_MAX_ALPHA = 1; // a Shield at its full Shield Strength
+const SHIELD_MIN_ALPHA = 0.2; // a Shield about to be gone, still visible
 
 export class Renderer {
   private readonly context: CanvasRenderingContext2D;
@@ -67,6 +77,7 @@ export class Renderer {
       if (!isAlive(tank)) continue;
       const { color } = round.playerOf(tank.playerId);
       this.drawTank(tank, color);
+      this.drawShield(tank, color);
       this.drawTankHealth(tank, color);
     }
     if (phase.kind === "aiming") this.drawTurnMarker(round.currentTank());
@@ -103,6 +114,25 @@ export class Renderer {
     ctx.fillStyle = color;
     const baseline = tank.y - TANK_HEIGHT - BARREL_LENGTH - TANK_HEALTH_GAP;
     ctx.fillText(String(tank.health), tank.x + 0.5, baseline);
+    ctx.restore();
+  }
+
+  /** A circle round a shielded Tank in its Player's colour, fading as its Shield Strength drops. */
+  private drawShield(tank: Tank, color: string): void {
+    const { shield } = tank;
+    if (!shield) return;
+    const item = forSaleNamed(shield.name);
+    const full = item.kind === "shield" ? item.strength : shield.strength;
+    const left = Math.min(1, Math.max(0, shield.strength / full));
+    const ctx = this.context;
+    const c = centre(tank);
+    ctx.save();
+    ctx.globalAlpha = SHIELD_MIN_ALPHA + (SHIELD_MAX_ALPHA - SHIELD_MIN_ALPHA) * left;
+    ctx.strokeStyle = color;
+    ctx.lineWidth = SHIELD_LINE_WIDTH;
+    ctx.beginPath();
+    ctx.arc(c.x + 0.5, c.y, SHIELD_RADIUS, 0, Math.PI * 2);
+    ctx.stroke();
     ctx.restore();
   }
 

@@ -81,8 +81,17 @@ describe("healthLine (HUD line 2)", () => {
       text: `${current.name}: 73`,
       color: current.color,
       health: 73,
+      shield: null,
     });
     expect(healthLine(match)?.text).not.toContain(other?.name);
+  });
+
+  it("reports the current Tank's Shield Strength once a Shield is raised", () => {
+    const { match, round } = playing();
+    round.currentTank().shield = { name: "Heavy Shield", strength: 37 };
+    expect(healthLine(match)?.shield).toBe(37);
+    round.currentTank().shield = null;
+    expect(healthLine(match)?.shield).toBeNull();
   });
 
   it("still shows the current Player while a Computer Player is thinking", () => {

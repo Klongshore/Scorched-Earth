@@ -19,6 +19,13 @@ export interface Tank {
   angle: number; // integer degrees
   power: number; // integer
   health: number; // integer 0..100
+  shield: RaisedShield | null; // the raised Shield; null once its Shield Strength is gone
+}
+
+/** A Shield raised around a Tank: which one, and the Shield Strength it has left. */
+export interface RaisedShield {
+  readonly name: ShieldName;
+  strength: number;
 }
 
 export type WeaponName =
