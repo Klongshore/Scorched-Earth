@@ -36,9 +36,17 @@ export interface Projectile {
   readonly firedBy: number; // playerId
 }
 
+/** What an Explosion did to one Tank it damaged. */
+export interface ExplosionHit {
+  readonly playerId: number;
+  readonly healthRemoved: number; // Health actually removed, never more than the Tank had
+  readonly destroyed: boolean; // alive before, dead after
+}
+
 export interface Explosion {
   readonly x: number;
   readonly y: number;
   readonly radius: number;
+  readonly hits: readonly ExplosionHit[]; // one per Tank whose Health it removed
   elapsed: number; // seconds since it started
 }

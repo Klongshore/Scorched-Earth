@@ -7,6 +7,7 @@ import {
   MIN_PLAYERS,
   MIN_ROUNDS,
 } from "../sim/constants";
+import { Match } from "../sim/match";
 import { createPlayers } from "../sim/players";
 import {
   DEFAULT_PLAYERS_SETUP,
@@ -15,6 +16,7 @@ import {
   clampRounds,
   optionValue,
   resizePlayerChoices,
+  roundResultsRows,
   setupChoiceFrom,
   startOnce,
 } from "./screens";
@@ -176,5 +178,25 @@ describe("Starting the Match from the Setup screen", () => {
     submit();
     submit();
     expect(started).toEqual(["ok"]);
+  });
+});
+
+describe("Round results", () => {
+  it("show each Player's Round Wins, Money earned this Round and total Money", () => {
+    const match = new Match({
+      players: [{ kind: "human" }, { kind: "human" }],
+      rounds: 3,
+      seed: 1,
+    });
+    match.round.earnings[0] = 1250;
+    match.round.earnings[1] = 2500;
+    match.round.phase = { kind: "over", result: { kind: "win", playerId: 1 } };
+    match.recordRoundResult();
+    expect(
+      roundResultsRows(match).map((r) => [r.player.name, r.roundWins, r.earned, r.money]),
+    ).toEqual([
+      ["Player 2", "1", "$7,500", "$9,500"],
+      ["Player 1", "0", "$1,250", "$3,250"],
+    ]);
   });
 });

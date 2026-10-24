@@ -1,4 +1,11 @@
-import { MAX_PLAYERS, MAX_ROUNDS, MIN_PLAYERS, MIN_ROUNDS } from "./constants";
+import {
+  MAX_PLAYERS,
+  MAX_ROUNDS,
+  MIN_PLAYERS,
+  MIN_ROUNDS,
+  MONEY_PER_ROUND_WIN,
+  STARTING_MONEY,
+} from "./constants";
 import { createPlayers } from "./players";
 import { Rng } from "./rng";
 import { Round, type RoundResult } from "./round";
@@ -15,6 +22,10 @@ export class Match {
   readonly totalRounds: number;
   readonly roundWins: number[]; // indexed by playerId
   readonly results: RoundResult[] = [];
+  /** Each Player's Money, indexed by playerId. Never decides the Match. */
+  readonly money: number[];
+  /** Money each Player earned in the last finished Round (Round Win bonus included), by playerId. */
+  readonly earnedThisRound: number[];
   round: Round;
 
   /** One Rng per Match, shared by every Round, so the whole Match is reproducible from its seed. */
@@ -33,10 +44,12 @@ export class Match {
     this.players = createPlayers(setup.players);
     this.totalRounds = rounds;
     this.roundWins = this.players.map(() => 0);
+    this.money = this.players.map(() => STARTING_MONEY);
+    this.earnedThisRound = this.players.map(() => 0);
     this.round = new Round(1, this.players, this.rng);
   }
 
-  /** Call when round.phase is "over": records the result. */
+  /** Call when round.phase is "over": records the result and pays out the Round's Money. */
   recordRoundResult(): void {
     const phase = this.round.phase;
     if (phase.kind !== "over") throw new Error("Round is not over");
@@ -47,6 +60,12 @@ export class Match {
     this.results.push(result);
     if (result.kind === "win") {
       this.roundWins[result.playerId] = (this.roundWins[result.playerId] ?? 0) + 1;
+    }
+    for (const { id } of this.players) {
+      const bonus = result.kind === "win" && result.playerId === id ? MONEY_PER_ROUND_WIN : 0;
+      const earned = (this.round.earnings[id] ?? 0) + bonus;
+      this.earnedThisRound[id] = earned;
+      this.money[id] = (this.money[id] ?? 0) + earned;
     }
   }
 

@@ -7,6 +7,7 @@ import {
   WIND_MAX,
 } from "./constants";
 import { detonate } from "./explosion";
+import { moneyEarned } from "./money";
 import { chooseAim, newComputerMemory, type ComputerMemory, type Landing } from "./personalities";
 import { placeTanks } from "./placement";
 import { launch, stepProjectile } from "./projectile";
@@ -40,6 +41,9 @@ export class Round {
   currentIndex: number; // index into turnOrder
   phase: Phase = { kind: "aiming", thinkTicks: null };
 
+  /** Money each Player has earned so far this Round, indexed by playerId. */
+  readonly earnings: number[];
+
   private readonly players: readonly Player[];
   private readonly rng: Rng;
   /** One per Computer Player, keyed by playerId; fresh every Round. */
@@ -49,6 +53,7 @@ export class Round {
     this.number = number;
     this.players = players;
     this.rng = rng;
+    this.earnings = players.map(() => 0);
     for (const p of players) {
       if (p.kind === "computer") this.memories.set(p.id, newComputerMemory());
     }
@@ -113,6 +118,7 @@ export class Round {
         } else if (outcome.kind === "hit") {
           this.recordLanding(p.firedBy, { kind: "hit", x: outcome.x });
           const explosion = detonate(outcome.x, outcome.y, p.weapon, this.terrain, this.tanks);
+          this.earn(p.firedBy, moneyEarned(explosion, p.firedBy));
           this.phase = { kind: "exploding", explosion };
         }
         break;
@@ -183,6 +189,10 @@ export class Round {
   /** What a Computer Player remembers this Round; null for a Human. */
   memoryOf(playerId: number): Readonly<ComputerMemory> | null {
     return this.memories.get(playerId) ?? null;
+  }
+
+  private earn(playerId: number, money: number): void {
+    this.earnings[playerId] = (this.earnings[playerId] ?? 0) + money;
   }
 
   /** Remember where a Computer Player's Projectile ended up; a Human's is not recorded. */
