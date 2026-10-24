@@ -75,6 +75,25 @@ describe("detonate", () => {
     expect(terrain.isSolid(100, GROUND + 10)).toBe(false);
     expect(terrain.isSolid(100, GROUND + 30)).toBe(true);
     expect(terrain.version).toBeGreaterThan(before);
-    expect(explosion).toEqual({ x: 100, y: GROUND, radius: BABY_MISSILE.radius, elapsed: 0 });
+    expect(explosion).toEqual({
+      x: 100,
+      y: GROUND,
+      radius: BABY_MISSILE.radius,
+      hits: [],
+      elapsed: 0,
+    });
+  });
+
+  it("reports the Health actually removed from each Tank and which it destroyed", () => {
+    const hurt = tank({ playerId: 0 });
+    const killed = tank({ playerId: 1, x: 325, health: 10 });
+    const missed = tank({ playerId: 2, x: 500 });
+    const dead = tank({ playerId: 3, x: 320, health: 0 });
+    const c = centre(hurt);
+    const explosion = detonate(c.x, c.y, BABY_MISSILE, flat(), [hurt, killed, missed, dead]);
+    expect(explosion.hits).toEqual([
+      { playerId: 0, healthRemoved: 30, destroyed: false },
+      { playerId: 1, healthRemoved: 10, destroyed: true },
+    ]);
   });
 });

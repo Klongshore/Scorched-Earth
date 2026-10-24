@@ -7,6 +7,7 @@ import {
   MIN_ROUNDS,
 } from "../sim/constants";
 import type { Match } from "../sim/match";
+import { formatMoney } from "../sim/money";
 import { playerLook } from "../sim/players";
 import type { Player, PlayerSetup } from "../sim/types";
 
@@ -216,6 +217,38 @@ function winsTable(match: Match): HTMLTableElement {
   return table;
 }
 
+export interface RoundResultsRow {
+  readonly player: Player;
+  readonly roundWins: string;
+  readonly earned: string; // Money earned in the Round just finished, Round Win bonus included
+  readonly money: string; // total Money
+}
+
+/** One row per Player for the Round results table, in standings order. */
+export function roundResultsRows(match: Match): RoundResultsRow[] {
+  return match.standings().map(({ player, roundWins }) => ({
+    player,
+    roundWins: String(roundWins),
+    earned: formatMoney(match.earnedThisRound[player.id] ?? 0),
+    money: formatMoney(match.money[player.id] ?? 0),
+  }));
+}
+
+function roundResultsTable(match: Match): HTMLTableElement {
+  const table = el("table");
+  const head = el("tr");
+  head.append(el("th", "Player"), el("th", "Round Wins"), el("th", "Earned"), el("th", "Money"));
+  table.append(head);
+  for (const { player, roundWins, earned, money } of roundResultsRows(match)) {
+    const row = el("tr");
+    const name = el("td");
+    name.append(playerName(player));
+    row.append(name, el("td", roundWins), el("td", earned), el("td", money));
+    table.append(row);
+  }
+  return table;
+}
+
 /** Show the result of the Round that just ended (it must already be recorded). */
 export function showRoundResults(overlay: HTMLElement, match: Match): void {
   const { number } = match.round;
@@ -224,7 +257,7 @@ export function showRoundResults(overlay: HTMLElement, match: Match): void {
   const winner = result?.kind === "win" ? match.players[result.playerId] : undefined;
   if (winner) heading.append(playerName(winner), ` wins Round ${number}!`);
   else heading.textContent = `Round ${number} is a draw`;
-  panel(overlay, heading, winsTable(match), el("p", "Press Enter to continue", "hint"));
+  panel(overlay, heading, roundResultsTable(match), el("p", "Press Enter to continue", "hint"));
 }
 
 /** Show the Final standings of a finished Match. */

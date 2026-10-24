@@ -140,6 +140,49 @@ describe("Match", () => {
     expect(split.winner()).toBeNull();
   });
 
+  it("starts every Player with $2,000 and nothing earned", () => {
+    const match = newMatch({ players: [human, moron, human] });
+    expect(match.money).toEqual([2000, 2000, 2000]);
+    expect(match.earnedThisRound).toEqual([0, 0, 0]);
+  });
+
+  it("adds the Round's earnings, plus $5,000 for the Round Win", () => {
+    const match = newMatch();
+    match.round.earnings[0] = 1250;
+    match.round.earnings[1] = 2500;
+    finishRound(match, win(1));
+    expect(match.earnedThisRound).toEqual([1250, 7500]);
+    expect(match.money).toEqual([3250, 9500]);
+  });
+
+  it("pays no Round Win bonus for a Draw", () => {
+    const match = newMatch();
+    match.round.earnings[0] = 500;
+    finishRound(match, draw);
+    expect(match.earnedThisRound).toEqual([500, 0]);
+    expect(match.money).toEqual([2500, 2000]);
+  });
+
+  it("carries Money into later Rounds and replaces what was earned each Round", () => {
+    const match = newMatch();
+    match.round.earnings[0] = 1000;
+    finishRound(match, win(0));
+    expect(match.round.earnings).toEqual([0, 0]);
+    match.round.earnings[1] = 300;
+    finishRound(match, draw);
+    expect(match.earnedThisRound).toEqual([0, 300]);
+    expect(match.money).toEqual([8000, 2300]);
+  });
+
+  it("never lets Money decide standings or the winner", () => {
+    const match = newMatch({ rounds: 1 });
+    match.round.earnings[0] = 100_000;
+    finishRound(match, win(1));
+    expect(match.money[0]).toBeGreaterThan(match.money[1] ?? 0);
+    expect(match.standings().map((s) => s.player.id)).toEqual([1, 0]);
+    expect(match.winner()?.id).toBe(1);
+  });
+
   it("is reproducible from its seed across Rounds", () => {
     const a = newMatch({ seed: 42 });
     const b = newMatch({ seed: 42 });

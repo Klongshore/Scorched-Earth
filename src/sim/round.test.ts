@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
+  BARREL_LENGTH,
   COMPUTER_THINK_SECONDS,
   EXPLOSION_SECONDS,
+  FIELD_HEIGHT,
   FIELD_WIDTH,
   MAX_ANGLE,
   MAX_HEALTH,
@@ -237,6 +239,54 @@ describe("Round", () => {
     expect(round.phase.kind).toBe("aiming");
     runUntil(round, (r) => r.phase.kind !== "aiming");
     expect(round.phase.kind).toBe("resolving");
+  });
+});
+
+describe("Round earnings", () => {
+  const settled = (r: Round): boolean => r.phase.kind === "aiming" || r.phase.kind === "over";
+
+  it("starts every Player at 0", () => {
+    expect(newRound().earnings).toEqual([0, 0]);
+  });
+
+  it("pays the firer $1,250 for 25 Health removed from another Tank", () => {
+    const { round, firer, other } = scenario(300, 300 + BARREL_LENGTH + 2);
+    // A Power-0 shot drops from the barrel tip into the other Tank, about 3.5 px from its centre.
+    other.y = GROUND - 1;
+    firer.angle = 0;
+    firer.power = 0;
+    round.act({ kind: "fire" });
+    runUntil(round, settled);
+    expect(other.health).toBe(MAX_HEALTH - 25);
+    expect(round.earnings[firer.playerId]).toBe(1250);
+    expect(round.earnings[other.playerId]).toBe(0);
+  });
+
+  it("pays $500 + $2,000 for destroying a 10-Health Tank", () => {
+    const { round, firer, other } = scenario(300, 312);
+    other.health = 10;
+    fireStraightUp(round, firer);
+    runUntil(round, settled);
+    expect(other.health).toBe(0);
+    expect(round.earnings[firer.playerId]).toBe(500 + 2000);
+  });
+
+  it("pays nothing for damage to the firer's own Tank", () => {
+    const { round, firer } = scenario(150, 500);
+    fireStraightUp(round, firer);
+    runUntil(round, settled);
+    expect(firer.health).toBeLessThan(MAX_HEALTH);
+    expect(round.earnings).toEqual([0, 0]);
+  });
+
+  it("pays no one when a Tank dies by Settling to the bottom", () => {
+    const { round, other } = scenario(150, 500);
+    round.terrain.carveCircle(other.x, FIELD_HEIGHT - 1, 30);
+    for (let y = other.y; y < FIELD_HEIGHT; y++) round.terrain.carveCircle(other.x, y, 12);
+    round.phase = { kind: "settling" };
+    runUntil(round, (r) => r.phase.kind === "over");
+    expect(other.health).toBe(0);
+    expect(round.earnings).toEqual([0, 0]);
   });
 });
 
