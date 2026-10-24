@@ -43,17 +43,21 @@ export class Renderer {
     this.sky.addColorStop(1, SKY_BOTTOM);
   }
 
-  /** Draw only the sky, for when no Match is in play (the Setup screen). */
+  /** Draw only the sky, for when no Round is in play (Setup, or the Shop before Round 1). */
   drawBackdrop(): void {
     this.context.fillStyle = this.sky;
     this.context.fillRect(0, 0, this.canvas.width, this.canvas.height);
   }
 
-  /** Draw the Match's current Round and the HUD. Reads state only; never changes it. */
+  /**
+   * Draw the Match's current Round and the HUD, or only the backdrop before Round 1 starts.
+   * Reads state only; never changes it.
+   */
   draw(match: Match): void {
     const { round } = match;
-    const { terrain, tanks, phase } = round;
     this.drawBackdrop();
+    if (!round) return;
+    const { terrain, tanks, phase } = round;
     if (this.builtTerrain !== terrain || this.builtVersion !== terrain.version) {
       this.rebuildTerrain(terrain);
     }

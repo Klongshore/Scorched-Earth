@@ -14,11 +14,15 @@ import {
   PLAYER_COUNTS,
   PLAYER_OPTIONS,
   clampRounds,
+  moveShopFocus,
   optionValue,
   resizePlayerChoices,
   roundResultsRows,
+  settleShopFocus,
   setupChoiceFrom,
+  shopView,
   startOnce,
+  type ShopRow,
 } from "./screens";
 
 describe("Player choices on the Setup screen", () => {
@@ -181,6 +185,106 @@ describe("Starting the Match from the Setup screen", () => {
   });
 });
 
+describe("Shop view", () => {
+  const shopping = (): Match =>
+    new Match({
+      players: [{ kind: "computer", personality: "moron" }, { kind: "human" }, { kind: "human" }],
+      rounds: 3,
+      seed: 1,
+    });
+  const row = (name: string, owned: number, disabled: boolean) => ({ name, owned, disabled });
+  const summary = (rows: readonly ShopRow[]) => rows.map((r) => row(r.name, r.owned, r.disabled));
+
+  it("heads the screen with the current shopper and their Money", () => {
+    const match = shopping();
+    const view = shopView(match);
+    expect(view.player).toBe(match.players[1]);
+    expect(view.money).toBe("$2,000");
+  });
+
+  it("lists every Weapon but the Baby Missile, with its Bundle, price and owned count", () => {
+    const view = shopView(shopping());
+    expect(view.rows.map((r) => [r.name, r.bundle, r.price, r.owned])).toEqual([
+      ["Missile", "×5", "$1,875", 0],
+      ["Baby Nuke", "×3", "$10,000", 0],
+      ["Nuke", "×1", "$12,000", 0],
+    ]);
+  });
+
+  it("disables the rows the shopper cannot afford", () => {
+    expect(summary(shopView(shopping()).rows)).toEqual([
+      row("Missile", 0, false),
+      row("Baby Nuke", 0, true),
+      row("Nuke", 0, true),
+    ]);
+  });
+
+  it("updates Money, owned counts and disabled rows after a purchase", () => {
+    const match = shopping();
+    match.money[1] = 12_000;
+    expect(summary(shopView(match).rows)).toEqual([
+      row("Missile", 0, false),
+      row("Baby Nuke", 0, false),
+      row("Nuke", 0, false),
+    ]);
+    match.buy(1, "Missile");
+    const view = shopView(match);
+    expect(view.money).toBe("$10,125");
+    expect(summary(view.rows)).toEqual([
+      row("Missile", 5, false),
+      row("Baby Nuke", 0, false),
+      row("Nuke", 0, true),
+    ]);
+  });
+
+  it("shows the next Human once the first is done", () => {
+    const match = shopping();
+    match.finishShopping(1);
+    expect(shopView(match).player).toBe(match.players[2]);
+  });
+});
+
+describe("Shop focus", () => {
+  const rows = (...disabled: boolean[]): ShopRow[] =>
+    disabled.map((d, i) => ({
+      name: "Missile",
+      bundle: "×1",
+      price: `$${i}`,
+      owned: 0,
+      disabled: d,
+    }));
+
+  it("moves between enabled rows and Done, wrapping round", () => {
+    const r = rows(false, true, false); // Done is index 3
+    expect(moveShopFocus(r, 0, 1)).toBe(2);
+    expect(moveShopFocus(r, 2, 1)).toBe(3);
+    expect(moveShopFocus(r, 3, 1)).toBe(0);
+    expect(moveShopFocus(r, 0, -1)).toBe(3);
+    expect(moveShopFocus(r, 3, -1)).toBe(2);
+    expect(moveShopFocus(r, 2, -1)).toBe(0);
+  });
+
+  it("stays on Done when every row is disabled", () => {
+    const r = rows(true, true);
+    expect(moveShopFocus(r, 2, 1)).toBe(2);
+    expect(moveShopFocus(r, 2, -1)).toBe(2);
+  });
+
+  it("keeps focus on a row still affordable after a purchase", () => {
+    expect(settleShopFocus(rows(false, false), 1)).toBe(1);
+  });
+
+  it("moves focus to the next enabled row, or Done, when the row becomes unaffordable", () => {
+    expect(settleShopFocus(rows(true, true, false), 0)).toBe(2);
+    expect(settleShopFocus(rows(false, true, true), 1)).toBe(3);
+  });
+
+  it("opens on the first enabled row, or Done when nothing is affordable", () => {
+    expect(settleShopFocus(rows(true, false), 0)).toBe(1);
+    expect(settleShopFocus(rows(true, true), 0)).toBe(2);
+  });
+});
+
 describe("Round results", () => {
   it("show each Player's Round Wins, Money earned this Round and total Money", () => {
     const match = new Match({
@@ -188,9 +292,12 @@ describe("Round results", () => {
       rounds: 3,
       seed: 1,
     });
-    match.round.earnings[0] = 1250;
-    match.round.earnings[1] = 2500;
-    match.round.phase = { kind: "over", result: { kind: "win", playerId: 1 } };
+    match.finishShopping(0);
+    match.finishShopping(1);
+    const round = match.requireRound();
+    round.earnings[0] = 1250;
+    round.earnings[1] = 2500;
+    round.phase = { kind: "over", result: { kind: "win", playerId: 1 } };
     match.recordRoundResult();
     expect(
       roundResultsRows(match).map((r) => [r.player.name, r.roundWins, r.earned, r.money]),

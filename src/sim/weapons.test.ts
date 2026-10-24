@@ -34,6 +34,22 @@ describe("Weapon catalogue", () => {
     for (const w of WEAPONS) expect(weaponNamed(w.name)).toBe(w);
   });
 
+  it("has the blast family's Bundles, prices, radii and damage, in Shop order", () => {
+    expect(WEAPONS.slice(0, 4).map((w) => w.name)).toEqual([
+      "Baby Missile",
+      "Missile",
+      "Baby Nuke",
+      "Nuke",
+    ]);
+    const row = (name: WeaponName) => {
+      const w = weaponNamed(name);
+      return [w.kind, w.bundle, w.price, w.radius, w.kind === "dirt" ? null : w.maxDamage];
+    };
+    expect(row("Missile")).toEqual(["blast", 5, 1875, 30, 50]);
+    expect(row("Baby Nuke")).toEqual(["blast", 3, 10_000, 45, 70]);
+    expect(row("Nuke")).toEqual(["blast", 1, 12_000, 75, 100]);
+  });
+
   it("throws for a name not in the catalogue", () => {
     expect(() => weaponNamed("Wet Noodle" as WeaponName)).toThrow();
   });

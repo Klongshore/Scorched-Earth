@@ -15,7 +15,7 @@ import {
 } from "./constants";
 import { createPlayers } from "./players";
 import { Rng } from "./rng";
-import { Round, type RoundAction } from "./round";
+import { Round, emptyLoadout, type RoundAction } from "./round";
 import { isSupported } from "./tank";
 import type { PlayerSetup, Tank } from "./types";
 
@@ -287,6 +287,130 @@ describe("Round earnings", () => {
     runUntil(round, (r) => r.phase.kind === "over");
     expect(other.health).toBe(0);
     expect(round.earnings).toEqual([0, 0]);
+  });
+});
+
+describe("Round Weapons", () => {
+  const settled = (r: Round): boolean => r.phase.kind === "aiming" || r.phase.kind === "over";
+  const weaponName = (r: Round): string => r.currentWeapon().name;
+
+  it("starts every Turn on the Baby Missile when nothing is bought", () => {
+    expect(weaponName(newRound())).toBe("Baby Missile");
+  });
+
+  it("cycles both ways through owned Weapons only, wrapping round", () => {
+    const round = newRound();
+    const inventory = round.inventoryOf(round.currentPlayerId);
+    inventory.add("Missile", 5);
+    inventory.add("Nuke", 1);
+    const seen: string[] = [];
+    for (let i = 0; i < 4; i++) {
+      round.act({ kind: "cycleWeapon", delta: 1 });
+      seen.push(weaponName(round));
+    }
+    expect(seen).toEqual(["Missile", "Nuke", "Baby Missile", "Missile"]);
+    round.act({ kind: "cycleWeapon", delta: -1 });
+    expect(weaponName(round)).toBe("Baby Missile");
+    round.act({ kind: "cycleWeapon", delta: -1 });
+    expect(weaponName(round)).toBe("Nuke");
+  });
+
+  it("stays on the Baby Missile when cycling with nothing else owned", () => {
+    const round = newRound();
+    round.act({ kind: "cycleWeapon", delta: 1 });
+    expect(weaponName(round)).toBe("Baby Missile");
+    round.act({ kind: "cycleWeapon", delta: -1 });
+    expect(weaponName(round)).toBe("Baby Missile");
+  });
+
+  it("ignores cycling for a Computer Player", () => {
+    const round = new Round(1, createPlayers([MORON, MORON]), new Rng(3));
+    round.inventoryOf(round.currentPlayerId).add("Missile", 5);
+    round.act({ kind: "cycleWeapon", delta: 1 });
+    expect(weaponName(round)).toBe("Baby Missile");
+  });
+
+  it("fires the chosen Weapon and uses one; the Baby Missile is never used up", () => {
+    const { round, firer } = scenario(150, 500);
+    const inventory = round.inventoryOf(firer.playerId);
+    inventory.add("Missile", 5);
+    round.act({ kind: "cycleWeapon", delta: 1 });
+    fireStraightUp(round, firer);
+    const phase = round.phase;
+    if (phase.kind !== "resolving") return expect.fail("expected resolving");
+    expect(phase.projectiles[0]?.weapon.name).toBe("Missile");
+    expect(inventory.count("Missile")).toBe(4);
+
+    const second = scenario(150, 500);
+    fireStraightUp(second.round, second.firer);
+    expect(second.round.inventoryOf(second.firer.playerId).count("Baby Missile")).toBe(Infinity);
+  });
+
+  it("starts the next Turn on the last Weapon fired, or the Baby Missile once none is left", () => {
+    const { round, firer, other } = scenario(150, 500);
+    round.inventoryOf(firer.playerId).add("Missile", 5);
+    round.inventoryOf(other.playerId).add("Nuke", 1);
+    const fireAway = (tank: Tank, angle: number): void => {
+      tank.angle = angle;
+      tank.power = 300;
+      round.act({ kind: "fire" });
+      runUntil(round, settled);
+    };
+    round.act({ kind: "cycleWeapon", delta: 1 });
+    fireAway(firer, 180); // a Missile, to the left
+    round.act({ kind: "cycleWeapon", delta: 1 });
+    expect(weaponName(round)).toBe("Nuke");
+    fireAway(other, 0); // the other Player's only Nuke, to the right
+    expect(round.currentPlayerId).toBe(firer.playerId);
+    expect(weaponName(round)).toBe("Missile");
+    fireAway(firer, 180);
+    expect(round.currentPlayerId).toBe(other.playerId);
+    expect(weaponName(round)).toBe("Baby Missile");
+  });
+
+  it("carries the chosen Weapon and the Inventory into the next Round", () => {
+    const players = createPlayers([HUMAN, HUMAN]);
+    const loadout = emptyLoadout(players);
+    loadout.inventories[0]?.add("Baby Nuke", 3);
+    loadout.inventories[1]?.add("Baby Nuke", 3);
+    loadout.chosenWeapons[0] = "Baby Nuke";
+    loadout.chosenWeapons[1] = "Baby Nuke";
+    const round = new Round(2, players, new Rng(1), loadout);
+    expect(weaponName(round)).toBe("Baby Nuke");
+    expect(round.inventoryOf(round.currentPlayerId).count("Baby Nuke")).toBe(3);
+  });
+
+  it("falls back to the Baby Missile at the start of a Turn when the chosen Weapon is gone", () => {
+    const players = createPlayers([HUMAN, HUMAN]);
+    const loadout = emptyLoadout(players);
+    loadout.chosenWeapons[0] = "Nuke";
+    loadout.chosenWeapons[1] = "Nuke";
+    const round = new Round(1, players, new Rng(1), loadout);
+    expect(weaponName(round)).toBe("Baby Missile");
+    expect(loadout.chosenWeapons[round.currentPlayerId]).toBe("Baby Missile");
+  });
+
+  it("carves a 75-px crater with a Nuke on flat ground", () => {
+    const { round, firer } = scenario(300, 600);
+    round.inventoryOf(firer.playerId).add("Nuke", 1);
+    round.act({ kind: "cycleWeapon", delta: 1 });
+    // A Power-0 shot drops from the barrel tip straight onto the ground beside the firer.
+    firer.angle = 0;
+    firer.power = 0;
+    round.act({ kind: "fire" });
+    runUntil(round, (r) => r.phase.kind === "resolving" && r.phase.explosions.length > 0);
+    const phase = round.phase;
+    if (phase.kind !== "resolving") return expect.fail("expected resolving");
+    const explosion = phase.explosions[0];
+    if (!explosion) return expect.fail("expected an Explosion");
+    expect(explosion.radius).toBe(75);
+    const x = Math.floor(explosion.x);
+    const y = Math.floor(explosion.y);
+    expect(round.terrain.isSolid(x, y + 73)).toBe(false);
+    expect(round.terrain.isSolid(x, y + 77)).toBe(true);
+    expect(round.terrain.isSolid(x - 73, y + 1)).toBe(false);
+    expect(round.terrain.isSolid(x + 73, y + 1)).toBe(false);
+    expect(round.terrain.isSolid(x + 78, y + 1)).toBe(true);
   });
 });
 

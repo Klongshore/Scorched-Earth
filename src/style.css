@@ -114,6 +114,33 @@ body {
   outline-offset: 2px;
 }
 
+/* The Shop: one row per Weapon on sale (up to 11), kept tight so the panel fits in 640 × 480. */
+.panel .shop {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.panel .shop-row {
+  display: grid;
+  grid-template-columns: 13ch 4ch 8ch 9ch;
+  gap: 12px;
+  margin-top: 0;
+  padding: 2px 12px;
+  text-align: left;
+}
+
+.panel .shop-row span:nth-child(2),
+.panel .shop-row span:nth-child(3) {
+  text-align: right;
+}
+
+.panel .shop-row:disabled {
+  color: #606060;
+  border-color: #404040;
+  cursor: default;
+}
+
 .panel table {
   margin: 0 auto 16px;
   border-collapse: collapse;

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { BABY_MISSILE, FIELD_HEIGHT, FIELD_WIDTH } from "./constants";
+import { BABY_MISSILE, FIELD_HEIGHT, FIELD_WIDTH, weaponNamed } from "./constants";
 import { damageAt, detonate } from "./explosion";
 import { centre } from "./tank";
 import { Terrain } from "./terrain";
@@ -82,6 +82,18 @@ describe("detonate", () => {
       hits: [],
       elapsed: 0,
     });
+  });
+
+  it("deals a Nuke's 100 at its centre and carves a 75-px crater", () => {
+    const nuke = weaponNamed("Nuke");
+    expect(damageAt(nuke, 0)).toBe(100);
+    const t = tank();
+    const c = centre(t);
+    const terrain = flat();
+    detonate(c.x, c.y, nuke, terrain, [t]);
+    expect(t.health).toBe(0);
+    expect(terrain.isSolid(c.x, c.y + 73)).toBe(false);
+    expect(terrain.isSolid(c.x, c.y + 77)).toBe(true);
   });
 
   it("reports the Health actually removed from each Tank and which it destroyed", () => {

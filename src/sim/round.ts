@@ -1,12 +1,13 @@
 import {
-  BABY_MISSILE,
   COMPUTER_THINK_TICKS,
   EXPLOSION_SECONDS,
   FIELD_HEIGHT,
   FIELD_WIDTH,
   WIND_MAX,
+  weaponNamed,
 } from "./constants";
 import { detonate } from "./explosion";
+import { Inventory } from "./inventory";
 import { moneyEarned } from "./money";
 import { chooseAim, newComputerMemory, type ComputerMemory, type Landing } from "./personalities";
 import { placeTanks } from "./placement";
@@ -16,7 +17,7 @@ import { settleTick } from "./settling";
 import { clampAim, isAlive } from "./tank";
 import type { Terrain } from "./terrain";
 import { generateHills } from "./terrainGen";
-import type { Explosion, Player, Projectile, Tank } from "./types";
+import type { Explosion, Player, Projectile, Tank, Weapon, WeaponName } from "./types";
 
 export type Phase =
   | { kind: "aiming"; thinkTicks: number | null } // ticks left to think; non-null only for Computer Players
@@ -30,7 +31,25 @@ export type RoundResult = { kind: "win"; playerId: number } | { kind: "draw" };
 export type RoundAction =
   | { kind: "adjustAngle"; delta: number }
   | { kind: "adjustPower"; delta: number }
+  | { kind: "cycleWeapon"; delta: 1 | -1 } // step through the Weapons the Player owns
   | { kind: "fire" };
+
+/**
+ * What the Match lends each Round, both indexed by playerId and kept for the whole Match: every
+ * Player's Inventory, and the Weapon each Player last chose (the Round updates it in place).
+ */
+export interface Loadout {
+  readonly inventories: readonly Inventory[];
+  readonly chosenWeapons: WeaponName[];
+}
+
+/** A Loadout with nothing bought: every Player holds only the Baby Missile. */
+export function emptyLoadout(players: readonly Player[]): Loadout {
+  return {
+    inventories: players.map(() => new Inventory()),
+    chosenWeapons: players.map(() => "Baby Missile"),
+  };
+}
 
 export class Round {
   readonly number: number; // 1-based
@@ -46,13 +65,20 @@ export class Round {
 
   private readonly players: readonly Player[];
   private readonly rng: Rng;
+  private readonly loadout: Loadout;
   /** One per Computer Player, keyed by playerId; fresh every Round. */
   private readonly memories = new Map<number, ComputerMemory>();
 
-  constructor(number: number, players: readonly Player[], rng: Rng) {
+  constructor(
+    number: number,
+    players: readonly Player[],
+    rng: Rng,
+    loadout: Loadout = emptyLoadout(players),
+  ) {
     this.number = number;
     this.players = players;
     this.rng = rng;
+    this.loadout = loadout;
     this.earnings = players.map(() => 0);
     for (const p of players) {
       if (p.kind === "computer") this.memories.set(p.id, newComputerMemory());
@@ -93,10 +119,38 @@ export class Round {
         tank.power += action.delta;
         clampAim(tank);
         break;
+      case "cycleWeapon":
+        this.cycleWeapon(action.delta);
+        break;
       case "fire":
         this.fire();
         break;
     }
+  }
+
+  /** The Weapon the current Player will fire. */
+  currentWeapon(): Weapon {
+    return weaponNamed(this.chosenWeaponOf(this.currentPlayerId));
+  }
+
+  /** The Inventory of a Player, kept by the Match for the whole Match. */
+  inventoryOf(playerId: number): Inventory {
+    const inventory = this.loadout.inventories[playerId];
+    if (!inventory) throw new Error(`No Inventory for player ${playerId}`);
+    return inventory;
+  }
+
+  private chosenWeaponOf(playerId: number): WeaponName {
+    return this.loadout.chosenWeapons[playerId] ?? "Baby Missile";
+  }
+
+  /** Step through the current Player's owned Weapons, wrapping round at either end. */
+  private cycleWeapon(delta: 1 | -1): void {
+    const playerId = this.currentPlayerId;
+    const owned = this.inventoryOf(playerId).owned();
+    const index = owned.findIndex((w) => w.name === this.chosenWeaponOf(playerId));
+    const next = owned[(index + delta + owned.length) % owned.length];
+    if (next) this.loadout.chosenWeapons[playerId] = next.name;
   }
 
   /** Advance the simulation by one tick. */
@@ -124,8 +178,11 @@ export class Round {
     }
   }
 
+  /** Launch the chosen Weapon, using one up (the Baby Missile is never used up). */
   private fire(): void {
-    const projectile = launch(this.currentTank(), BABY_MISSILE);
+    const weapon = this.currentWeapon();
+    this.inventoryOf(this.currentPlayerId).useOne(weapon.name);
+    const projectile = launch(this.currentTank(), weapon);
     this.phase = { kind: "resolving", projectiles: [projectile], explosions: [] };
   }
 
@@ -173,6 +230,10 @@ export class Round {
 
   private beginTurn(): void {
     const player = this.playerOf(this.currentPlayerId);
+    // Each Turn starts on the last Weapon chosen, or the Baby Missile once none of it is left.
+    if (this.inventoryOf(player.id).count(this.chosenWeaponOf(player.id)) <= 0) {
+      this.loadout.chosenWeapons[player.id] = "Baby Missile";
+    }
     if (player.kind === "computer") {
       const tank = this.currentTank();
       if (!player.personality) throw new Error(`Computer player ${player.id} has no Personality`);
