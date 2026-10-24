@@ -78,7 +78,7 @@ describe("healthLine (HUD line 2)", () => {
       seed: 1,
     });
     match.round.act({ kind: "fire" });
-    expect(match.round.phase.kind).toBe("flying");
+    expect(match.round.phase.kind).toBe("resolving");
     expect(healthLine(match)).toBeNull();
   });
 

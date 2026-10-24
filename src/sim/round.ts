@@ -19,8 +19,8 @@ import type { Explosion, Player, Projectile, Tank } from "./types";
 
 export type Phase =
   | { kind: "aiming"; thinkTicks: number | null } // ticks left to think; non-null only for Computer Players
-  | { kind: "flying"; projectile: Projectile }
-  | { kind: "exploding"; explosion: Explosion }
+  // Everything in the air: Projectiles still flying and Explosions still showing.
+  | { kind: "resolving"; projectiles: Projectile[]; explosions: Explosion[] }
   | { kind: "settling" }
   | { kind: "over"; result: RoundResult };
 
@@ -104,22 +104,11 @@ export class Round {
           if (phase.thinkTicks <= 0) this.fire();
         }
         break;
-      case "flying": {
-        const p = phase.projectile;
-        const outcome = stepProjectile(p, this.wind, this.terrain, this.tanks, dt);
-        if (outcome.kind === "lost") {
-          this.recordLanding(p.firedBy, { kind: "lost", side: outcome.side });
+      case "resolving":
+        this.resolveTick(phase.projectiles, phase.explosions, dt);
+        if (phase.projectiles.length === 0 && phase.explosions.length === 0) {
           this.phase = { kind: "settling" };
-        } else if (outcome.kind === "hit") {
-          this.recordLanding(p.firedBy, { kind: "hit", x: outcome.x });
-          const explosion = detonate(outcome.x, outcome.y, p.weapon, this.terrain, this.tanks);
-          this.phase = { kind: "exploding", explosion };
         }
-        break;
-      }
-      case "exploding":
-        phase.explosion.elapsed += dt;
-        if (phase.explosion.elapsed >= EXPLOSION_SECONDS) this.phase = { kind: "settling" };
         break;
       case "settling":
         // The Turn only ends once all dirt and Tanks are at rest.
@@ -131,7 +120,31 @@ export class Round {
   }
 
   private fire(): void {
-    this.phase = { kind: "flying", projectile: launch(this.currentTank(), BABY_MISSILE) };
+    const projectile = launch(this.currentTank(), BABY_MISSILE);
+    this.phase = { kind: "resolving", projectiles: [projectile], explosions: [] };
+  }
+
+  /**
+   * One tick of everything in the air. Explosions already showing age first, so one born this
+   * tick starts at elapsed 0; then every Projectile steps, and each that lands becomes an
+   * Explosion. Both lists are edited in place.
+   */
+  private resolveTick(projectiles: Projectile[], explosions: Explosion[], dt: number): void {
+    for (const explosion of explosions) explosion.elapsed += dt;
+    keepWhere(explosions, (e) => e.elapsed < EXPLOSION_SECONDS);
+
+    const flying = projectiles.splice(0);
+    for (const p of flying) {
+      const outcome = stepProjectile(p, this.wind, this.terrain, this.tanks, dt);
+      if (outcome.kind === "flying") {
+        projectiles.push(p);
+      } else if (outcome.kind === "lost") {
+        this.recordLanding(p.firedBy, { kind: "lost", side: outcome.side });
+      } else {
+        this.recordLanding(p.firedBy, { kind: "hit", x: outcome.x });
+        explosions.push(detonate(outcome.x, outcome.y, p.weapon, this.terrain, this.tanks));
+      }
+    }
   }
 
   private endTurn(): void {
@@ -208,4 +221,11 @@ export class Round {
     if (!player) throw new Error(`No player ${playerId}`);
     return player;
   }
+}
+
+/** Remove, in place, every item that fails the test, keeping the rest in order. */
+function keepWhere<T>(items: T[], keep: (item: T) => boolean): void {
+  let kept = 0;
+  for (const item of items) if (keep(item)) items[kept++] = item;
+  items.length = kept;
 }

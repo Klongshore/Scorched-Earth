@@ -65,12 +65,13 @@ export class Renderer {
       this.drawTankHealth(tank, color);
     }
     if (phase.kind === "aiming") this.drawTurnMarker(round.currentTank());
-    if (phase.kind === "flying") {
-      const { projectile } = phase;
+    if (phase.kind === "resolving") {
       this.context.fillStyle = PROJECTILE_COLOR;
-      this.context.fillRect(Math.floor(projectile.x) - 1, Math.floor(projectile.y) - 1, 2, 2);
+      for (const projectile of phase.projectiles) {
+        this.context.fillRect(Math.floor(projectile.x) - 1, Math.floor(projectile.y) - 1, 2, 2);
+      }
+      for (const explosion of phase.explosions) this.drawExplosion(explosion);
     }
-    if (phase.kind === "exploding") this.drawExplosion(phase.explosion);
     drawHud(this.context, match);
   }
 
