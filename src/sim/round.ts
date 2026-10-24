@@ -59,6 +59,7 @@ export type RoundAction =
   | { kind: "adjustAngle"; delta: number }
   | { kind: "adjustPower"; delta: number }
   | { kind: "cycleWeapon"; delta: 1 | -1 } // step through the Weapons the Player owns
+  | { kind: "raiseShield" } // replace the raised Shield with the strongest owned one
   | { kind: "fire" };
 
 export class Round {
@@ -143,6 +144,10 @@ export class Round {
         break;
       case "cycleWeapon":
         this.cycleWeapon(action.delta);
+        break;
+      case "raiseShield":
+        // Stays aiming: the Turn goes on with the same Player.
+        raiseShield(tank, this.inventoryOf(this.currentPlayerId));
         break;
       case "fire":
         this.fire();
@@ -357,6 +362,8 @@ export class Round {
     if (player.kind === "computer") {
       const tank = this.currentTank();
       if (!player.personality) throw new Error(`Computer player ${player.id} has no Personality`);
+      // Only once its Shield is gone, never replacing a damaged one. Draws nothing from rng.
+      if (!tank.shield) raiseShield(tank, this.inventoryOf(player.id));
       const memory = this.requireMemory(player.id);
       const aim = chooseAim(player.personality, tank, this.tanks, memory, this.rng);
       // After the aim, so the aim's draws keep their order.

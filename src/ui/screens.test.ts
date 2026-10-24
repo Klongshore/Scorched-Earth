@@ -12,6 +12,7 @@ import {
 import { Match } from "../sim/match";
 import { createPlayers } from "../sim/players";
 import {
+  CONTROLS_REMINDER,
   DEFAULT_PLAYERS_SETUP,
   PLAYER_COUNTS,
   PLAYER_OPTIONS,
@@ -89,6 +90,15 @@ describe("Player choices on the Setup screen", () => {
       if (player.kind === "human") expect(player.personality).toBeNull();
       else expect(player.personality).not.toBeNull();
     }
+  });
+});
+
+describe("Controls reminder on the Setup screen", () => {
+  it("mentions S Shield on the second of two lines", () => {
+    expect(CONTROLS_REMINDER.split("\n")).toEqual([
+      "←/→ Angle   ↑/↓ Power (Shift ×10)",
+      "Tab Weapon   S Shield   Space Fire",
+    ]);
   });
 });
 

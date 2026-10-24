@@ -128,6 +128,24 @@ describe("attachKeyboard", () => {
     expect(k.actions).toEqual([]);
   });
 
+  it("raises a Shield once per S press, either case, ignoring auto-repeat", () => {
+    const k = setup();
+    expect(k.press("s")).toBe(true);
+    expect(k.press("s", { repeat: true })).toBe(true);
+    expect(k.press("S", { shiftKey: true })).toBe(true);
+    expect(k.press("S", { shiftKey: true, repeat: true })).toBe(true);
+    expect(k.actions).toEqual([{ kind: "raiseShield" }, { kind: "raiseShield" }]);
+  });
+
+  it("leaves S to a focused form control", () => {
+    const k = setup();
+    for (const tagName of ["INPUT", "SELECT", "TEXTAREA", "BUTTON"]) {
+      expect(k.press("s", { target: { tagName } })).toBe(false);
+      expect(k.press("S", { target: { tagName } })).toBe(false);
+    }
+    expect(k.actions).toEqual([]);
+  });
+
   it("detach removes the listener", () => {
     const k = setup();
     k.detach();
