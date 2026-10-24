@@ -19,10 +19,13 @@ import {
   TOSSER_MAX_FACTOR,
   TOSSER_MIN_FACTOR,
   WIND_MAX,
+  weaponNamed,
 } from "./constants";
+import { Inventory } from "./inventory";
 import {
   chooseAim,
   chooseTarget,
+  chooseWeapon,
   isReachable,
   newComputerMemory,
   shooterAim,
@@ -37,7 +40,7 @@ import { Rng } from "./rng";
 import { Round } from "./round";
 import { centre, powerCap } from "./tank";
 import { Terrain } from "./terrain";
-import type { PlayerSetup, Tank } from "./types";
+import type { PlayerSetup, Tank, Weapon, WeaponName } from "./types";
 
 const HUMAN: PlayerSetup = { kind: "human" };
 const MORON: PlayerSetup = { kind: "computer", personality: "moron" };
@@ -736,4 +739,84 @@ describe("Tosser Personality", () => {
       }
     });
   });
+});
+
+describe("Computer Players choose Weapons", () => {
+  const self: Tank = { playerId: 0, x: 300, y: 400, angle: 90, power: 500, health: MAX_HEALTH };
+  const targetAt = (x: number): Tank => ({ ...self, playerId: 1, x });
+
+  function inventoryOf(bundles: Partial<Record<WeaponName, number>>): Inventory {
+    const inventory = new Inventory();
+    for (const [name, n] of Object.entries(bundles)) inventory.add(name as WeaponName, n);
+    return inventory;
+  }
+
+  /** An Inventory owning exactly these Weapons and the Baby Missile, catalogue or not. */
+  function stubInventory(weapons: readonly Weapon[]): Pick<Inventory, "owned"> {
+    return { owned: () => [BABY_MISSILE, ...weapons] };
+  }
+
+  const dirt: Weapon = { name: "Ton of Dirt", kind: "dirt", bundle: 2, price: 6750, radius: 5 };
+
+  describe("Moron", () => {
+    it("fires the Baby Missile without drawing from the Rng when it owns nothing else", () => {
+      const rng = new Rng(3);
+      expect(chooseWeapon("moron", self, null, new Inventory(), rng)).toBe("Baby Missile");
+      expect(rng.next()).toBe(new Rng(3).next());
+    });
+
+    it("fires each Weapon it owns over many Turns", () => {
+      const inventory = inventoryOf({ Missile: 5, "Baby Nuke": 3, Nuke: 1 });
+      const rng = new Rng(11);
+      const fired = new Set<WeaponName>();
+      for (let i = 0; i < 200; i++) fired.add(chooseWeapon("moron", self, null, inventory, rng));
+      expect([...fired].sort()).toEqual(["Baby Missile", "Baby Nuke", "Missile", "Nuke"]);
+    });
+  });
+
+  for (const personality of ["shooter", "tosser"] as const) {
+    describe(personality, () => {
+      it("fires the Nuke at a far Target and a Missile at a Target closer than 75 px", () => {
+        const inventory = inventoryOf({ Missile: 5, Nuke: 1 });
+        const rng = new Rng(1);
+        expect(chooseWeapon(personality, self, targetAt(500), inventory, rng)).toBe("Nuke");
+        expect(chooseWeapon(personality, self, targetAt(360), inventory, rng)).toBe("Missile");
+        expect(chooseWeapon(personality, self, targetAt(240), inventory, rng)).toBe("Missile");
+      });
+
+      it("falls back to the Baby Missile when every Weapon it owns would reach itself", () => {
+        const inventory = inventoryOf({ Missile: 5, Nuke: 1 });
+        const close = targetAt(self.x + 25);
+        expect(chooseWeapon(personality, self, close, inventory, new Rng(1))).toBe("Baby Missile");
+      });
+
+      it("fires the Baby Missile with no Target", () => {
+        const inventory = inventoryOf({ Missile: 5, Nuke: 1 });
+        expect(chooseWeapon(personality, self, null, inventory, new Rng(1))).toBe("Baby Missile");
+      });
+
+      it("breaks ties in max damage by catalogue order", () => {
+        const twin: Weapon = { ...weaponNamed("Missile"), name: "Roller" };
+        const inventory = stubInventory([weaponNamed("Missile"), twin]);
+        const far = targetAt(500);
+        expect(chooseWeapon(personality, self, far, inventory, new Rng(1))).toBe("Missile");
+      });
+
+      it("never fires a Dirt Weapon, even when it owns nothing else", () => {
+        const inventory = stubInventory([dirt]);
+        for (const x of [50, 290, 320, 600]) {
+          const target = targetAt(x);
+          expect(chooseWeapon(personality, self, target, inventory, new Rng(1))).toBe(
+            "Baby Missile",
+          );
+        }
+      });
+
+      it("makes no Rng draws", () => {
+        const rng = new Rng(8);
+        chooseWeapon(personality, self, targetAt(500), inventoryOf({ Nuke: 1 }), rng);
+        expect(rng.next()).toBe(new Rng(8).next());
+      });
+    });
+  }
 });
