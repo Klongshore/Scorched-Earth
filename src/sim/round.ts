@@ -32,6 +32,7 @@ import { launch, stepProjectile } from "./projectile";
 import { startRolling, stepRolling } from "./roller";
 import type { Rng } from "./rng";
 import { landTanks, settleTick } from "./settling";
+import { raiseShield } from "./shield";
 import { clampAim, hitTest, isAlive } from "./tank";
 import type { Terrain } from "./terrain";
 import { generateHills } from "./terrainGen";
@@ -108,6 +109,8 @@ export class Round {
     this.wind = rng.int(-WIND_MAX, WIND_MAX);
     this.turnOrder = rng.shuffle(playerIds);
     this.currentIndex = 0;
+    // Every owner's strongest Shield goes up before the first Turn, in Player order.
+    for (const p of players) raiseShield(this.tankOf(p.id), this.inventoryOf(p.id));
     this.beginTurn();
   }
 

@@ -20,6 +20,13 @@ export interface Tank {
   power: number; // integer
   health: number; // integer 0..100
   fallen: number; // px fallen during the current Settling; 0 at rest
+  shield: RaisedShield | null; // the raised Shield; null once its Shield Strength is gone
+}
+
+/** A Shield raised around a Tank: which one, and the Shield Strength it has left. */
+export interface RaisedShield {
+  readonly name: ShieldName;
+  strength: number;
 }
 
 export type WeaponName =

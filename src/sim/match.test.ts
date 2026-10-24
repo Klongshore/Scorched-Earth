@@ -349,7 +349,8 @@ describe("Match Shop", () => {
     match.startNextRound();
     expect(match.money).toEqual([125, 7000]);
     expect(match.inventoryOf(0).count("Missile")).toBe(5);
-    expect(match.inventoryOf(0).count("Shield")).toBe(forSaleNamed("Shield").bundle);
+    // One Shield went up at the start of Round 1.
+    expect(match.inventoryOf(0).count("Shield")).toBe((forSaleNamed("Shield").bundle ?? 0) - 1);
     expect(match.inventoryOf(0).count("Parachute")).toBe(forSaleNamed("Parachute").bundle);
     expect(match.currentShopper).toBe(0);
     match.finishShopping(0);

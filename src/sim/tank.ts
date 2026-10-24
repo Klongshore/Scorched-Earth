@@ -13,7 +13,7 @@ import {
 import type { CellRect, Terrain } from "./terrain";
 import type { Tank } from "./types";
 
-/** A Tank at full Health with the starting aim, at rest. The one source of a new Tank's defaults. */
+/** A Tank at full Health with the starting aim, at rest, with no Shield. The one source of a new Tank's defaults. */
 export function newTank(playerId: number, x: number, y: number): Tank {
   return {
     playerId,
@@ -23,6 +23,7 @@ export function newTank(playerId: number, x: number, y: number): Tank {
     power: START_POWER,
     health: MAX_HEALTH,
     fallen: 0,
+    shield: null,
   };
 }
 

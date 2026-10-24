@@ -1,4 +1,5 @@
 import { TANK_HALF_WIDTH } from "./constants";
+import { absorb } from "./shield";
 import { centre, clampAim, isAlive, occupiesCell } from "./tank";
 import type { Terrain } from "./terrain";
 import type { Explosion, ExplosionHit, Tank, Weapon } from "./types";
@@ -19,7 +20,8 @@ export function damageAt(weapon: Weapon, distance: number): number {
 
 /**
  * Apply an Explosion: damage every living Tank (including the firer), carve Terrain, clamp aim.
- * The Explosion reports the Health it actually removed from each Tank and which it destroyed.
+ * A raised Shield absorbs a Tank's damage before its Health. The Explosion reports the Health it
+ * actually removed from each Tank and which it destroyed.
  * A Dirt Weapon instead fills its circle with dirt around every living Tank and damages no one.
  */
 export function detonate(
@@ -39,7 +41,8 @@ export function detonate(
     const c = centre(t);
     const distance = Math.hypot(c.x - x, c.y - y);
     const before = t.health;
-    t.health = Math.max(0, t.health - damageAt(weapon, distance));
+    // A Shield absorbs first, so Money is paid only for Health actually removed.
+    t.health = Math.max(0, t.health - absorb(t, damageAt(weapon, distance)));
     clampAim(t);
     const healthRemoved = before - t.health;
     if (healthRemoved > 0) {
