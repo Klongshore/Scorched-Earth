@@ -105,8 +105,12 @@ _Avoid_: Collapse, gravity
 ### Defence
 
 **Shield**:
-An Item raised around a Tank for the rest of a Round, absorbing Explosion damage before Health until it is used up (Shield, Heavy Shield).
+An Item raised around a Tank for the rest of a Round, absorbing Explosion damage before Health until its Shield Strength runs out (Shield, Heavy Shield).
 _Avoid_: Armour, barrier, force field
+
+**Shield Strength**:
+How much Explosion damage a raised Shield can still absorb; it is gone at 0.
+_Avoid_: Energy, charge, shield HP
 
 **Parachute**:
 An Item that opens by itself when a Tank falls far enough to take Fall Damage, and spares it that Fall Damage.

@@ -4,11 +4,11 @@ This plan builds on v1 (`docs/implementation-plan.md`), v2 (`docs/implementation
 
 ## 0. Before you start
 
-1. Read `CONTEXT.md`. **Use its terms exactly** in code, including the new ones added for this plan: `Item`, `Shield`, `Parachute`, `Fall Damage`. Never use the words in its _Avoid_ lists (no `ammo`, `stock`, `hp`, `bot`, `armour`, `chute`, `gear`, `power-up`).
+1. Read `CONTEXT.md`. **Use its terms exactly** in code, including the new ones added for this plan: `Item`, `Shield`, `Shield Strength`, `Parachute`, `Fall Damage`. Never use the words in its _Avoid_ lists (no `ammo`, `stock`, `hp`, `bot`, `armour`, `energy`, `chute`, `gear`, `power-up`).
 2. Read `docs/adr/`. Nothing in this plan changes them.
 3. The golden rules from v1–v3 still hold:
    - **`src/sim/` is pure.** No DOM, no `window`, no `Math.random`, no `Date.now`, no imports from `src/render`, `src/input` or `src/ui`. All randomness goes through the seeded `Rng`.
-   - **Every number lives in `src/sim/constants.ts`.** Shield energy, prices, Bundle sizes, fall distances and damage rates included. Sizes used only for drawing (the Shield bubble, the Parachute canopy) live in `src/render/`.
+   - **Every number lives in `src/sim/constants.ts`.** Shield Strength, prices, Bundle sizes, fall distances and damage rates included. Sizes used only for drawing (the Shield bubble, the Parachute canopy) live in `src/render/`.
    - **Fixed timestep.** The simulation only ever advances by `TICK_SECONDS`.
    - Run `npm run check` (typecheck + lint + format + test) before every commit.
 
@@ -20,12 +20,12 @@ This plan builds on v1 (`docs/implementation-plan.md`), v2 (`docs/implementation
 - The Shop sells Items after the Weapons. Humans and Computer Players buy them like Weapons, one Bundle at a time.
 - Every Player's strongest Shield goes up on its own at the start of each Round, using one up.
 - Raising a fresh Shield on your Turn with `S`. It uses one up from the Inventory and doesn't end the Turn.
-- A raised Shield absorbs Explosion damage until its energy runs out or the Round ends.
+- A raised Shield absorbs Explosion damage until its Strength runs out or the Round ends.
 - Fall Damage: a Tank takes damage for how far it fell during a Turn's Settling, beyond a safe distance.
 - Money for Health that Settling removes from other Tanks (Fall Damage, or sinking to the bottom of the field), paid to the Player whose Turn it is.
 - A Parachute opens on its own when a falling Tank passes the safe distance, uses one up, and cancels that fall's Fall Damage.
 - Computer Players raise their strongest Shield at the start of their Turn.
-- The HUD shows the current Player's Shield energy. The field shows a bubble around each shielded Tank and a canopy over each Tank falling under a Parachute.
+- The HUD shows the current Player's Shield Strength. The field shows a bubble around each shielded Tank and a canopy over each Tank falling under a Parachute.
 
 **Out of scope** (unchanged from v3, plus):
 
@@ -38,15 +38,17 @@ This plan builds on v1 (`docs/implementation-plan.md`), v2 (`docs/implementation
 - Selling Items back.
 - Money for damage a Shield absorbs.
 - Personality-specific Shield or Parachute habits.
+- Keeping Shields in reserve: there is no toggle to skip the Round-start Shield.
 - Any setting, sound, mouse or touch input, death animations, name entry, teams, online play.
 
 ## Rules settled during design
 
 - **Items belong to the Player**, like Weapons. They sit in the same Inventory and carry from Round to Round for the whole Match.
-- **A raised Shield belongs to the Tank.** It lasts until its energy reaches 0 or the Round ends. Tanks are recreated every Round, so a raised Shield never carries over. Shields still in the Inventory do.
-- **At the start of every Round**, before the first Turn, every Player who owns a Shield raises their strongest one, Humans and Computer Players alike. That way a Player late in the shuffled Turn order is protected from the first Turn.
-- **Raising a Shield** uses up your strongest Shield (Heavy Shield before Shield) and gives the Tank that Shield at full energy, replacing any Shield already raised. It is ignored when you own no Shield, or when the raised Shield already has at least as much energy as the new one would. That way you never waste one for nothing. It doesn't end the Turn, and you can still aim and fire afterwards.
-- **Absorbing:** an Explosion's damage to a shielded Tank comes off the Shield's energy first, and only the rest comes off Health. A Shield whose energy reaches 0 is gone. Dirt Weapons damage no one, so they never touch a Shield.
+- **A raised Shield belongs to the Tank.** It lasts until its Strength reaches 0 or the Round ends. Tanks are recreated every Round, so a raised Shield never carries over. Shields still in the Inventory do.
+- **At the start of every Round**, before the first Turn, every Player who owns a Shield raises their strongest one, Humans and Computer Players alike. That way a Player late in the shuffled Turn order is protected from the first Turn. There is no way to opt out: owning a Shield means it goes up.
+- **Mid-Round**, a Human presses `S` to replace a damaged Shield. A Computer Player raises a new one only once its Shield is gone.
+- **Raising a Shield** uses up your strongest Shield (Heavy Shield before Shield) and gives the Tank that Shield at full Strength, replacing any Shield already raised. It is ignored when you own no Shield, or when the raised Shield already has at least as much Strength as the new one would. That way you never waste one for nothing. It doesn't end the Turn, and you can still aim and fire afterwards.
+- **Absorbing:** any Explosion's damage to a shielded Tank, including from its own Weapon (a buried Tank blasting its way out), comes off the Shield's Strength first, and only the rest comes off Health. A Shield whose Strength reaches 0 is gone. Dirt Weapons damage no one, so they never touch a Shield.
 - **Money** is still paid only for **Health actually removed** from other Tanks, plus the existing bonuses. Damage a Shield absorbs earns nothing. Destroying a Tank still pays the bonus whether or not it had a Shield.
 - **Settling pays too.** All Settling happens in someone's Turn, so the Player whose Turn it is earns for Health that Settling removes from other Tanks, and the destroyed-Tank bonus for each other Tank it destroys. This covers Fall Damage and a Tank sinking to the bottom of the field. Undermining a Tank is a real tactic. This replaces the v3 rule that a Tank Settling to the bottom earns no one a bonus. Harming your own Tank still earns nothing.
 - **A fall** is everything a Tank drops during one Turn's Settling, added up even when the dirt under it is falling too. When the Settling comes to rest, each living Tank that fell takes `floor(max(0, fallen − FALL_SAFE_PIXELS) × FALL_DAMAGE_PER_PIXEL)` Fall Damage, and then its fall resets to 0. A Tank that reaches the bottom of the field is still destroyed, as now.
@@ -62,7 +64,7 @@ Data only. Nothing in the Round changes yet.
 
 ### 1.1 `CONTEXT.md`
 
-The glossary already has **Item**, **Shield**, **Parachute** and **Fall Damage**, and its Inventory, Shop, Bundle and Money entries already cover Items and Settling. They were added while this plan was designed. Read them, and use them as written. Don't redefine them.
+The glossary already has **Item**, **Shield**, **Shield Strength**, **Parachute** and **Fall Damage**, and its Inventory, Shop, Bundle and Money entries already cover Items and Settling. They were added while this plan was designed. Read them, and use them as written. Don't redefine them.
 
 ### 1.2 `src/sim/types.ts`
 
@@ -80,7 +82,7 @@ interface ItemBase {
 export type ShieldItem = ItemBase & {
   readonly name: ShieldName;
   readonly kind: "shield";
-  readonly energy: number; // damage it absorbs before it is gone
+  readonly strength: number; // damage it absorbs before it is gone
 };
 export type Item =
   | ShieldItem
@@ -97,7 +99,7 @@ Extend `Tank`:
 ```ts
 export interface Tank {
   // …existing fields…
-  shield: { readonly name: ShieldName; energy: number } | null; // the raised Shield; null once its energy is gone
+  shield: { readonly name: ShieldName; strength: number } | null; // the raised Shield; null once its Strength is gone
   fallen: number; // px fallen during the current Settling; 0 at rest
   parachute: boolean; // a Parachute is open for the current Settling
 }
@@ -120,8 +122,8 @@ Test helpers keep their `overrides` parameter: `{ ...newTank(0, 320, GROUND), ..
 // Items
 /** Every Item, in Shop order (after the Weapons). */
 export const ITEMS: readonly Item[] = [
-  { name: "Shield", kind: "shield", bundle: 3, price: 6_000, energy: 50 },
-  { name: "Heavy Shield", kind: "shield", bundle: 2, price: 10_000, energy: 100 },
+  { name: "Shield", kind: "shield", bundle: 3, price: 6_000, strength: 50 },
+  { name: "Heavy Shield", kind: "shield", bundle: 2, price: 10_000, strength: 100 },
   { name: "Parachute", kind: "parachute", bundle: 5, price: 3_000 },
 ];
 /** Everything the Shop sells, in Shop order: Weapons (never the Baby Missile), then Items. */
@@ -141,14 +143,14 @@ With these numbers, a Baby Missile under a Tank drops it about 16 px for 3 Fall 
 - `Inventory.count`, `add` and `useOne` take a `ShopName`. The Baby Missile rules are unchanged.
 - `Inventory.owned()` still returns **Weapons only**, because it feeds `Tab` cycling and `chooseWeapon`. Add:
   ```ts
-  /** The owned Shield with the most energy, or null when none is owned. */
+  /** The owned Shield with the most Strength, or null when none is owned. */
   strongestShield(): ShieldItem | null;
   ```
 - `canAfford(thing: ForSale, money: number)`. It still checks `bundle !== null` because a Weapon's Bundle may be null.
 
 ### 1.6 Tests
 
-- `ITEMS` has 3 entries with unique names that are not `WeaponName`s. Every Item has a positive integer Bundle and price, and every Shield has `energy > 0`.
+- `ITEMS` has 3 entries with unique names that are not `WeaponName`s. Every Item has a positive integer Bundle and price, and every Shield has `strength > 0`.
 - `FOR_SALE` is the 11 sold Weapons in catalogue order, then the 3 Items. It never contains the Baby Missile.
 - `forSaleNamed` finds every Weapon and Item and throws on an unknown name.
 - `Inventory` counts Items. `owned()` never includes an Item. `strongestShield()` prefers the Heavy Shield, falls back to the Shield, and returns null with none owned.
@@ -284,13 +286,13 @@ Commit: `Add Parachutes`.
 ```ts
 /**
  * Raise the strongest Shield in the Inventory on the Tank, using one up. Ignored (returns false)
- * when none is owned or the raised Shield already has at least that much energy.
+ * when none is owned or the raised Shield already has at least that much Strength.
  */
 export function raiseShield(tank: Tank, inventory: Inventory): boolean;
 
 /**
  * Take `damage` off the Tank's Shield first. Returns the damage left over for Health. Drops the
- * Shield once its energy reaches 0.
+ * Shield once its Strength reaches 0.
  */
 export function absorb(tank: Tank, damage: number): number;
 ```
@@ -310,12 +312,12 @@ t.health = Math.max(0, t.health - damage);
 
 - New Human action `{ kind: "raiseShield" }`. It calls `raiseShield(this.currentTank(), this.inventoryOf(this.currentPlayerId))`, stays in `aiming`, and leaves the Turn with the same Player.
 - **Round start:** in the constructor, after `placeTanks` and before the first `beginTurn()`, call `raiseShield` on every Player's Tank, in Player order. It draws nothing from `rng`.
-- **Computer Players:** in `beginTurn()`, before `chooseAim`, every Computer Player calls `raiseShield` on its own Tank. It draws nothing from `rng`, so aim and Weapon draws keep their order, and a Moron that owns no Shield draws exactly as it did in v3.
+- **Computer Players:** in `beginTurn()`, before `chooseAim`, a Computer Player whose Tank has **no Shield up** calls `raiseShield`. It never replaces a damaged Shield that is still up. That's the frugal habit a careful player has, and it's the same for every Personality. It draws nothing from `rng`, so aim and Weapon draws keep their order, and a Moron that owns no Shield draws exactly as it did in v3.
 
 ### 5.4 Tests
 
-- `raiseShield` uses the Heavy Shield first, then the Shield. It is ignored with no Shield owned. It is ignored while the raised Shield has at least that much energy, and replaces a weaker or damaged one.
-- `absorb`: damage below the energy only lowers the energy. Damage above it drops the Shield and returns the rest. The Shield is gone exactly at 0.
+- `raiseShield` uses the Heavy Shield first, then the Shield. It is ignored with no Shield owned. It is ignored while the raised Shield has at least that much Strength, and replaces a weaker or damaged one.
+- `absorb`: damage below the Strength only lowers the Strength. Damage above it drops the Shield and returns the rest. The Shield is gone exactly at 0.
 - A Baby Missile at the centre of a Tank with a Shield (50) leaves Health at 100 and the Shield at 20. A Nuke at its centre leaves Health at 50 and no Shield.
 - Earnings: a Missile whose 50 damage a Shield fully absorbs pays the firer nothing. One that removes 30 Health through a Shield pays for 30.
 - A Dirt Weapon leaves a Shield untouched.
@@ -323,7 +325,7 @@ t.health = Math.max(0, t.health - damage);
 - `raiseShield` as a Human action keeps the phase `aiming` and the current Player unchanged. Firing afterwards works as usual.
 - Shields don't carry into the next Round, but Shields in the Inventory do.
 - At the start of a Round every Player who owns a Shield, Human or Computer, has their strongest one raised before the first Turn, and their Inventory drops by one. A Player who owns none has no Shield.
-- A Computer Player whose Shield is damaged below its next Shield's energy raises a fresh one at the start of its Turn.
+- A Computer Player whose Shield is gone raises a fresh one at the start of its Turn. One whose Shield is damaged but still up does not, even when it owns a stronger one.
 - A Moron that owns no Shield makes exactly the same `rng` draws as in v3.
 
 Commit: `Add Shields to the sim`.
@@ -338,11 +340,11 @@ Commit: `Add Shields to the sim`.
 
 ### 6.2 `src/render/hud.ts`
 
-`HealthLine` gains `shield: number | null`, the current Tank's Shield energy. When it isn't null, HUD line 2 draws `  Shield {energy}` after the Health bar and before `(thinking…)`. It must still fit in 640 px with `Player 10: 100`, `Shield 100`, the thinking marker and the right-aligned Wind and Round. Shorten the spacing if it doesn't.
+`HealthLine` gains `shield: number | null`, the current Tank's Shield Strength. When it isn't null, HUD line 2 draws `  Shield {strength}` after the Health bar and before `(thinking…)`. It must still fit in 640 px with `Player 10: 100`, `Shield 100`, the thinking marker and the right-aligned Wind and Round. Shorten the spacing if it doesn't.
 
 ### 6.3 `src/render/renderer.ts`
 
-Every living Tank with a Shield gets a circle round its centre in its Player's colour: radius about 14 px, 1 px line, at an alpha that fades as its energy drops (full at the Shield's own energy, fainter towards 0). Keep the radius and alpha as constants in the renderer.
+Every living Tank with a Shield gets a circle round its centre in its Player's colour: radius about 14 px, 1 px line, at an alpha that fades as its Strength drops (full at the Shield's own Strength, fainter towards 0). Keep the radius and alpha as constants in the renderer.
 
 ### 6.4 `src/ui/screens.ts`
 
@@ -356,7 +358,7 @@ Tab Weapon   S Shield   Space Fire
 ### 6.5 Tests
 
 - Keyboard: `s` and `S` map to `raiseShield`. They are ignored in form controls and on auto-repeat.
-- HUD: `healthLine` reports the Shield energy, or null with no Shield raised.
+- HUD: `healthLine` reports the Shield Strength, or null with no Shield raised.
 - Setup screen: the reminder mentions `S Shield`.
 
 Commit: `Raise Shields with S and show them`.
@@ -375,7 +377,7 @@ Commit: `Raise Shields with S and show them`.
 3. **Manual checklist.** Play it yourself via Playwright keypresses and screenshots. Hand yourself Items through the Match in a dev-only console hook, or play enough Rounds to afford them:
    - [ ] The Shop panel fits in 640 × 480, its rows scroll, and `↓` reaches the Parachute row and keeps it in view. The header and **Done** stay visible throughout.
    - [ ] A Round starts with every owner's Shield already up.
-   - [ ] Once your Shield is damaged, `S` raises a fresh one, the bubble brightens, HUD line 2 shows its energy, and the Inventory drops by one.
+   - [ ] Once your Shield is damaged, `S` raises a fresh one, the bubble brightens, HUD line 2 shows its Strength, and the Inventory drops by one.
    - [ ] A hit on a shielded Tank lowers the Shield first, and the bubble fades and then disappears.
    - [ ] A Tank dropped by a deep crater loses Health for the fall once everything comes to rest, and the Player who dug the crater earns for it on the Round results.
    - [ ] With a Parachute owned, the canopy opens partway down, the Tank takes no Fall Damage, and one Parachute is used up.
@@ -389,7 +391,7 @@ Commit: `Raise Shields with S and show them`.
 ## Pitfalls to avoid
 
 - **`Inventory.owned()` stays Weapons only.** If Items leak into it, `Tab` would cycle onto a Parachute and `chooseWeapon` would try to fire one.
-- **Pay only for Health actually removed.** Absorb first, then compute `healthRemoved`. Never pay for Shield energy.
+- **Pay only for Health actually removed.** Absorb first, then compute `healthRemoved`. Never pay for Shield Strength.
 - **Snapshot Health for Settling only after every Explosion is over**, or Explosion damage gets paid twice.
 - **A raised Shield belongs to the Tank, an owned Shield to the Player.** Tanks are recreated every Round. Inventories are not.
 - **Fall Damage is applied once Settling is at rest, not per tick.** Applying it per tick splits a Tank riding falling dirt into many short falls under the safe distance.
@@ -398,5 +400,5 @@ Commit: `Raise Shields with S and show them`.
 - **Keep Moron's random draws unchanged when it owns no Shield.** `raiseShield` must never touch `rng`.
 - **Raising a Shield is not firing.** It must not leave `aiming`, end the Turn, or start a Computer Player's think timer again.
 - **The Turn ends only when everything is at rest**, including dirt falling through a Tank that Fall Damage destroyed.
-- **No new magic numbers in `src/sim`.** Every price, energy, distance and rate goes in `constants.ts`. Drawing sizes go in the renderer.
+- **No new magic numbers in `src/sim`.** Every price, Strength, distance and rate goes in `constants.ts`. Drawing sizes go in the renderer.
 - **Don't add features** from the out-of-scope list, even if they seem easy.
