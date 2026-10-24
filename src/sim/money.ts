@@ -14,8 +14,3 @@ export function moneyEarned(explosion: Explosion, firedBy: number): number {
   }
   return money;
 }
-
-/** Money as shown to Players: a dollar sign, a thousands separator and no decimals. */
-export function formatMoney(amount: number): string {
-  return `$${String(Math.round(amount)).replace(/\B(?=(\d{3})+(?!\d))/g, ",")}`;
-}

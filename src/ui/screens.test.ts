@@ -15,12 +15,14 @@ import {
   PLAYER_COUNTS,
   PLAYER_OPTIONS,
   clampRounds,
+  formatMoney,
   moveShopFocus,
   optionValue,
   resizePlayerChoices,
   roundResultsRows,
   settleShopFocus,
   setupChoiceFrom,
+  shopKeyAction,
   shopView,
   startOnce,
   type ShopRow,
@@ -333,5 +335,25 @@ describe("Round results", () => {
       ["Player 2", "1", "$7,500", "$9,500"],
       ["Player 1", "0", "$1,250", "$3,250"],
     ]);
+  });
+});
+
+describe("formatMoney", () => {
+  it("uses a thousands separator and no decimals", () => {
+    expect(formatMoney(0)).toBe("$0");
+    expect(formatMoney(500)).toBe("$500");
+    expect(formatMoney(2000)).toBe("$2,000");
+    expect(formatMoney(12345)).toBe("$12,345");
+    expect(formatMoney(1234567)).toBe("$1,234,567");
+  });
+});
+
+describe("shopKeyAction", () => {
+  it("finishes on Esc, moves on ↑/↓ and ignores other keys", () => {
+    expect(shopKeyAction("Escape")).toBe("finish");
+    expect(shopKeyAction("ArrowUp")).toBe(-1);
+    expect(shopKeyAction("ArrowDown")).toBe(1);
+    expect(shopKeyAction("Enter")).toBeNull();
+    expect(shopKeyAction("ArrowLeft")).toBeNull();
   });
 });

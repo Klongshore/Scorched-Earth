@@ -1,4 +1,5 @@
 import {
+  BABY_MISSILE,
   COMPUTER_THINK_TICKS,
   EXPLOSION_SECONDS,
   FIELD_HEIGHT,
@@ -17,7 +18,7 @@ import {
   weaponNamed,
 } from "./constants";
 import { detonate } from "./explosion";
-import { Inventory } from "./inventory";
+import { emptyLoadout, inventoryIn, type Inventory, type Loadout } from "./inventory";
 import { moneyEarned } from "./money";
 import {
   chooseAim,
@@ -51,28 +52,11 @@ export type RoundAction =
   | { kind: "cycleWeapon"; delta: 1 | -1 } // step through the Weapons the Player owns
   | { kind: "fire" };
 
-/**
- * What the Match lends each Round, both indexed by playerId and kept for the whole Match: every
- * Player's Inventory, and the Weapon each Player last chose (the Round updates it in place).
- */
-export interface Loadout {
-  readonly inventories: readonly Inventory[];
-  readonly chosenWeapons: WeaponName[];
-}
-
-/** A Loadout with nothing bought: every Player holds only the Baby Missile. */
-export function emptyLoadout(players: readonly Player[]): Loadout {
-  return {
-    inventories: players.map(() => new Inventory()),
-    chosenWeapons: players.map(() => "Baby Missile"),
-  };
-}
-
 export class Round {
   readonly number: number; // 1-based
   readonly terrain: Terrain;
   readonly tanks: Tank[]; // indexed by playerId
-  wind: number; // not readonly: tests set it to 0 for predictable shots
+  wind: number; // not readonly: tests set it to 0 for predictable flights
   readonly turnOrder: number[]; // playerIds, shuffled once per Round
   currentIndex: number; // index into turnOrder
   phase: Phase = { kind: "aiming", thinkTicks: null };
@@ -89,7 +73,7 @@ export class Round {
    * The Projectile whose first landing the firer remembers: the one launched from the barrel, or
    * a split MIRV's middle piece. Null once it has landed or been lost.
    */
-  private barrelShot: Projectile | null = null;
+  private barrelProjectile: Projectile | null = null;
 
   constructor(
     number: number,
@@ -122,7 +106,7 @@ export class Round {
     return this.tankOf(this.currentPlayerId);
   }
 
-  /** True while a Computer Player is "thinking": its aim is shown and the shot fires when the timer runs out. */
+  /** True while a Computer Player is "thinking": its aim is shown and it fires when the timer runs out. */
   get isComputerThinking(): boolean {
     return this.phase.kind === "aiming" && this.phase.thinkTicks !== null;
   }
@@ -157,13 +141,11 @@ export class Round {
 
   /** The Inventory of a Player, kept by the Match for the whole Match. */
   inventoryOf(playerId: number): Inventory {
-    const inventory = this.loadout.inventories[playerId];
-    if (!inventory) throw new Error(`No Inventory for player ${playerId}`);
-    return inventory;
+    return inventoryIn(this.loadout, playerId);
   }
 
   private chosenWeaponOf(playerId: number): WeaponName {
-    return this.loadout.chosenWeapons[playerId] ?? "Baby Missile";
+    return this.loadout.chosenWeapons[playerId] ?? BABY_MISSILE.name;
   }
 
   /** Step through the current Player's owned Weapons, wrapping round at either end. */
@@ -205,7 +187,7 @@ export class Round {
     const weapon = this.currentWeapon();
     this.inventoryOf(this.currentPlayerId).useOne(weapon.name);
     const projectile = launch(this.currentTank(), weapon);
-    this.barrelShot = projectile;
+    this.barrelProjectile = projectile;
     this.phase = { kind: "resolving", projectiles: [projectile], explosions: [] };
   }
 
@@ -264,7 +246,7 @@ export class Round {
       firedBy: mirv.firedBy,
     }));
     // The MIRV itself never lands, so the firer remembers its middle piece instead.
-    if (this.barrelShot === mirv) this.barrelShot = pieces[Math.floor(middle)] ?? null;
+    if (this.barrelProjectile === mirv) this.barrelProjectile = pieces[Math.floor(middle)] ?? null;
     return pieces;
   }
 
@@ -288,8 +270,8 @@ export class Round {
 
   /** A Projectile has landed or been lost; the firer remembers it only if it came from the barrel. */
   private landed(p: Projectile, landing: Landing): void {
-    if (p !== this.barrelShot) return;
-    this.barrelShot = null;
+    if (p !== this.barrelProjectile) return;
+    this.barrelProjectile = null;
     this.recordLanding(p.firedBy, landing);
   }
 
@@ -321,7 +303,7 @@ export class Round {
     const player = this.playerOf(this.currentPlayerId);
     // Each Turn starts on the last Weapon chosen, or the Baby Missile once none of it is left.
     if (this.inventoryOf(player.id).count(this.chosenWeaponOf(player.id)) <= 0) {
-      this.loadout.chosenWeapons[player.id] = "Baby Missile";
+      this.loadout.chosenWeapons[player.id] = BABY_MISSILE.name;
     }
     if (player.kind === "computer") {
       const tank = this.currentTank();

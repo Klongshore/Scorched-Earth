@@ -12,8 +12,8 @@ export function damageAt(weapon: Weapon, distance: number): number {
     case "roller":
       if (distance >= weapon.radius) return 0;
       return Math.round(weapon.maxDamage * (1 - distance / weapon.radius));
-    default:
-      throw new Error(`Explosions for ${weapon.kind} Weapons are not built yet`);
+    case "dirt":
+      return 0; // a Dirt Weapon damages no one
   }
 }
 
@@ -49,5 +49,5 @@ export function detonate(
     if (!isAlive(t)) terrain.markUnsettled(t.x - TANK_HALF_WIDTH, t.x + TANK_HALF_WIDTH);
   }
   terrain.carveCircle(x, y, weapon.radius);
-  return { kind: "blast", x, y, radius: weapon.radius, hits, elapsed: 0 };
+  return { kind: "carve", x, y, radius: weapon.radius, hits, elapsed: 0 };
 }

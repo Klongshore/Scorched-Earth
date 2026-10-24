@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { MONEY_PER_DAMAGE, MONEY_PER_DESTROYED_TANK } from "./constants";
-import { formatMoney, moneyEarned } from "./money";
+import { moneyEarned } from "./money";
 import type { Explosion, ExplosionHit } from "./types";
 
 function explosion(...hits: ExplosionHit[]): Explosion {
-  return { kind: "blast", x: 0, y: 0, radius: 20, hits, elapsed: 0 };
+  return { kind: "carve", x: 0, y: 0, radius: 20, hits, elapsed: 0 };
 }
 
 describe("moneyEarned", () => {
@@ -29,15 +29,5 @@ describe("moneyEarned", () => {
     );
     expect(moneyEarned(e, 0)).toBe(250);
     expect(moneyEarned(explosion(), 0)).toBe(0);
-  });
-});
-
-describe("formatMoney", () => {
-  it("uses a thousands separator and no decimals", () => {
-    expect(formatMoney(0)).toBe("$0");
-    expect(formatMoney(500)).toBe("$500");
-    expect(formatMoney(2000)).toBe("$2,000");
-    expect(formatMoney(12345)).toBe("$12,345");
-    expect(formatMoney(1234567)).toBe("$1,234,567");
   });
 });

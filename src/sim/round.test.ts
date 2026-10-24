@@ -23,7 +23,8 @@ import {
 } from "./constants";
 import { createPlayers } from "./players";
 import { Rng } from "./rng";
-import { Round, emptyLoadout, type RoundAction } from "./round";
+import { emptyLoadout } from "./inventory";
+import { Round, type RoundAction } from "./round";
 import { barrelTip, centre, isSupported, occupiesCell } from "./tank";
 import type { Terrain } from "./terrain";
 import type { Explosion, PlayerSetup, Tank, WeaponName } from "./types";
@@ -264,7 +265,7 @@ describe("Round earnings", () => {
 
   it("pays the firer $1,250 for 25 Health removed from another Tank", () => {
     const { round, firer, other } = scenario(300, 300 + BARREL_LENGTH + 2);
-    // A Power-0 shot drops from the barrel tip into the other Tank, about 3.5 px from its centre.
+    // A Power-0 Projectile drops from the barrel tip into the other Tank, about 3.5 px from its centre.
     other.y = GROUND - 1;
     firer.angle = 0;
     firer.power = 0;
@@ -441,7 +442,7 @@ describe("Round Weapons", () => {
     const { round, firer } = scenario(300, 600);
     round.inventoryOf(firer.playerId).add("Nuke", 1);
     round.act({ kind: "cycleWeapon", delta: 1 });
-    // A Power-0 shot drops from the barrel tip straight onto the ground beside the firer.
+    // A Power-0 Projectile drops from the barrel tip straight onto the ground beside the firer.
     firer.angle = 0;
     firer.power = 0;
     round.act({ kind: "fire" });
@@ -1076,7 +1077,7 @@ describe("Round with Dirt Weapons", () => {
     expect(round.phase.projectiles).toHaveLength(0);
     const [explosion] = round.phase.explosions;
     if (!explosion) return expect.fail("expected an Explosion");
-    expect(explosion.kind).toBe("blast");
+    expect(explosion.kind).toBe("carve");
     expect(Math.hypot(explosion.x - tip.x, explosion.y - tip.y)).toBeLessThan(2);
     expect(firer.health).toBeLessThan(MAX_HEALTH);
     runUntil(round, turnOver);
