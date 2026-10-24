@@ -50,6 +50,30 @@ export type Weapon =
   | (WeaponBase & { readonly kind: "roller"; readonly maxDamage: number })
   | (WeaponBase & { readonly kind: "dirt" }); // adds dirt, damages no one
 
+export type ShieldName = "Shield" | "Heavy Shield";
+export type ItemName = ShieldName | "Parachute";
+/** Anything the Shop sells. */
+export type ShopName = WeaponName | ItemName;
+
+interface ItemBase {
+  readonly bundle: number;
+  readonly price: number; // per Bundle
+}
+
+export type ShieldItem = ItemBase & {
+  readonly name: ShieldName;
+  readonly kind: "shield";
+  readonly strength: number; // Shield Strength: damage it absorbs before it is gone
+};
+
+/** Something sold in the Shop that is not a Weapon. */
+export type Item =
+  | ShieldItem
+  | (ItemBase & { readonly name: "Parachute"; readonly kind: "parachute" });
+
+/** Anything the Shop sells. */
+export type ForSale = Weapon | Item;
+
 export interface Projectile {
   x: number;
   y: number;

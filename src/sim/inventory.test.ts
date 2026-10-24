@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { forSaleNamed } from "./constants";
 import { Inventory } from "./inventory";
 
 describe("Inventory", () => {
@@ -41,6 +42,33 @@ describe("Inventory", () => {
     const inventory = new Inventory();
     inventory.useOne("Baby Missile");
     expect(inventory.count("Baby Missile")).toBe(Infinity);
+  });
+
+  it("counts Items, uses them up, and never lists them among the owned Weapons", () => {
+    const inventory = new Inventory();
+    inventory.add("Parachute", 5);
+    inventory.add("Shield", 3);
+    inventory.add("Heavy Shield", 2);
+    inventory.useOne("Parachute");
+    expect(inventory.count("Parachute")).toBe(4);
+    expect(inventory.count("Shield")).toBe(3);
+    expect(inventory.count("Heavy Shield")).toBe(2);
+    expect(inventory.owned().map((w) => w.name)).toEqual(["Baby Missile"]);
+  });
+
+  it("reports the owned Shield with the most Shield Strength", () => {
+    const inventory = new Inventory();
+    expect(inventory.strongestShield()).toBeNull();
+    inventory.add("Parachute", 5);
+    expect(inventory.strongestShield()).toBeNull();
+    inventory.add("Shield", 1);
+    expect(inventory.strongestShield()?.name).toBe("Shield");
+    inventory.add("Heavy Shield", 1);
+    expect(inventory.strongestShield()?.name).toBe("Heavy Shield");
+    inventory.useOne("Heavy Shield");
+    expect(inventory.strongestShield()).toBe(forSaleNamed("Shield"));
+    inventory.useOne("Shield");
+    expect(inventory.strongestShield()).toBeNull();
   });
 
   it("lists owned Weapons with the Baby Missile first, then in catalogue order", () => {

@@ -1,4 +1,4 @@
-import type { Weapon, WeaponName } from "./types";
+import type { ForSale, Item, ShopName, Weapon, WeaponName } from "./types";
 
 // Field
 export const FIELD_WIDTH = 640;
@@ -59,6 +59,24 @@ export function weaponNamed(name: WeaponName): Weapon {
 }
 
 export const BABY_MISSILE = weaponNamed("Baby Missile");
+
+// Items
+/** Every Item, in Shop order (after the Weapons). */
+export const ITEMS: readonly Item[] = [
+  { name: "Shield", kind: "shield", bundle: 3, price: 6_000, strength: 50 },
+  { name: "Heavy Shield", kind: "shield", bundle: 2, price: 10_000, strength: 100 },
+  { name: "Parachute", kind: "parachute", bundle: 5, price: 3_000 },
+];
+
+/** Everything the Shop sells, in Shop order: Weapons (never the Baby Missile), then Items. */
+export const FOR_SALE: readonly ForSale[] = [...WEAPONS.filter((w) => w.bundle !== null), ...ITEMS];
+
+/** The Weapon or Item with this name; throws for a name not in WEAPONS or ITEMS. */
+export function forSaleNamed(name: ShopName): ForSale {
+  const thing = WEAPONS.find((w) => w.name === name) ?? ITEMS.find((i) => i.name === name);
+  if (!thing) throw new Error(`Nothing named ${name}`);
+  return thing;
+}
 
 // Splitters
 export const MIRV_PIECES = 5; // what a MIRV splits into at the top of its arc

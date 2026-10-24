@@ -114,11 +114,19 @@ body {
   outline-offset: 2px;
 }
 
-/* The Shop: one row per Weapon on sale (up to 11), kept tight so the panel fits in 640 × 480. */
+/*
+ * The Shop: one row per Weapon or Item on sale. The rows scroll between the fixed header and
+ * Done, so the panel fits in 640 × 480 without squeezing them. The padding leaves room for the
+ * focus outline inside the scrolling box.
+ */
 .panel .shop {
+  position: relative; /* rows' offsetTop is measured from the list */
   display: flex;
   flex-direction: column;
   gap: 2px;
+  max-height: 260px;
+  overflow-y: auto;
+  padding: 4px 6px;
 }
 
 .panel .shop-row {
