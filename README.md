@@ -61,8 +61,14 @@ uses one up, except the Baby Missile, which every Player always has without limi
 | Missile      | 5      | $1,875  | 30 px        | 50                   |
 | Baby Nuke    | 3      | $10,000 | 45 px        | 70                   |
 | Nuke         | 1      | $12,000 | 75 px        | 100                  |
+| MIRV         | 3      | $10,000 | 30 px        | 50                   |
+| Funky Bomb   | 2      | $7,000  | 30 px        | 50                   |
 
 Damage falls off from the centre of the Explosion to nothing at its edge.
+
+- **MIRV:** splits into 5 Missiles at the top of its arc, spread out sideways. One that hits
+  something on the way up explodes as a single Missile.
+- **Funky Bomb:** explodes, then throws 6 to 8 Baby Missile bomblets in random directions.
 
 ## Run it locally
 

@@ -41,6 +41,8 @@ export const WEAPONS: readonly Weapon[] = [
   { name: "Missile", kind: "blast", bundle: 5, price: 1875, radius: 30, maxDamage: 50 },
   { name: "Baby Nuke", kind: "blast", bundle: 3, price: 10_000, radius: 45, maxDamage: 70 },
   { name: "Nuke", kind: "blast", bundle: 1, price: 12_000, radius: 75, maxDamage: 100 },
+  { name: "MIRV", kind: "mirv", bundle: 3, price: 10_000, radius: 30, maxDamage: 50 },
+  { name: "Funky Bomb", kind: "funky", bundle: 2, price: 7_000, radius: 30, maxDamage: 50 },
 ];
 
 /** The Weapon with this name; throws for a name not in WEAPONS. */
@@ -51,6 +53,18 @@ export function weaponNamed(name: WeaponName): Weapon {
 }
 
 export const BABY_MISSILE = weaponNamed("Baby Missile");
+
+// Splitters
+export const MIRV_PIECES = 5; // what a MIRV splits into at the top of its arc
+export const MIRV_PIECE_WEAPON: WeaponName = "Missile"; // also what an unsplit MIRV explodes as
+export const MIRV_SPREAD = 30; // px/s of sideways speed between neighbouring pieces
+export const FUNKY_MIN_BOMBLETS = 6;
+export const FUNKY_MAX_BOMBLETS = 8;
+export const FUNKY_BOMBLET_WEAPON: WeaponName = "Baby Missile";
+export const FUNKY_MIN_ANGLE = 30; // degrees, 0 = right, 180 = left
+export const FUNKY_MAX_ANGLE = 150;
+export const FUNKY_MIN_SPEED = 100; // px/s
+export const FUNKY_MAX_SPEED = 250;
 
 // Explosion and Settling
 export const EXPLOSION_SECONDS = 0.5;

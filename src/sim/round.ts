@@ -3,6 +3,16 @@ import {
   EXPLOSION_SECONDS,
   FIELD_HEIGHT,
   FIELD_WIDTH,
+  FUNKY_BOMBLET_WEAPON,
+  FUNKY_MAX_ANGLE,
+  FUNKY_MAX_BOMBLETS,
+  FUNKY_MAX_SPEED,
+  FUNKY_MIN_ANGLE,
+  FUNKY_MIN_BOMBLETS,
+  FUNKY_MIN_SPEED,
+  MIRV_PIECES,
+  MIRV_PIECE_WEAPON,
+  MIRV_SPREAD,
   WIND_MAX,
   weaponNamed,
 } from "./constants";
@@ -68,6 +78,11 @@ export class Round {
   private readonly loadout: Loadout;
   /** One per Computer Player, keyed by playerId; fresh every Round. */
   private readonly memories = new Map<number, ComputerMemory>();
+  /**
+   * The Projectile whose first landing the firer remembers: the one launched from the barrel, or
+   * a split MIRV's middle piece. Null once it has landed or been lost.
+   */
+  private barrelShot: Projectile | null = null;
 
   constructor(
     number: number,
@@ -183,13 +198,15 @@ export class Round {
     const weapon = this.currentWeapon();
     this.inventoryOf(this.currentPlayerId).useOne(weapon.name);
     const projectile = launch(this.currentTank(), weapon);
+    this.barrelShot = projectile;
     this.phase = { kind: "resolving", projectiles: [projectile], explosions: [] };
   }
 
   /**
    * One tick of everything in the air. Explosions already showing age first, so one born this
-   * tick starts at elapsed 0; then every Projectile steps, and each that lands becomes an
-   * Explosion. Both lists are edited in place.
+   * tick starts at elapsed 0; then every Projectile steps. A MIRV that starts falling splits into
+   * its pieces; each Projectile that lands becomes an Explosion, and a Funky Bomb's also throws
+   * its bomblets. New Projectiles first step on the next tick. Both lists are edited in place.
    */
   private resolveTick(projectiles: Projectile[], explosions: Explosion[], dt: number): void {
     for (const explosion of explosions) explosion.elapsed += dt;
@@ -199,16 +216,63 @@ export class Round {
     for (const p of flying) {
       const outcome = stepProjectile(p, this.wind, this.terrain, this.tanks, dt);
       if (outcome.kind === "flying") {
-        projectiles.push(p);
+        if (p.weapon.kind === "mirv" && p.vy >= 0) projectiles.push(...this.splitMirv(p));
+        else projectiles.push(p);
       } else if (outcome.kind === "lost") {
-        this.recordLanding(p.firedBy, { kind: "lost", side: outcome.side });
+        this.landed(p, { kind: "lost", side: outcome.side });
       } else {
-        this.recordLanding(p.firedBy, { kind: "hit", x: outcome.x });
-        const explosion = detonate(outcome.x, outcome.y, p.weapon, this.terrain, this.tanks);
+        this.landed(p, { kind: "hit", x: outcome.x });
+        // A MIRV that lands before it splits explodes as one of its pieces.
+        const weapon = p.weapon.kind === "mirv" ? weaponNamed(MIRV_PIECE_WEAPON) : p.weapon;
+        const explosion = detonate(outcome.x, outcome.y, weapon, this.terrain, this.tanks);
         this.earn(p.firedBy, moneyEarned(explosion, p.firedBy));
         explosions.push(explosion);
+        if (weapon.kind === "funky")
+          projectiles.push(...this.funkyBomblets(p, outcome.x, outcome.y));
       }
     }
+  }
+
+  /** A MIRV's pieces: same place and vertical speed, sideways speed spread evenly around its own. */
+  private splitMirv(mirv: Projectile): Projectile[] {
+    const weapon = weaponNamed(MIRV_PIECE_WEAPON);
+    const middle = (MIRV_PIECES - 1) / 2;
+    const pieces = Array.from({ length: MIRV_PIECES }, (_, i) => ({
+      x: mirv.x,
+      y: mirv.y,
+      vx: mirv.vx + (i - middle) * MIRV_SPREAD,
+      vy: mirv.vy,
+      weapon,
+      firedBy: mirv.firedBy,
+    }));
+    // The MIRV itself never lands, so the firer remembers its middle piece instead.
+    if (this.barrelShot === mirv) this.barrelShot = pieces[Math.floor(middle)] ?? null;
+    return pieces;
+  }
+
+  /** A Funky Bomb's bomblets, thrown from the centre of its crater at random Angles and speeds. */
+  private funkyBomblets(funky: Projectile, x: number, y: number): Projectile[] {
+    const weapon = weaponNamed(FUNKY_BOMBLET_WEAPON);
+    const count = this.rng.int(FUNKY_MIN_BOMBLETS, FUNKY_MAX_BOMBLETS);
+    return Array.from({ length: count }, () => {
+      const radians = (this.rng.range(FUNKY_MIN_ANGLE, FUNKY_MAX_ANGLE) * Math.PI) / 180;
+      const speed = this.rng.range(FUNKY_MIN_SPEED, FUNKY_MAX_SPEED);
+      return {
+        x,
+        y,
+        vx: speed * Math.cos(radians),
+        vy: -speed * Math.sin(radians), // y points down
+        weapon,
+        firedBy: funky.firedBy,
+      };
+    });
+  }
+
+  /** A Projectile has landed or been lost; the firer remembers it only if it came from the barrel. */
+  private landed(p: Projectile, landing: Landing): void {
+    if (p !== this.barrelShot) return;
+    this.barrelShot = null;
+    this.recordLanding(p.firedBy, landing);
   }
 
   private endTurn(): void {

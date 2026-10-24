@@ -9,6 +9,8 @@ import {
   MAX_HEALTH,
   MAX_PLAYERS,
   MIN_POWER,
+  MONEY_PER_DAMAGE,
+  MONEY_PER_DESTROYED_TANK,
   POWER_PER_HEALTH,
   TICK_SECONDS,
   WIND_MAX,
@@ -17,7 +19,7 @@ import { createPlayers } from "./players";
 import { Rng } from "./rng";
 import { Round, emptyLoadout, type RoundAction } from "./round";
 import { isSupported } from "./tank";
-import type { PlayerSetup, Tank } from "./types";
+import type { Explosion, PlayerSetup, Tank, WeaponName } from "./types";
 
 const HUMAN: PlayerSetup = { kind: "human" };
 const MORON: PlayerSetup = { kind: "computer", personality: "moron" };
@@ -37,8 +39,12 @@ function runUntil(round: Round, predicate: (r: Round) => boolean, maxTicks = 200
 }
 
 /** Flat Terrain at GROUND, Wind 0, and the Tanks overwritten to the given columns. */
-function scenario(firerX: number, otherX: number): { round: Round; firer: Tank; other: Tank } {
-  const round = newRound();
+function scenario(
+  firerX: number,
+  otherX: number,
+  seed = 1,
+): { round: Round; firer: Tank; other: Tank } {
+  const round = newRound(seed);
   round.wind = 0;
   round.terrain.flatten(0, FIELD_WIDTH - 1, GROUND);
   const firer = round.currentTank();
@@ -414,6 +420,137 @@ describe("Round Weapons", () => {
   });
 });
 
+describe("Round splitters", () => {
+  const settled = (r: Round): boolean => r.phase.kind === "aiming" || r.phase.kind === "over";
+
+  /** Give the current Human one of `weapon`, their only Weapon but the Baby Missile, and choose it. */
+  function arm(round: Round, weapon: WeaponName): void {
+    round.inventoryOf(round.currentPlayerId).add(weapon, 1);
+    round.act({ kind: "cycleWeapon", delta: 1 });
+    expect(round.currentWeapon().name).toBe(weapon);
+  }
+
+  /** Fire, run until the Turn ends, and return every Explosion in the order it started. */
+  function fireAndCollect(round: Round, tank: Tank, angle: number, power: number): Explosion[] {
+    tank.angle = angle;
+    tank.power = power;
+    round.act({ kind: "fire" });
+    const seen = new Set<Explosion>();
+    runUntil(round, (r) => {
+      if (r.phase.kind === "resolving") for (const e of r.phase.explosions) seen.add(e);
+      return settled(r);
+    });
+    return [...seen];
+  }
+
+  it("splits a MIRV fired at 60° into 5 Explosions either side of where a Missile lands", () => {
+    const missile = scenario(100, 600);
+    arm(missile.round, "Missile");
+    const [one] = fireAndCollect(missile.round, missile.firer, 60, 400);
+    if (!one) return expect.fail("the Missile did not explode");
+
+    const mirv = scenario(100, 600);
+    arm(mirv.round, "MIRV");
+    const explosions = fireAndCollect(mirv.round, mirv.firer, 60, 400);
+    expect(explosions).toHaveLength(5);
+    for (const e of explosions) expect(e.radius).toBe(30);
+    const xs = explosions.map((e) => e.x).sort((a, b) => a - b);
+    expect(xs[0]).toBeLessThan(one.x - 20);
+    expect(xs[1]).toBeLessThan(one.x - 10);
+    expect(xs[2]).toBeCloseTo(one.x, 5);
+    expect(xs[3]).toBeGreaterThan(one.x + 10);
+    expect(xs[4]).toBeGreaterThan(one.x + 20);
+  });
+
+  it("explodes a MIRV that lands before its peak like one Missile", () => {
+    const { round, firer } = scenario(100, 600);
+    round.terrain.flatten(130, 200, 250); // a cliff in the way
+    arm(round, "MIRV");
+    const explosions = fireAndCollect(round, firer, 10, 400);
+    expect(explosions).toHaveLength(1);
+    expect(explosions[0]?.radius).toBe(30);
+  });
+
+  it("explodes a Funky Bomb, then 6 to 8 Baby Missile bomblets, reproducibly from the seed", () => {
+    const counts = new Set<number>();
+    for (let seed = 1; seed <= 12; seed++) {
+      const run = (): Explosion[] => {
+        const { round, firer } = scenario(150, 600, seed);
+        arm(round, "Funky Bomb");
+        return fireAndCollect(round, firer, 60, 400);
+      };
+      const explosions = run();
+      expect(explosions.length).toBeGreaterThanOrEqual(1 + 6);
+      expect(explosions.length).toBeLessThanOrEqual(1 + 8);
+      expect(explosions[0]?.radius).toBe(30);
+      for (const e of explosions.slice(1)) expect(e.radius).toBe(20);
+      expect(run().map((e) => [e.x, e.y])).toEqual(explosions.map((e) => [e.x, e.y]));
+      counts.add(explosions.length - 1);
+    }
+    expect(counts.size).toBeGreaterThan(1);
+  });
+
+  it("ends the Turn only after the last bomblet's Explosion and Settling", () => {
+    const { round, firer } = scenario(150, 600);
+    arm(round, "Funky Bomb");
+    firer.angle = 60;
+    firer.power = 400;
+    round.act({ kind: "fire" });
+    const first = round.currentPlayerId;
+    const seen = new Set<Explosion>();
+    let seenAtSettling = -1;
+    runUntil(round, (r) => {
+      if (r.phase.kind === "resolving") for (const e of r.phase.explosions) seen.add(e);
+      if (r.phase.kind === "settling") {
+        if (seenAtSettling < 0) seenAtSettling = seen.size;
+        expect(r.currentPlayerId).toBe(first);
+      }
+      return settled(r);
+    });
+    expect(seen.size).toBeGreaterThanOrEqual(7);
+    expect(seenAtSettling).toBe(seen.size);
+  });
+
+  it("credits damage from MIRV pieces and Funky Bomb bomblets to the firer", () => {
+    // Find where the MIRV's leftmost piece lands, then stand the other Tank there.
+    const dry = scenario(100, 600);
+    arm(dry.round, "MIRV");
+    const pieceX = Math.min(...fireAndCollect(dry.round, dry.firer, 60, 400).map((e) => e.x));
+    const mirv = scenario(100, Math.round(pieceX));
+    arm(mirv.round, "MIRV");
+    fireAndCollect(mirv.round, mirv.firer, 60, 400);
+    const removed = MAX_HEALTH - mirv.other.health;
+    expect(removed).toBeGreaterThan(0);
+    expect(mirv.round.earnings[mirv.firer.playerId]).toBe(MONEY_PER_DAMAGE * removed);
+
+    // Bomblets scatter at random: across seeds, some must hit the other Tank standing beside
+    // the Funky Bomb's crater, beyond the Funky Bomb's own reach.
+    let bombletMoney = 0;
+    for (let seed = 1; seed <= 20; seed++) {
+      const dryFunky = scenario(150, 600, seed);
+      arm(dryFunky.round, "Funky Bomb");
+      const [funky] = fireAndCollect(dryFunky.round, dryFunky.firer, 60, 400);
+      if (!funky) return expect.fail("the Funky Bomb did not explode");
+
+      const { round, firer, other } = scenario(150, Math.round(funky.x) + 45, seed);
+      arm(round, "Funky Bomb");
+      const explosions = fireAndCollect(round, firer, 60, 400);
+      expect(explosions[0]?.hits.some((h) => h.playerId === other.playerId)).toBe(false);
+      let expected = 0;
+      for (const e of explosions) {
+        for (const h of e.hits) {
+          if (h.playerId === firer.playerId) continue;
+          expected += MONEY_PER_DAMAGE * h.healthRemoved;
+          if (h.destroyed) expected += MONEY_PER_DESTROYED_TANK;
+        }
+      }
+      expect(round.earnings[firer.playerId]).toBe(expected);
+      bombletMoney += expected;
+    }
+    expect(bombletMoney).toBeGreaterThan(0);
+  });
+});
+
 describe("Round with 10 Players", () => {
   const tenHumans = (seed = 1): Round =>
     new Round(1, createPlayers(Array.from({ length: MAX_PLAYERS }, () => HUMAN)), new Rng(seed));
@@ -557,8 +694,14 @@ describe("Round Landings", () => {
   const TOSSER: PlayerSetup = { kind: "computer", personality: "tosser" };
 
   /** A Round of two Computer Players on flat Terrain at Wind 0, the firer at `firerX`. */
-  function computerScenario(firerX: number, seed = 3) {
-    const round = new Round(1, createPlayers([MORON, MORON]), new Rng(seed));
+  function computerScenario(firerX: number, seed = 3, weapon: WeaponName = "Baby Missile") {
+    const players = createPlayers([MORON, MORON]);
+    const loadout = emptyLoadout(players);
+    for (const p of players) {
+      if (weapon !== "Baby Missile") loadout.inventories[p.id]?.add(weapon, 1);
+      loadout.chosenWeapons[p.id] = weapon;
+    }
+    const round = new Round(1, players, new Rng(seed), loadout);
     round.wind = 0;
     round.terrain.flatten(0, FIELD_WIDTH - 1, GROUND);
     const firer = round.currentTank();
@@ -600,6 +743,34 @@ describe("Round Landings", () => {
       kind: "lost",
       side: "left",
     });
+  });
+
+  /** Like fireAndFinish, but returns every Explosion in the order it started. */
+  function fireAndCollect(round: Round, firer: Tank, angle: number, power: number): Explosion[] {
+    firer.angle = angle;
+    firer.power = power;
+    runUntil(round, (r) => r.phase.kind === "resolving");
+    const seen = new Set<Explosion>();
+    runUntil(round, (r) => {
+      if (r.phase.kind === "resolving") for (const e of r.phase.explosions) seen.add(e);
+      return r.phase.kind !== "resolving";
+    });
+    return [...seen];
+  }
+
+  it("records a split MIRV's middle piece's landing", () => {
+    const { round, firer } = computerScenario(100, 3, "MIRV");
+    const explosions = fireAndCollect(round, firer, 60, 400);
+    expect(explosions).toHaveLength(5);
+    const middle = explosions.map((e) => e.x).sort((a, b) => a - b)[2];
+    expect(round.memoryOf(firer.playerId)?.lastLanding).toEqual({ kind: "hit", x: middle });
+  });
+
+  it("records a Funky Bomb's own landing, not any bomblet's", () => {
+    const { round, firer } = computerScenario(150, 3, "Funky Bomb");
+    const [funky, ...bomblets] = fireAndCollect(round, firer, 60, 400);
+    expect(bomblets.length).toBeGreaterThanOrEqual(6);
+    expect(round.memoryOf(firer.playerId)?.lastLanding).toEqual({ kind: "hit", x: funky?.x });
   });
 
   it("keeps no memory for a Human", () => {
