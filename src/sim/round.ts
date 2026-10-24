@@ -194,7 +194,10 @@ export class Round {
         // destroys a Tank, the dirt on that Tank falls and Settling goes on. Health is recorded
         // on Settling's first tick, before anything moves, and paid for once all is at rest.
         this.healthBeforeSettling ??= this.tanks.map((t) => t.health);
-        if (!settleTick(this.terrain, this.tanks) && !landTanks(this.terrain, this.tanks)) {
+        if (
+          !settleTick(this.terrain, this.tanks, (id) => this.useParachute(id)) &&
+          !landTanks(this.terrain, this.tanks)
+        ) {
           this.paySettling(this.healthBeforeSettling);
           this.healthBeforeSettling = null;
           this.endTurn();
@@ -318,6 +321,14 @@ export class Round {
       hits.push({ playerId: t.playerId, healthRemoved: before - t.health, destroyed: !isAlive(t) });
     });
     this.earn(this.currentPlayerId, moneyEarned(hits, this.currentPlayerId));
+  }
+
+  /** Use up one of a Player's Parachutes; false if they own none. */
+  private useParachute(playerId: number): boolean {
+    const inventory = this.inventoryOf(playerId);
+    if (inventory.count("Parachute") <= 0) return false;
+    inventory.useOne("Parachute");
+    return true;
   }
 
   private endTurn(): void {

@@ -20,6 +20,7 @@ export interface Tank {
   power: number; // integer
   health: number; // integer 0..100
   fallen: number; // px fallen during the current Settling; 0 at rest
+  parachute: boolean; // a Parachute is open for the current Settling
   shield: RaisedShield | null; // the raised Shield; null once its Shield Strength is gone
 }
 

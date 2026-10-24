@@ -5,7 +5,7 @@ import {
   TANK_HALF_WIDTH,
   TANK_HEIGHT,
 } from "../sim/constants";
-import { centre, barrelTip, isAlive } from "../sim/tank";
+import { centre, barrelTip, isAlive, isSupported } from "../sim/tank";
 import type { Terrain } from "../sim/terrain";
 import type { Explosion, Tank } from "../sim/types";
 import type { Match } from "../sim/match";
@@ -29,6 +29,9 @@ const SHIELD_RADIUS = 14; // px from the Tank centre to the Shield bubble
 const SHIELD_LINE_WIDTH = 1;
 const SHIELD_MAX_ALPHA = 1; // a Shield at its full Shield Strength
 const SHIELD_MIN_ALPHA = 0.2; // a Shield about to be gone, still visible
+const CANOPY_RADIUS = 5; // the Parachute canopy is a half-disc 10 px across
+const CANOPY_CLEARANCE = 3; // px from the tip of a barrel at 90° to the canopy's flat edge
+const CANOPY_LINE_SPREAD = 2; // px either side of the turret's centre where the lines meet it
 
 export class Renderer {
   private readonly context: CanvasRenderingContext2D;
@@ -78,7 +81,9 @@ export class Renderer {
       const { color } = round.playerOf(tank.playerId);
       this.drawTank(tank, color);
       this.drawShield(tank, color);
-      this.drawTankHealth(tank, color);
+      // The canopy sits where the Health is drawn, so it hides the Health while it is open.
+      if (tank.parachute && !isSupported(tank, terrain)) this.drawCanopy(tank, color);
+      else this.drawTankHealth(tank, color);
     }
     if (phase.kind === "aiming") this.drawTurnMarker(round.currentTank());
     if (phase.kind === "resolving") {
@@ -132,6 +137,29 @@ export class Renderer {
     ctx.lineWidth = SHIELD_LINE_WIDTH;
     ctx.beginPath();
     ctx.arc(c.x + 0.5, c.y, SHIELD_RADIUS, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  /** An open Parachute: a half-disc above the Tank, with a line down to each side of the turret. */
+  private drawCanopy(tank: Tank, color: string): void {
+    const ctx = this.context;
+    const cx = tank.x + 0.5;
+    const turretY = tank.y - TANK_HEIGHT;
+    const edgeY = turretY - BARREL_LENGTH - CANOPY_CLEARANCE;
+    ctx.save();
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.arc(cx, edgeY, CANOPY_RADIUS, Math.PI, 0);
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(cx - CANOPY_RADIUS, edgeY);
+    ctx.lineTo(cx - CANOPY_LINE_SPREAD, turretY);
+    ctx.moveTo(cx + CANOPY_RADIUS, edgeY);
+    ctx.lineTo(cx + CANOPY_LINE_SPREAD, turretY);
     ctx.stroke();
     ctx.restore();
   }
