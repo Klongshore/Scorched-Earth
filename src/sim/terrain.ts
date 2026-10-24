@@ -165,9 +165,10 @@ export class Terrain {
     let from = Infinity;
     let to = -Infinity;
     for (let x = Math.max(0, this.unsettledFrom); x <= Math.min(w - 1, this.unsettledTo); x++) {
-      const columnMoved = blocks(blockers, x, -Infinity, Infinity)
-        ? this.settleColumnAround(x, blockers)
-        : this.settleColumn(x);
+      const columnMoved = this.settleColumn(
+        x,
+        blocks(blockers, x, -Infinity, Infinity) ? blockers : null,
+      );
       if (columnMoved) {
         from = Math.min(from, x);
         to = Math.max(to, x);
@@ -180,23 +181,11 @@ export class Terrain {
     return moved;
   }
 
-  /** Drop every solid cell in column x with air below it by one row; true if any moved. */
-  private settleColumn(x: number): boolean {
-    const w = this.width;
-    let moved = false;
-    for (let y = this.height - 2; y >= 0; y--) {
-      const index = y * w + x;
-      if (this.cells[index] === 1 && this.cells[index + w] === 0) {
-        this.cells[index] = 0;
-        this.cells[index + w] = 1;
-        moved = true;
-      }
-    }
-    return moved;
-  }
-
-  /** As settleColumn, for a column a blocker covers: nothing falls into a blocker. */
-  private settleColumnAround(x: number, blockers: readonly CellRect[]): boolean {
+  /**
+   * Drop every solid cell in column x with air below it by one row; true if any moved. With
+   * blockers (only passed when one covers this column), nothing falls into a blocker.
+   */
+  private settleColumn(x: number, blockers: readonly CellRect[] | null): boolean {
     const w = this.width;
     let moved = false;
     for (let y = this.height - 2; y >= 0; y--) {
@@ -204,7 +193,7 @@ export class Terrain {
       if (
         this.cells[index] === 1 &&
         this.cells[index + w] === 0 &&
-        !blocks(blockers, x, y + 1, y + 1)
+        (blockers === null || !blocks(blockers, x, y + 1, y + 1))
       ) {
         this.cells[index] = 0;
         this.cells[index + w] = 1;

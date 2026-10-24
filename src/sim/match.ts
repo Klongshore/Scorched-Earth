@@ -7,7 +7,7 @@ import {
   STARTING_MONEY,
   weaponNamed,
 } from "./constants";
-import { Inventory } from "./inventory";
+import { emptyLoadout, inventoryIn, type Inventory, type Loadout } from "./inventory";
 import { createPlayers } from "./players";
 import { Rng } from "./rng";
 import { Round, type RoundResult } from "./round";
@@ -34,10 +34,11 @@ export class Match {
   readonly money: number[];
   /** Money each Player earned in the last finished Round (Round Win bonus included), by playerId. */
   readonly earnedThisRound: number[];
-  /** Each Player's Inventory for the whole Match, indexed by playerId. */
-  readonly inventories: Inventory[];
-  /** The Weapon each Player last chose, indexed by playerId; carried from Round to Round. */
-  readonly chosenWeapons: WeaponName[];
+  /**
+   * Each Player's Inventory and last chosen Weapon for the whole Match, indexed by playerId;
+   * lent to every Round, so both carry from Round to Round.
+   */
+  private readonly loadout: Loadout;
   stage: MatchStage = { kind: "playing" };
   /** The Round being played, or the last one while the Shop is open; null before Round 1. */
   round: Round | null = null;
@@ -60,8 +61,7 @@ export class Match {
     this.roundWins = this.players.map(() => 0);
     this.money = this.players.map(() => STARTING_MONEY);
     this.earnedThisRound = this.players.map(() => 0);
-    this.inventories = this.players.map(() => new Inventory());
-    this.chosenWeapons = this.players.map(() => "Baby Missile");
+    this.loadout = emptyLoadout(this.players);
     this.openShop();
   }
 
@@ -95,9 +95,7 @@ export class Match {
   }
 
   inventoryOf(playerId: number): Inventory {
-    const inventory = this.inventories[playerId];
-    if (!inventory) throw new Error(`No player ${playerId}`);
-    return inventory;
+    return inventoryIn(this.loadout, playerId);
   }
 
   /** The Round being played; throws while the Shop is open before Round 1. */
@@ -123,8 +121,7 @@ export class Match {
   }
 
   private startRound(): void {
-    const loadout = { inventories: this.inventories, chosenWeapons: this.chosenWeapons };
-    this.round = new Round(this.results.length + 1, this.players, this.rng, loadout);
+    this.round = new Round(this.results.length + 1, this.players, this.rng, this.loadout);
     this.stage = { kind: "playing" };
   }
 

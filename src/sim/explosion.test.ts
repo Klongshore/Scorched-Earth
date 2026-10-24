@@ -35,6 +35,10 @@ describe("damageAt", () => {
     expect(damageAt(BABY_MISSILE, 25)).toBe(0);
     expect(damageAt(BABY_MISSILE, 1000)).toBe(0);
   });
+
+  it("gives 0 for a Dirt Weapon, even at distance 0", () => {
+    expect(damageAt(weaponNamed("Ton of Dirt"), 0)).toBe(0);
+  });
 });
 
 describe("detonate", () => {
@@ -84,7 +88,7 @@ describe("detonate", () => {
     expect(terrain.isSolid(100, GROUND + 30)).toBe(true);
     expect(terrain.version).toBeGreaterThan(before);
     expect(explosion).toEqual({
-      kind: "blast",
+      kind: "carve",
       x: 100,
       y: GROUND,
       radius: BABY_MISSILE.radius,

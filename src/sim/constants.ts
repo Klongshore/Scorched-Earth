@@ -38,7 +38,7 @@ export const TANK_FALL_PIXELS_PER_TICK = 2;
 /** Every Weapon, in Shop order. */
 export const WEAPONS: readonly Weapon[] = [
   { name: "Baby Missile", kind: "blast", bundle: null, price: 0, radius: 20, maxDamage: 30 },
-  { name: "Missile", kind: "blast", bundle: 5, price: 1875, radius: 30, maxDamage: 50 },
+  { name: "Missile", kind: "blast", bundle: 5, price: 1_875, radius: 30, maxDamage: 50 },
   { name: "Baby Nuke", kind: "blast", bundle: 3, price: 10_000, radius: 45, maxDamage: 70 },
   { name: "Nuke", kind: "blast", bundle: 1, price: 12_000, radius: 75, maxDamage: 100 },
   { name: "MIRV", kind: "mirv", bundle: 3, price: 10_000, radius: 30, maxDamage: 50 },
@@ -46,9 +46,9 @@ export const WEAPONS: readonly Weapon[] = [
   { name: "Baby Roller", kind: "roller", bundle: 10, price: 5_000, radius: 20, maxDamage: 30 },
   { name: "Roller", kind: "roller", bundle: 5, price: 6_000, radius: 30, maxDamage: 50 },
   { name: "Heavy Roller", kind: "roller", bundle: 2, price: 6_750, radius: 45, maxDamage: 70 },
-  { name: "Dirt Clod", kind: "dirt", bundle: 10, price: 5000, radius: 20 },
-  { name: "Dirt Ball", kind: "dirt", bundle: 5, price: 5000, radius: 35 },
-  { name: "Ton of Dirt", kind: "dirt", bundle: 2, price: 6750, radius: 70 },
+  { name: "Dirt Clod", kind: "dirt", bundle: 10, price: 5_000, radius: 20 },
+  { name: "Dirt Ball", kind: "dirt", bundle: 5, price: 5_000, radius: 35 },
+  { name: "Ton of Dirt", kind: "dirt", bundle: 2, price: 6_750, radius: 70 },
 ];
 
 /** The Weapon with this name; throws for a name not in WEAPONS. */
@@ -99,10 +99,10 @@ export const MIN_ROUNDS = 1;
 export const MAX_ROUNDS = 99;
 
 // Money
-export const STARTING_MONEY = 2000;
+export const STARTING_MONEY = 2_000;
 export const MONEY_PER_DAMAGE = 50; // per point of Health removed from another Tank
-export const MONEY_PER_DESTROYED_TANK = 2000; // per other Tank an Explosion destroys
-export const MONEY_PER_ROUND_WIN = 5000;
+export const MONEY_PER_DESTROYED_TANK = 2_000; // per other Tank an Explosion destroys
+export const MONEY_PER_ROUND_WIN = 5_000;
 
 // Computer Players
 export const COMPUTER_THINK_SECONDS = 1.5;

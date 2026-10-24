@@ -8,7 +8,7 @@ import {
   WEAPONS,
 } from "../sim/constants";
 import type { Match } from "../sim/match";
-import { formatMoney } from "../sim/money";
+import { canAfford } from "../sim/shop";
 import { playerLook } from "../sim/players";
 import type { Player, PlayerSetup, WeaponName } from "../sim/types";
 
@@ -63,6 +63,11 @@ function setupFromOption(value: string): PlayerSetup {
 /** Turn the form's dropdown values (one per Player, in order) and Rounds box into a choice. */
 export function setupChoiceFrom(optionValues: readonly string[], rounds: string): SetupChoice {
   return { players: optionValues.map(setupFromOption), rounds: clampRounds(rounds) };
+}
+
+/** Money as shown to Players: a dollar sign, a thousands separator and no decimals. */
+export function formatMoney(amount: number): string {
+  return `$${String(Math.round(amount)).replace(/\B(?=(\d{3})+(?!\d))/g, ",")}`;
 }
 
 const CONTROLS_REMINDER = "←/→ Angle   ↑/↓ Power (Shift ×10)   Tab Weapon   Space Fire";
@@ -311,7 +316,7 @@ export function shopView(match: Match): ShopView {
             bundle: `×${weapon.bundle}`,
             price: formatMoney(weapon.price),
             owned: inventory.count(weapon.name),
-            disabled: weapon.price > money,
+            disabled: !canAfford(weapon, money),
           },
         ],
   );
@@ -341,10 +346,25 @@ export function settleShopFocus(rows: readonly ShopRow[], focus: number): number
   return rows.length;
 }
 
+/** What a key does on the Shop screen: finish, move focus up (-1) or down (1), or nothing. */
+export function shopKeyAction(key: string): "finish" | 1 | -1 | null {
+  switch (key) {
+    case "Escape":
+      return "finish";
+    case "ArrowUp":
+      return -1;
+    case "ArrowDown":
+      return 1;
+    default:
+      return null;
+  }
+}
+
 /**
  * Show the current shopper's Shop screen. ↑/↓ move between the enabled rows and Done; Enter
  * (routed through the returned handler) buys one Bundle of the focused row or finishes on
- * Done; Esc also finishes. `onDone` is called at most once.
+ * Done; Esc also finishes. ↑/↓ and Esc work wherever focus is while the Shop is showing.
+ * `onDone` is called at most once.
  */
 export function showShop(overlay: HTMLElement, match: Match, onDone: () => void): () => void {
   const playerId = match.currentShopper;
@@ -358,9 +378,19 @@ export function showShop(overlay: HTMLElement, match: Match, onDone: () => void)
   const done = el("button", "Done");
   done.type = "button";
 
+  const keyTarget = overlay.ownerDocument;
+  const onKeyDown = (event: KeyboardEvent): void => {
+    const action = shopKeyAction(event.key);
+    if (action === null) return;
+    event.preventDefault();
+    if (action === "finish") finish();
+    else focusOn(moveShopFocus(shopView(match).rows, focus, action));
+  };
+
   const finish = (): void => {
     if (finished) return;
     finished = true;
+    keyTarget.removeEventListener("keydown", onKeyDown);
     onDone();
   };
 
@@ -405,15 +435,7 @@ export function showShop(overlay: HTMLElement, match: Match, onDone: () => void)
   });
 
   const box = el("div", undefined, "panel");
-  box.addEventListener("keydown", (event) => {
-    if (event.key === "Escape") {
-      event.preventDefault();
-      finish();
-    } else if (event.key === "ArrowUp" || event.key === "ArrowDown") {
-      event.preventDefault();
-      focusOn(moveShopFocus(shopView(match).rows, focus, event.key === "ArrowUp" ? -1 : 1));
-    }
-  });
+  keyTarget.addEventListener("keydown", onKeyDown);
   box.append(header, list, done, el("p", "↑/↓ choose   Enter buy   Esc done", "hint"));
   overlay.replaceChildren(box);
   focusOn(settleShopFocus(render().rows, 0));

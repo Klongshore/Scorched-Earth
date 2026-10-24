@@ -40,7 +40,7 @@ export function weaponText(name: string, count: number): string {
 
 /**
  * HUD line 1: the current Player's name, Angle, Power and chosen Weapon, only while they are
- * aiming, so a finished shot or a finished Round never looks like a live Turn.
+ * aiming, so a finished Turn or a finished Round never looks like a live Turn.
  */
 export function aimLine(match: Match): Piece[] {
   const { round } = match;

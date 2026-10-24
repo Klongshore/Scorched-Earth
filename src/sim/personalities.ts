@@ -1,5 +1,6 @@
 import { powerToHit } from "./aiming";
 import {
+  BABY_MISSILE,
   MAX_ANGLE,
   MIN_ANGLE,
   MIN_POWER,
@@ -166,17 +167,17 @@ export function chooseWeapon(
 ): WeaponName {
   const owned = inventory.owned();
   if (personality === "moron") {
-    if (owned.length <= 1) return "Baby Missile";
+    if (owned.length <= 1) return BABY_MISSILE.name;
     return (owned[rng.int(0, owned.length - 1)] as Weapon).name;
   }
-  if (!target) return "Baby Missile";
+  if (!target) return BABY_MISSILE.name;
   const distance = Math.abs(target.x - self.x);
   let best: DamagingWeapon | null = null;
   for (const weapon of owned) {
     if (!isDamaging(weapon) || weapon.radius >= distance) continue;
     if (!best || weapon.maxDamage > best.maxDamage) best = weapon;
   }
-  return best?.name ?? "Baby Missile";
+  return best?.name ?? BABY_MISSILE.name;
 }
 
 /**

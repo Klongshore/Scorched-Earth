@@ -45,7 +45,7 @@ describe("Weapon catalogue", () => {
       const w = weaponNamed(name);
       return [w.kind, w.bundle, w.price, w.radius, w.kind === "dirt" ? null : w.maxDamage];
     };
-    expect(row("Missile")).toEqual(["blast", 5, 1875, 30, 50]);
+    expect(row("Missile")).toEqual(["blast", 5, 1_875, 30, 50]);
     expect(row("Baby Nuke")).toEqual(["blast", 3, 10_000, 45, 70]);
     expect(row("Nuke")).toEqual(["blast", 1, 12_000, 75, 100]);
   });
@@ -70,9 +70,9 @@ describe("Weapon catalogue", () => {
       const w = weaponNamed(name);
       return [w.kind, w.bundle, w.price, w.radius, w.kind === "dirt" ? null : w.maxDamage];
     };
-    expect(row("Baby Roller")).toEqual(["roller", 10, 5000, 20, 30]);
+    expect(row("Baby Roller")).toEqual(["roller", 10, 5_000, 20, 30]);
     expect(row("Roller")).toEqual(["roller", 5, 6000, 30, 50]);
-    expect(row("Heavy Roller")).toEqual(["roller", 2, 6750, 45, 70]);
+    expect(row("Heavy Roller")).toEqual(["roller", 2, 6_750, 45, 70]);
   });
 
   it("has the Dirt Weapons' Bundles, prices and radii, last in Shop order", () => {
@@ -81,9 +81,9 @@ describe("Weapon catalogue", () => {
       const w = weaponNamed(name);
       return [w.kind, w.bundle, w.price, w.radius];
     };
-    expect(row("Dirt Clod")).toEqual(["dirt", 10, 5000, 20]);
-    expect(row("Dirt Ball")).toEqual(["dirt", 5, 5000, 35]);
-    expect(row("Ton of Dirt")).toEqual(["dirt", 2, 6750, 70]);
+    expect(row("Dirt Clod")).toEqual(["dirt", 10, 5_000, 20]);
+    expect(row("Dirt Ball")).toEqual(["dirt", 5, 5_000, 35]);
+    expect(row("Ton of Dirt")).toEqual(["dirt", 2, 6_750, 70]);
   });
 
   it("throws for a name not in the catalogue", () => {
