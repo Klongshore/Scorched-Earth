@@ -312,11 +312,14 @@ describe("Round Weapons", () => {
     expect(weaponName(newRound())).toBe("Baby Missile");
   });
 
-  it("cycles both ways through owned Weapons only, wrapping round", () => {
+  it("cycles both ways through owned Weapons only, never an Item, wrapping round", () => {
     const round = newRound();
     const inventory = round.inventoryOf(round.currentPlayerId);
     inventory.add("Missile", 5);
     inventory.add("Nuke", 1);
+    inventory.add("Shield", 3);
+    inventory.add("Heavy Shield", 2);
+    inventory.add("Parachute", 5);
     const seen: string[] = [];
     for (let i = 0; i < 4; i++) {
       round.act({ kind: "cycleWeapon", delta: 1 });

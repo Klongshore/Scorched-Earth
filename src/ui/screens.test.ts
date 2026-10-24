@@ -7,6 +7,7 @@ import {
   MIN_PLAYERS,
   MIN_ROUNDS,
   WEAPONS,
+  forSaleNamed,
 } from "../sim/constants";
 import { Match } from "../sim/match";
 import { createPlayers } from "../sim/players";
@@ -20,6 +21,7 @@ import {
   optionValue,
   resizePlayerChoices,
   roundResultsRows,
+  scrollToShow,
   settleShopFocus,
   setupChoiceFrom,
   shopKeyAction,
@@ -214,7 +216,9 @@ describe("Shop view", () => {
 
   it("lists every Weapon but the Baby Missile, with its Bundle, price and owned count", () => {
     const view = shopView(shopping());
-    expect(view.rows.map((r) => r.name)).toEqual(WEAPONS.slice(1).map((w) => w.name));
+    expect(view.rows.slice(0, WEAPONS.length - 1).map((r) => r.name)).toEqual(
+      WEAPONS.slice(1).map((w) => w.name),
+    );
     expect(listing(view.rows, SAMPLED)).toEqual([
       ["Missile", "×5", "$1,875", 0],
       ["Baby Nuke", "×3", "$10,000", 0],
@@ -233,6 +237,28 @@ describe("Shop view", () => {
       ["Dirt Ball", "×5", "$5,000", 0],
       ["Ton of Dirt", "×2", "$6,750", 0],
     ]);
+  });
+
+  it("shows 14 rows: the Weapons, then Shield, Heavy Shield and Parachute", () => {
+    const match = shopping();
+    match.money[1] = 20_000;
+    match.buy(1, "Parachute");
+    const view = shopView(match);
+    expect(view.rows).toHaveLength(14);
+    expect(view.rows.slice(11).map((r) => [r.name, r.bundle, r.price, r.owned])).toEqual([
+      ["Shield", "×3", "$6,000", 0],
+      ["Heavy Shield", "×2", "$10,000", 0],
+      ["Parachute", "×5", "$3,000", 5],
+    ]);
+  });
+
+  it("disables the Item rows the shopper cannot afford", () => {
+    const match = shopping();
+    const items = ["Shield", "Heavy Shield", "Parachute"];
+    const disabled = () => pick(shopView(match).rows, items).map((r) => r.disabled);
+    expect(disabled()).toEqual([true, true, true]); // $2,000 buys no Item
+    match.money[1] = forSaleNamed("Shield").price;
+    expect(disabled()).toEqual([false, true, false]);
   });
 
   it("disables the rows the shopper cannot afford", () => {
@@ -345,6 +371,29 @@ describe("formatMoney", () => {
     expect(formatMoney(2000)).toBe("$2,000");
     expect(formatMoney(12345)).toBe("$12,345");
     expect(formatMoney(1234567)).toBe("$1,234,567");
+  });
+});
+
+describe("Shop scrolling", () => {
+  const view = { top: 100, height: 200 }; // showing 100..300 of the rows
+
+  it("leaves the list where it is when the row is already in full view", () => {
+    expect(scrollToShow(view, { top: 100, height: 25 })).toBe(100);
+    expect(scrollToShow(view, { top: 275, height: 25 })).toBe(100);
+  });
+
+  it("scrolls up just far enough to show a row above", () => {
+    expect(scrollToShow(view, { top: 80, height: 25 })).toBe(80);
+    expect(scrollToShow(view, { top: 0, height: 25 })).toBe(0);
+  });
+
+  it("scrolls down just far enough to show a row below", () => {
+    expect(scrollToShow(view, { top: 290, height: 25 })).toBe(115);
+    expect(scrollToShow(view, { top: 500, height: 25 })).toBe(325);
+  });
+
+  it("shows a row taller than the list from its top", () => {
+    expect(scrollToShow(view, { top: 150, height: 300 })).toBe(150);
   });
 });
 

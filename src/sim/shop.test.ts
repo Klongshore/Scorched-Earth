@@ -1,13 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { WEAPONS, weaponNamed } from "./constants";
+import { FOR_SALE, ITEMS, forSaleNamed, weaponNamed } from "./constants";
 import { Rng } from "./rng";
 import { canAfford, computerShopping } from "./shop";
-import type { WeaponName } from "./types";
+import type { ShopName } from "./types";
 
-const cheapest = Math.min(...WEAPONS.filter((w) => w.bundle !== null).map((w) => w.price));
+const cheapest = Math.min(...FOR_SALE.map((thing) => thing.price));
 
-function spent(names: readonly WeaponName[]): number {
-  return names.reduce((sum, name) => sum + weaponNamed(name).price, 0);
+function spent(names: readonly ShopName[]): number {
+  return names.reduce((sum, name) => sum + forSaleNamed(name).price, 0);
 }
 
 describe("canAfford", () => {
@@ -15,6 +15,12 @@ describe("canAfford", () => {
     const missile = weaponNamed("Missile");
     expect(canAfford(missile, missile.price)).toBe(true);
     expect(canAfford(missile, missile.price - 1)).toBe(false);
+  });
+
+  it("works for Items too", () => {
+    const parachute = forSaleNamed("Parachute");
+    expect(canAfford(parachute, parachute.price)).toBe(true);
+    expect(canAfford(parachute, parachute.price - 1)).toBe(false);
   });
 
   it("is never true for the Baby Missile", () => {
@@ -44,11 +50,12 @@ describe("computerShopping", () => {
     expect(computerShopping(60_000, new Rng(9))).toEqual(computerShopping(60_000, new Rng(9)));
   });
 
-  it("buys every Weapon for sale across seeds", () => {
-    const seen = new Set<WeaponName>();
+  it("buys every Weapon and Item for sale across seeds", () => {
+    const seen = new Set<ShopName>();
     for (let seed = 1; seed <= 50; seed++) {
       for (const name of computerShopping(100_000, new Rng(seed))) seen.add(name);
     }
-    expect(seen.size).toBe(WEAPONS.length - 1);
+    expect([...seen].sort()).toEqual(FOR_SALE.map((thing) => thing.name).sort());
+    for (const item of ITEMS) expect(seen).toContain(item.name);
   });
 });

@@ -1,6 +1,46 @@
 import { describe, expect, it } from "vitest";
-import { BABY_MISSILE, WEAPONS, weaponNamed } from "./constants";
+import { BABY_MISSILE, FOR_SALE, ITEMS, WEAPONS, forSaleNamed, weaponNamed } from "./constants";
 import type { WeaponName } from "./types";
+
+describe("Item catalogue", () => {
+  it("has the Shield, Heavy Shield and Parachute, in Shop order", () => {
+    expect(ITEMS.map((i) => [i.name, i.kind, i.bundle, i.price])).toEqual([
+      ["Shield", "shield", 3, 6_000],
+      ["Heavy Shield", "shield", 2, 10_000],
+      ["Parachute", "parachute", 5, 3_000],
+    ]);
+  });
+
+  it("names no Item like a Weapon", () => {
+    const weaponNames: string[] = WEAPONS.map((w) => w.name);
+    const names = ITEMS.map((i) => i.name);
+    expect(new Set(names).size).toBe(names.length);
+    for (const name of names) expect(weaponNames).not.toContain(name);
+  });
+
+  it("gives every Item a positive integer Bundle and price, and every Shield Shield Strength", () => {
+    for (const item of ITEMS) {
+      expect(Number.isInteger(item.bundle) && item.bundle > 0, item.name).toBe(true);
+      expect(Number.isInteger(item.price) && item.price > 0, item.name).toBe(true);
+      if (item.kind === "shield") expect(item.strength, item.name).toBeGreaterThan(0);
+    }
+    const strengths = ITEMS.map((i) => (i.kind === "shield" ? i.strength : null));
+    expect(strengths).toEqual([50, 100, null]);
+  });
+});
+
+describe("What the Shop sells", () => {
+  it("is the Weapons but the Baby Missile, in catalogue order, then the Items", () => {
+    expect(FOR_SALE).toEqual([...WEAPONS.slice(1), ...ITEMS]);
+    expect(FOR_SALE).toHaveLength(14);
+    expect(FOR_SALE).not.toContain(BABY_MISSILE);
+  });
+
+  it("finds every Weapon and Item by name, and throws for an unknown one", () => {
+    for (const thing of [...WEAPONS, ...ITEMS]) expect(forSaleNamed(thing.name)).toBe(thing);
+    expect(() => forSaleNamed("Battery" as WeaponName)).toThrow();
+  });
+});
 
 describe("Weapon catalogue", () => {
   it("has unique names", () => {

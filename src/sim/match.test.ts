@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { MAX_PLAYERS, MIN_PLAYERS, TICK_SECONDS, WEAPONS } from "./constants";
+import { FOR_SALE, MAX_PLAYERS, MIN_PLAYERS, TICK_SECONDS, forSaleNamed } from "./constants";
 import { Match, type MatchSetup } from "./match";
 import { createPlayers } from "./players";
 import { Rng } from "./rng";
 import { Round, type RoundResult } from "./round";
-import type { PlayerSetup } from "./types";
+import type { PlayerSetup, ShopName } from "./types";
 
 const human: PlayerSetup = { kind: "human" };
 const moron: PlayerSetup = { kind: "computer", personality: "moron" };
@@ -248,14 +248,44 @@ describe("Match Shop", () => {
     const match = shopping([moron, moron]);
     match.requireRound().earnings[0] = 40_000;
     finishRound(match, win(0));
-    const cheapest = Math.min(...WEAPONS.filter((w) => w.bundle !== null).map((w) => w.price));
+    const cheapest = Math.min(...FOR_SALE.map((thing) => thing.price));
     expect(match.money[0]).toBeGreaterThanOrEqual(0);
     expect(match.money[0]).toBeLessThan(cheapest);
-    const owned = match
-      .inventoryOf(0)
-      .owned()
-      .filter((w) => w.bundle !== null);
-    expect(owned.length).toBeGreaterThan(0);
+    const inventory = match.inventoryOf(0);
+    expect(FOR_SALE.some((thing) => inventory.count(thing.name) > 0)).toBe(true);
+  });
+
+  it("lets Computer Players buy Items, which never join their owned Weapons", () => {
+    const itemNames: ShopName[] = ["Shield", "Heavy Shield", "Parachute"];
+    let itemsBought = 0;
+    for (let seed = 1; seed <= 20; seed++) {
+      const match = new Match({ players: [moron, moron], rounds: 3, seed });
+      match.requireRound().earnings[0] = 100_000;
+      finishRound(match, win(0));
+      const inventory = match.inventoryOf(0);
+      for (const name of itemNames) itemsBought += inventory.count(name);
+      for (const weapon of inventory.owned()) expect(itemNames).not.toContain(weapon.name);
+    }
+    expect(itemsBought).toBeGreaterThan(0);
+  });
+
+  it("sells a Parachute Bundle like any other", () => {
+    const match = shopping([human, human]);
+    const parachute = forSaleNamed("Parachute");
+    match.money[0] = parachute.price;
+    match.buy(0, "Parachute");
+    expect(match.money[0]).toBe(0);
+    expect(match.inventoryOf(0).count("Parachute")).toBe(parachute.bundle);
+    expect(() => match.buy(0, "Parachute")).toThrow();
+  });
+
+  it("refuses an Item the shopper cannot afford", () => {
+    const match = shopping([human, human]);
+    const heavy = forSaleNamed("Heavy Shield");
+    match.money[0] = heavy.price - 1;
+    expect(() => match.buy(0, "Heavy Shield")).toThrow();
+    expect(match.money[0]).toBe(heavy.price - 1);
+    expect(match.inventoryOf(0).count("Heavy Shield")).toBe(0);
   });
 
   it("deducts the price and adds the Bundle on each purchase", () => {
@@ -305,6 +335,9 @@ describe("Match Shop", () => {
 
   it("carries Money and the Inventory across Rounds, even for a destroyed Tank", () => {
     const match = shopping([human, human]);
+    match.money[0] = 2000 + forSaleNamed("Shield").price + forSaleNamed("Parachute").price;
+    match.buy(0, "Shield");
+    match.buy(0, "Parachute");
     match.buy(0, "Missile");
     match.finishShopping(0);
     match.finishShopping(1);
@@ -315,6 +348,8 @@ describe("Match Shop", () => {
     match.startNextRound();
     expect(match.money).toEqual([125, 7000]);
     expect(match.inventoryOf(0).count("Missile")).toBe(5);
+    expect(match.inventoryOf(0).count("Shield")).toBe(forSaleNamed("Shield").bundle);
+    expect(match.inventoryOf(0).count("Parachute")).toBe(forSaleNamed("Parachute").bundle);
     expect(match.currentShopper).toBe(0);
     match.finishShopping(0);
     match.buy(1, "Missile");

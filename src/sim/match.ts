@@ -5,14 +5,14 @@ import {
   MIN_ROUNDS,
   MONEY_PER_ROUND_WIN,
   STARTING_MONEY,
-  weaponNamed,
+  forSaleNamed,
 } from "./constants";
 import { emptyLoadout, inventoryIn, type Inventory, type Loadout } from "./inventory";
 import { createPlayers } from "./players";
 import { Rng } from "./rng";
 import { Round, type RoundResult } from "./round";
 import { canAfford, computerShopping } from "./shop";
-import type { Player, PlayerSetup, WeaponName } from "./types";
+import type { Player, PlayerSetup, ShopName } from "./types";
 
 export interface MatchSetup {
   readonly players: readonly PlayerSetup[]; // one per Player, MIN_PLAYERS..MAX_PLAYERS
@@ -70,20 +70,23 @@ export class Match {
     return this.stage.kind === "shopping" ? (this.stage.shoppers[0] ?? null) : null;
   }
 
-  /** The current shopper buys one Bundle of a Weapon. Throws out of turn or when unaffordable. */
-  buy(playerId: number, name: WeaponName): void {
+  /**
+   * The current shopper buys one Bundle of a Weapon or Item. Throws out of turn or when
+   * unaffordable.
+   */
+  buy(playerId: number, name: ShopName): void {
     this.requireShopper(playerId);
     this.purchase(playerId, name);
   }
 
   /** Any Player buys one Bundle: deduct its price and add it to their Inventory. */
-  private purchase(playerId: number, name: WeaponName): void {
-    const weapon = weaponNamed(name);
+  private purchase(playerId: number, name: ShopName): void {
+    const thing = forSaleNamed(name);
     const money = this.money[playerId] ?? 0;
-    if (weapon.bundle === null) throw new Error(`${name} is not sold in the Shop`);
-    if (!canAfford(weapon, money)) throw new Error(`Player ${playerId} cannot afford ${name}`);
-    this.money[playerId] = money - weapon.price;
-    this.inventoryOf(playerId).add(name, weapon.bundle);
+    if (thing.bundle === null) throw new Error(`${name} is not sold in the Shop`);
+    if (!canAfford(thing, money)) throw new Error(`Player ${playerId} cannot afford ${name}`);
+    this.money[playerId] = money - thing.price;
+    this.inventoryOf(playerId).add(name, thing.bundle);
   }
 
   /** The current shopper is done; after the last Human the Round starts. */
