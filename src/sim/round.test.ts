@@ -67,6 +67,13 @@ function scenario(
   return { round, firer, other };
 }
 
+/** Clear a slab `depth` px deep under a Tank, so it falls that far on the next Settling. */
+function undercutTank(round: Round, tank: Tank, depth: number): void {
+  for (let y = tank.y; y < tank.y + depth; y++) {
+    for (let x = tank.x - 20; x <= tank.x + 20; x++) round.terrain.set(x, y, false);
+  }
+}
+
 /** Fire straight up so the Projectile falls back onto the firer. */
 function fireStraightUp(round: Round, firer: Tank): void {
   firer.angle = 90;
@@ -211,6 +218,34 @@ describe("Round", () => {
     expect(isSupported(other, round.terrain)).toBe(true);
     expect(other.health).toBe(MAX_HEALTH - fallDamage(drop));
     expect(other.fallen).toBe(0);
+  });
+
+  it("opens a Parachute for a 60 px fall, using exactly one, and lands no Fall Damage", () => {
+    const { round, other } = scenario(150, 500);
+    const inventory = round.inventoryOf(other.playerId);
+    inventory.add("Parachute", 5);
+    undercutTank(round, other, 60);
+    round.phase = { kind: "settling" };
+    runUntil(round, (r) => r.phase.kind === "aiming");
+    expect(other.y).toBe(GROUND + 60);
+    expect(other.health).toBe(MAX_HEALTH);
+    expect(inventory.count("Parachute")).toBe(4);
+    expect(other.parachute).toBe(false);
+  });
+
+  it("uses one Parachute for each of two falls in two Turns", () => {
+    const { round, firer, other } = scenario(150, 500);
+    const inventory = round.inventoryOf(other.playerId);
+    inventory.add("Parachute", 5);
+    for (const turnOf of [firer, other]) {
+      expect(round.currentTank()).toBe(turnOf);
+      undercutTank(round, other, 30);
+      round.phase = { kind: "settling" };
+      runUntil(round, (r) => r.phase.kind === "aiming");
+    }
+    expect(other.y).toBe(GROUND + 60);
+    expect(other.health).toBe(MAX_HEALTH);
+    expect(inventory.count("Parachute")).toBe(3);
   });
 
   it("ends the Turn only after dirt on a Tank its Fall Damage destroyed has fallen", () => {

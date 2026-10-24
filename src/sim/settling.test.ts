@@ -225,3 +225,100 @@ describe("landTanks", () => {
     expect(t.fallen).toBe(0);
   });
 });
+
+describe("Parachutes", () => {
+  /** An openParachute that hands out `owned` Parachutes and records every ask. */
+  function parachutes(owned: number): { open: (id: number) => boolean; asks: number[] } {
+    const asks: number[] = [];
+    let left = owned;
+    return {
+      asks,
+      open: (id) => {
+        asks.push(id);
+        if (left <= 0) return false;
+        left--;
+        return true;
+      },
+    };
+  }
+
+  function settleWith(terrain: Terrain, tanks: Tank[], open: (id: number) => boolean): void {
+    let ticks = 0;
+    while (settleTick(terrain, tanks, open)) {
+      if (++ticks > 10_000) throw new Error("Settling never came to rest");
+    }
+  }
+
+  it("opens one on a 60 px fall, using exactly one, and cancels the Fall Damage", () => {
+    const terrain = flat();
+    const t = tank();
+    undercut(terrain, t, 0, 60);
+    const p = parachutes(5);
+    let openedAt: number | null = null;
+    while (settleTick(terrain, [t], p.open)) {
+      if (t.parachute && openedAt === null) openedAt = t.fallen;
+    }
+    expect(t.fallen).toBe(60);
+    expect(p.asks).toEqual([t.playerId]);
+    expect(openedAt).toBeGreaterThan(FALL_SAFE_PIXELS);
+    expect(openedAt).toBeLessThanOrEqual(FALL_SAFE_PIXELS + 2);
+    landTanks(terrain, [t]);
+    expect(t.health).toBe(MAX_HEALTH);
+    expect(t.fallen).toBe(0);
+    expect(t.parachute).toBe(false);
+  });
+
+  it("never asks for one on a drop within FALL_SAFE_PIXELS", () => {
+    const terrain = flat();
+    const t = tank();
+    undercut(terrain, t, 0, FALL_SAFE_PIXELS);
+    const p = parachutes(5);
+    settleWith(terrain, [t], p.open);
+    expect(t.fallen).toBe(FALL_SAFE_PIXELS);
+    expect(p.asks).toEqual([]);
+    expect(t.parachute).toBe(false);
+  });
+
+  it("asks only once per fall when the Player owns none, and the full Fall Damage lands", () => {
+    const terrain = flat();
+    const t = tank();
+    undercut(terrain, t, 0, 60);
+    const p = parachutes(0);
+    settleWith(terrain, [t], p.open);
+    expect(p.asks).toEqual([t.playerId]);
+    landTanks(terrain, [t]);
+    expect(t.health).toBe(MAX_HEALTH - fallDamage(60));
+  });
+
+  it("asks again for the next fall once the last one has landed", () => {
+    const terrain = flat();
+    const t = tank();
+    const p = parachutes(5);
+    undercut(terrain, t, 0, 30);
+    settleWith(terrain, [t], p.open);
+    landTanks(terrain, [t]);
+    for (let y = t.y; y < t.y + 30; y++) {
+      for (let x = t.x - 20; x <= t.x + 20; x++) terrain.set(x, y, false);
+    }
+    settleWith(terrain, [t], p.open);
+    landTanks(terrain, [t]);
+    expect(t.y).toBe(GROUND + 60);
+    expect(p.asks).toEqual([t.playerId, t.playerId]);
+    expect(t.health).toBe(MAX_HEALTH);
+  });
+
+  it("does not save a Tank that falls to the bottom of the field", () => {
+    const terrain = flat();
+    const t = tank();
+    for (let x = t.x - TANK_HALF_WIDTH; x <= t.x + TANK_HALF_WIDTH; x++) {
+      for (let y = 0; y < FIELD_HEIGHT; y++) terrain.set(x, y, false);
+    }
+    const p = parachutes(5);
+    settleWith(terrain, [t], p.open);
+    expect(p.asks).toEqual([t.playerId]);
+    expect(t.health).toBe(0);
+    landTanks(terrain, [t]);
+    expect(t.health).toBe(0);
+    expect(t.parachute).toBe(false);
+  });
+});

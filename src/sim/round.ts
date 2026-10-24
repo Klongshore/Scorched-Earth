@@ -176,7 +176,10 @@ export class Round {
       case "settling":
         // The Turn only ends once all dirt and Tanks are at rest. Fall Damage lands then; if it
         // destroys a Tank, the dirt on that Tank falls and Settling goes on.
-        if (!settleTick(this.terrain, this.tanks) && !landTanks(this.terrain, this.tanks)) {
+        if (
+          !settleTick(this.terrain, this.tanks, (id) => this.useParachute(id)) &&
+          !landTanks(this.terrain, this.tanks)
+        ) {
           this.endTurn();
         }
         break;
@@ -283,6 +286,14 @@ export class Round {
     const explosion = detonate(x, y, weapon, this.terrain, this.tanks);
     this.earn(p.firedBy, moneyEarned(explosion.hits, p.firedBy));
     return explosion;
+  }
+
+  /** Use up one of a Player's Parachutes; false if they own none. */
+  private useParachute(playerId: number): boolean {
+    const inventory = this.inventoryOf(playerId);
+    if (inventory.count("Parachute") <= 0) return false;
+    inventory.useOne("Parachute");
+    return true;
   }
 
   private endTurn(): void {

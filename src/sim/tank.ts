@@ -23,6 +23,7 @@ export function newTank(playerId: number, x: number, y: number): Tank {
     power: START_POWER,
     health: MAX_HEALTH,
     fallen: 0,
+    parachute: false,
   };
 }
 
