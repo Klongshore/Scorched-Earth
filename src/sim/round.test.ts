@@ -336,6 +336,40 @@ describe("Round Weapons", () => {
     expect(weaponName(round)).toBe("Baby Missile");
   });
 
+  it("lets a Computer Player choose its Weapon each Turn from what it owns", () => {
+    const shooter: PlayerSetup = { kind: "computer", personality: "shooter" };
+    const players = createPlayers([shooter, shooter]);
+    let nukes = 0;
+    for (let seed = 1; seed <= 30; seed++) {
+      const loadout = emptyLoadout(players);
+      for (const inventory of loadout.inventories) {
+        inventory.add("Missile", 5);
+        inventory.add("Nuke", 1);
+      }
+      const round = new Round(1, players, new Rng(seed), loadout);
+      const targetId = round.targetOf(round.currentPlayerId);
+      const expected =
+        targetId === null
+          ? "Baby Missile"
+          : Math.abs(round.tankOf(targetId).x - round.currentTank().x) > 75
+            ? "Nuke"
+            : "Missile";
+      expect(weaponName(round)).toBe(expected);
+      if (expected === "Nuke") nukes++;
+    }
+    expect(nukes).toBeGreaterThan(0);
+  });
+
+  it("lets a Moron fire the Weapons it owns, using them up", () => {
+    const players = createPlayers([MORON, MORON]);
+    const loadout = emptyLoadout(players);
+    for (const inventory of loadout.inventories) inventory.add("Missile", 5);
+    const round = new Round(1, players, new Rng(4), loadout);
+    runUntil(round, (r) => r.phase.kind === "over", 200_000);
+    const left = loadout.inventories.map((i) => i.count("Missile"));
+    expect(left.some((n) => n < 5)).toBe(true);
+  });
+
   it("fires the chosen Weapon and uses one; the Baby Missile is never used up", () => {
     const { round, firer } = scenario(150, 500);
     const inventory = round.inventoryOf(firer.playerId);

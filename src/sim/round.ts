@@ -19,7 +19,13 @@ import {
 import { detonate } from "./explosion";
 import { Inventory } from "./inventory";
 import { moneyEarned } from "./money";
-import { chooseAim, newComputerMemory, type ComputerMemory, type Landing } from "./personalities";
+import {
+  chooseAim,
+  chooseWeapon,
+  newComputerMemory,
+  type ComputerMemory,
+  type Landing,
+} from "./personalities";
 import { placeTanks } from "./placement";
 import { launch, stepProjectile } from "./projectile";
 import type { Rng } from "./rng";
@@ -301,11 +307,15 @@ export class Round {
     if (player.kind === "computer") {
       const tank = this.currentTank();
       if (!player.personality) throw new Error(`Computer player ${player.id} has no Personality`);
-      const aim = chooseAim(
+      const memory = this.requireMemory(player.id);
+      const aim = chooseAim(player.personality, tank, this.tanks, memory, this.rng);
+      // After the aim, so the aim's draws keep their order.
+      const target = this.tanks.find((t) => t.playerId === memory.targetId) ?? null;
+      this.loadout.chosenWeapons[player.id] = chooseWeapon(
         player.personality,
         tank,
-        this.tanks,
-        this.requireMemory(player.id),
+        target,
+        this.inventoryOf(player.id),
         this.rng,
       );
       tank.angle = aim.angle;

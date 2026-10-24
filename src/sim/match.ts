@@ -11,6 +11,7 @@ import { Inventory } from "./inventory";
 import { createPlayers } from "./players";
 import { Rng } from "./rng";
 import { Round, type RoundResult } from "./round";
+import { canAfford, computerShopping } from "./shop";
 import type { Player, PlayerSetup, WeaponName } from "./types";
 
 export interface MatchSetup {
@@ -72,10 +73,15 @@ export class Match {
   /** The current shopper buys one Bundle of a Weapon. Throws out of turn or when unaffordable. */
   buy(playerId: number, name: WeaponName): void {
     this.requireShopper(playerId);
+    this.purchase(playerId, name);
+  }
+
+  /** Any Player buys one Bundle: deduct its price and add it to their Inventory. */
+  private purchase(playerId: number, name: WeaponName): void {
     const weapon = weaponNamed(name);
     const money = this.money[playerId] ?? 0;
     if (weapon.bundle === null) throw new Error(`${name} is not sold in the Shop`);
-    if (weapon.price > money) throw new Error(`Player ${playerId} cannot afford ${name}`);
+    if (!canAfford(weapon, money)) throw new Error(`Player ${playerId} cannot afford ${name}`);
     this.money[playerId] = money - weapon.price;
     this.inventoryOf(playerId).add(name, weapon.bundle);
   }
@@ -100,8 +106,17 @@ export class Match {
     return this.round;
   }
 
-  /** Open the Shop for every Human in Player order, or start the Round if there are none. */
+  /**
+   * Open the Shop: every Computer Player shops at once, in Player order, then every Human gets
+   * a turn in Player order. With no Humans the Round starts straight away.
+   */
   private openShop(): void {
+    for (const player of this.players) {
+      if (player.kind !== "computer") continue;
+      for (const name of computerShopping(this.money[player.id] ?? 0, this.rng)) {
+        this.purchase(player.id, name);
+      }
+    }
     const shoppers = this.players.filter((p) => p.kind === "human").map((p) => p.id);
     if (shoppers.length === 0) this.startRound();
     else this.stage = { kind: "shopping", shoppers };

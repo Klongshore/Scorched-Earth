@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { MAX_PLAYERS, MIN_PLAYERS, TICK_SECONDS } from "./constants";
+import { MAX_PLAYERS, MIN_PLAYERS, TICK_SECONDS, WEAPONS } from "./constants";
 import { Match, type MatchSetup } from "./match";
-import type { RoundResult } from "./round";
+import { createPlayers } from "./players";
+import { Rng } from "./rng";
+import { Round, type RoundResult } from "./round";
 import type { PlayerSetup } from "./types";
 
 const human: PlayerSetup = { kind: "human" };
@@ -154,7 +156,7 @@ describe("Match", () => {
   });
 
   it("starts every Player with $2,000 and nothing earned", () => {
-    const match = newMatch({ players: [human, moron, human] });
+    const match = newMatch({ players: [human, human, human] });
     expect(match.money).toEqual([2000, 2000, 2000]);
     expect(match.earnedThisRound).toEqual([0, 0, 0]);
   });
@@ -232,6 +234,30 @@ describe("Match Shop", () => {
     expect(match.requireRound().number).toBe(1);
   });
 
+  it("lets every Computer Player shop before any Human's Shop screen", () => {
+    const match = shopping([moron, human, moron]);
+    expect(match.currentShopper).toBe(1);
+    // $2,000 buys exactly one Bundle of Missiles, the only Weapon that cheap.
+    expect(match.money).toEqual([125, 2000, 125]);
+    expect(match.inventoryOf(0).count("Missile")).toBe(5);
+    expect(match.inventoryOf(1).count("Missile")).toBe(0);
+    expect(match.inventoryOf(2).count("Missile")).toBe(5);
+  });
+
+  it("lets Computer Players shop again before every later Round, spending what they earned", () => {
+    const match = shopping([moron, moron]);
+    match.requireRound().earnings[0] = 40_000;
+    finishRound(match, win(0));
+    const cheapest = Math.min(...WEAPONS.filter((w) => w.bundle !== null).map((w) => w.price));
+    expect(match.money[0]).toBeGreaterThanOrEqual(0);
+    expect(match.money[0]).toBeLessThan(cheapest);
+    const owned = match
+      .inventoryOf(0)
+      .owned()
+      .filter((w) => w.bundle !== null);
+    expect(owned.length).toBeGreaterThan(0);
+  });
+
   it("deducts the price and adds the Bundle on each purchase", () => {
     const match = shopping([human, human]);
     match.buy(0, "Missile");
@@ -306,9 +332,13 @@ describe("Match Shop", () => {
   });
 });
 
-/** Tick a Match to completion, recording each Round, failing past maxTicks. */
-function playOut(match: Match, maxTicks: number): number {
+/**
+ * Tick a Match to completion, recording each Round, failing past maxTicks. `afterShop` runs
+ * whenever the Shop has just closed and after the last Round is recorded.
+ */
+function playOut(match: Match, maxTicks: number, afterShop: () => void = () => {}): number {
   let ticks = 0;
+  afterShop();
   while (!match.isOver()) {
     if (ticks++ >= maxTicks) expect.fail(`Match did not finish within ${maxTicks} ticks`);
     const round = match.requireRound();
@@ -316,6 +346,7 @@ function playOut(match: Match, maxTicks: number): number {
     if (round.phase.kind === "over") {
       match.recordRoundResult();
       if (!match.isOver()) match.startNextRound();
+      afterShop();
     }
   }
   return ticks;
@@ -362,10 +393,11 @@ describe("Match integration", () => {
     expect(match.results.length).toBe(3);
   });
 
-  describe("1-Round Matches of 10 Computer Players finish within the tick budget", () => {
+  describe("3-Round Matches of 10 Computer Players, shopping and firing what they bought, finish within the tick budget", () => {
     const shooter: PlayerSetup = { kind: "computer", personality: "shooter" };
     const tosser: PlayerSetup = { kind: "computer", personality: "tosser" };
     const lineups: Record<string, PlayerSetup[]> = {
+      Morons: Array.from({ length: MAX_PLAYERS }, () => moron),
       Shooters: Array.from({ length: MAX_PLAYERS }, () => shooter),
       Tossers: Array.from({ length: MAX_PLAYERS }, () => tosser),
       "a mix": Array.from(
@@ -374,23 +406,38 @@ describe("Match integration", () => {
       ),
     };
     for (const [name, players] of Object.entries(lineups)) {
-      it(`of ${name}, across 40 seeds`, () => {
+      it(`of ${name}, across 40 seeds, with Money never negative`, () => {
         for (let seed = 1; seed <= 40; seed++) {
-          const match = new Match({ players, rounds: 1, seed });
-          playOut(match, 200_000);
-          expect(match.results.length).toBe(1);
+          const match = new Match({ players, rounds: 3, seed });
+          playOut(match, 3 * 200_000, () => {
+            for (const money of match.money) expect(money).toBeGreaterThanOrEqual(0);
+          });
+          expect(match.results.length).toBe(3);
         }
       });
     }
   });
 
-  it("plays a seeded Moron-only Match exactly as before Shooter existed", () => {
+  it("plays seeded Moron-only Rounds holding only the Baby Missile exactly as before Shooter existed", () => {
     // Pinned before Shooter was added: Morons must draw from the Rng exactly as they always have.
-    const match = new Match({ players: [moron, moron, moron, moron], rounds: 3, seed: 77 });
-    const ticks = playOut(match, 3 * 200_000);
+    // Rounds are played directly, sharing one Rng as a Match does, because a Match now lets its
+    // Computer Players shop, which draws from the Rng too.
+    const players = createPlayers([moron, moron, moron, moron]);
+    const rng = new Rng(77);
+    let ticks = 0;
+    const results: RoundResult[] = [];
+    let round: Round | null = null;
+    for (let number = 1; number <= 3; number++) {
+      round = new Round(number, players, rng);
+      while (round.phase.kind !== "over") {
+        round.tick(TICK_SECONDS);
+        ticks++;
+      }
+      results.push(round.phase.result);
+    }
     expect(ticks).toBe(75560);
-    expect(match.results).toEqual([win(2), win(0), win(2)]);
-    expect(match.requireRound().tanks).toEqual([
+    expect(results).toEqual([win(2), win(0), win(2)]);
+    expect(round?.tanks).toEqual([
       { playerId: 0, x: 256, y: 480, angle: 89, power: 70, health: 0 },
       { playerId: 1, x: 80, y: 362, angle: 93, power: 0, health: 0 },
       { playerId: 2, x: 531, y: 429, angle: 153, power: 123, health: 49 },
