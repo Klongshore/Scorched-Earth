@@ -31,7 +31,7 @@ import { placeTanks } from "./placement";
 import { launch, stepProjectile } from "./projectile";
 import { startRolling, stepRolling } from "./roller";
 import type { Rng } from "./rng";
-import { settleTick } from "./settling";
+import { landTanks, settleTick } from "./settling";
 import { clampAim, hitTest, isAlive } from "./tank";
 import type { Terrain } from "./terrain";
 import { generateHills } from "./terrainGen";
@@ -174,8 +174,11 @@ export class Round {
         }
         break;
       case "settling":
-        // The Turn only ends once all dirt and Tanks are at rest.
-        if (!settleTick(this.terrain, this.tanks)) this.endTurn();
+        // The Turn only ends once all dirt and Tanks are at rest. Fall Damage lands then; if it
+        // destroys a Tank, the dirt on that Tank falls and Settling goes on.
+        if (!settleTick(this.terrain, this.tanks) && !landTanks(this.terrain, this.tanks)) {
+          this.endTurn();
+        }
         break;
       case "over":
         break;

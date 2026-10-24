@@ -19,6 +19,7 @@ export interface Tank {
   angle: number; // integer degrees
   power: number; // integer
   health: number; // integer 0..100
+  fallen: number; // px fallen during the current Settling; 0 at rest
 }
 
 export type WeaponName =
