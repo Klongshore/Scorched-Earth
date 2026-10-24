@@ -343,13 +343,47 @@ describe("Round earnings", () => {
     expect(round.earnings).toEqual([0, 0]);
   });
 
-  it("pays no one when a Tank dies by Settling to the bottom", () => {
-    const { round, other } = scenario(150, 500);
+  it("pays the current Player for the Health and the Tank lost by Settling to the bottom", () => {
+    const { round, firer, other } = scenario(150, 500);
     round.terrain.carveCircle(other.x, FIELD_HEIGHT - 1, 30);
     for (let y = other.y; y < FIELD_HEIGHT; y++) round.terrain.carveCircle(other.x, y, 12);
     round.phase = { kind: "settling" };
     runUntil(round, (r) => r.phase.kind === "over");
     expect(other.health).toBe(0);
+    expect(round.earnings[firer.playerId]).toBe(
+      MONEY_PER_DAMAGE * MAX_HEALTH + MONEY_PER_DESTROYED_TANK,
+    );
+    expect(round.earnings[other.playerId]).toBe(0);
+  });
+
+  it("pays the current Player $50 per point of Fall Damage to another Tank", () => {
+    const { round, firer, other } = scenario(150, 500);
+    round.terrain.carveCircle(other.x, other.y + 15, 20);
+    round.phase = { kind: "settling" };
+    runUntil(round, settled);
+    const lost = MAX_HEALTH - other.health;
+    expect(lost).toBeGreaterThan(0);
+    expect(other.health).toBeGreaterThan(0);
+    expect(round.earnings[firer.playerId]).toBe(MONEY_PER_DAMAGE * lost);
+    expect(round.earnings[other.playerId]).toBe(0);
+  });
+
+  it("pays the destroyed-Tank bonus when Fall Damage destroys another Tank", () => {
+    const { round, firer, other } = scenario(150, 500);
+    other.health = 1;
+    round.terrain.carveCircle(other.x, other.y + 15, 20);
+    round.phase = { kind: "settling" };
+    runUntil(round, settled);
+    expect(other.health).toBe(0);
+    expect(round.earnings[firer.playerId]).toBe(MONEY_PER_DAMAGE + MONEY_PER_DESTROYED_TANK);
+  });
+
+  it("pays nothing for Fall Damage to the current Player's own Tank", () => {
+    const { round, firer } = scenario(150, 500);
+    round.terrain.carveCircle(firer.x, firer.y + 15, 20);
+    round.phase = { kind: "settling" };
+    runUntil(round, settled);
+    expect(firer.health).toBeLessThan(MAX_HEALTH);
     expect(round.earnings).toEqual([0, 0]);
   });
 });
@@ -614,13 +648,16 @@ describe("Round splitters", () => {
     const mirv = scenario(100, Math.round(pieceX));
     arm(mirv.round, "MIRV");
     const pieces = fireAndCollect(mirv.round, mirv.firer, 60, 400);
-    // Only the pieces' blasts pay; Fall Damage from the crater pays no one.
+    // The pieces' blasts pay, and so does the Fall Damage from the crater: each exactly once.
     const removed = pieces
       .flatMap((e) => e.hits)
       .filter((h) => h.playerId === mirv.other.playerId)
       .reduce((sum, h) => sum + h.healthRemoved, 0);
     expect(removed).toBeGreaterThan(0);
-    expect(mirv.round.earnings[mirv.firer.playerId]).toBe(MONEY_PER_DAMAGE * removed);
+    const fell = MAX_HEALTH - removed - mirv.other.health;
+    expect(fell).toBeGreaterThan(0);
+    expect(mirv.other.health).toBeGreaterThan(0);
+    expect(mirv.round.earnings[mirv.firer.playerId]).toBe(MONEY_PER_DAMAGE * (removed + fell));
 
     // Bomblets scatter at random: across seeds, some must hit the other Tank standing beside
     // the Funky Bomb's crater, beyond the Funky Bomb's own reach.
@@ -635,14 +672,11 @@ describe("Round splitters", () => {
       arm(round, "Funky Bomb");
       const explosions = fireAndCollect(round, firer, 60, 400);
       expect(explosions[0]?.hits.some((h) => h.playerId === other.playerId)).toBe(false);
-      let expected = 0;
-      for (const e of explosions) {
-        for (const h of e.hits) {
-          if (h.playerId === firer.playerId) continue;
-          expected += MONEY_PER_DAMAGE * h.healthRemoved;
-          if (h.destroyed) expected += MONEY_PER_DESTROYED_TANK;
-        }
-      }
+      // Every point the other Tank lost, to blasts or to Settling, pays once.
+      const expected =
+        MONEY_PER_DAMAGE * (MAX_HEALTH - other.health) +
+        (other.health === 0 ? MONEY_PER_DESTROYED_TANK : 0);
+      expect(explosions.length).toBeGreaterThan(0);
       expect(round.earnings[firer.playerId]).toBe(expected);
       bombletMoney += expected;
     }

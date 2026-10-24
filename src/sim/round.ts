@@ -35,7 +35,15 @@ import { landTanks, settleTick } from "./settling";
 import { clampAim, hitTest, isAlive } from "./tank";
 import type { Terrain } from "./terrain";
 import { generateHills } from "./terrainGen";
-import type { Explosion, Player, Projectile, Tank, Weapon, WeaponName } from "./types";
+import type {
+  Explosion,
+  ExplosionHit,
+  Player,
+  Projectile,
+  Tank,
+  Weapon,
+  WeaponName,
+} from "./types";
 
 export type Phase =
   | { kind: "aiming"; thinkTicks: number | null } // ticks left to think; non-null only for Computer Players
@@ -74,6 +82,11 @@ export class Round {
    * a split MIRV's middle piece. Null once it has landed or been lost.
    */
   private barrelProjectile: Projectile | null = null;
+  /**
+   * Every Tank's Health, indexed like `tanks`, as Settling began: after every Explosion was over.
+   * Null outside Settling.
+   */
+  private healthBeforeSettling: number[] | null = null;
 
   constructor(
     number: number,
@@ -175,8 +188,12 @@ export class Round {
         break;
       case "settling":
         // The Turn only ends once all dirt and Tanks are at rest. Fall Damage lands then; if it
-        // destroys a Tank, the dirt on that Tank falls and Settling goes on.
+        // destroys a Tank, the dirt on that Tank falls and Settling goes on. Health is recorded
+        // on Settling's first tick, before anything moves, and paid for once all is at rest.
+        this.healthBeforeSettling ??= this.tanks.map((t) => t.health);
         if (!settleTick(this.terrain, this.tanks) && !landTanks(this.terrain, this.tanks)) {
+          this.paySettling(this.healthBeforeSettling);
+          this.healthBeforeSettling = null;
           this.endTurn();
         }
         break;
@@ -283,6 +300,21 @@ export class Round {
     const explosion = detonate(x, y, weapon, this.terrain, this.tanks);
     this.earn(p.firedBy, moneyEarned(explosion.hits, p.firedBy));
     return explosion;
+  }
+
+  /**
+   * All Settling happens during someone's Turn, so the current Player earns, by the same Money
+   * rule as Explosions, for the Health Settling removed: Fall Damage and sinking to the bottom of
+   * the field alike. Harm to their own Tank pays nothing.
+   */
+  private paySettling(healthBefore: readonly number[]): void {
+    const hits: ExplosionHit[] = [];
+    this.tanks.forEach((t, i) => {
+      const before = healthBefore[i] ?? t.health;
+      if (t.health >= before) return;
+      hits.push({ playerId: t.playerId, healthRemoved: before - t.health, destroyed: !isAlive(t) });
+    });
+    this.earn(this.currentPlayerId, moneyEarned(hits, this.currentPlayerId));
   }
 
   private endTurn(): void {
