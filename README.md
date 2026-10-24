@@ -61,8 +61,17 @@ uses one up, except the Baby Missile, which every Player always has without limi
 | Missile      | 5      | $1,875  | 30 px        | 50                   |
 | Baby Nuke    | 3      | $10,000 | 45 px        | 70                   |
 | Nuke         | 1      | $12,000 | 75 px        | 100                  |
+| Dirt Clod    | 10     | $5,000  | 20 px        | none                 |
+| Dirt Ball    | 5      | $5,000  | 35 px        | none                 |
+| Ton of Dirt  | 2      | $6,750  | 70 px        | none                 |
 
 Damage falls off from the centre of the Explosion to nothing at its edge.
+
+**Dirt Weapons** (Dirt Clod, Dirt Ball, Ton of Dirt) add a ball of dirt where they land instead of
+blasting a crater, and damage no one, so they earn nothing. Use them to build cover or bury an
+opponent: the dirt packs around a Tank without filling it, and any left hanging in the air Settles.
+A buried Tank can still fire, but its shot explodes in the dirt at the barrel tip, so it has to
+blast its way out and takes some of its own damage.
 
 ## Run it locally
 

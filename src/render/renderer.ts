@@ -6,6 +6,7 @@ import type { Match } from "../sim/match";
 import { drawHud } from "./hud";
 import {
   DIRT_DEEP,
+  DIRT_EXPLOSION_COLORS,
   DIRT_SURFACE,
   EXPLOSION_COLORS,
   HUD_TEXT,
@@ -108,8 +109,8 @@ export class Renderer {
   private drawExplosion(explosion: Explosion): void {
     const ctx = this.context;
     const grow = Math.min(1, explosion.elapsed / (EXPLOSION_SECONDS / 2));
-    ctx.fillStyle =
-      EXPLOSION_COLORS[Math.floor(explosion.elapsed * 30) % EXPLOSION_COLORS.length] ?? "#ffffff";
+    const colors = explosion.kind === "dirt" ? DIRT_EXPLOSION_COLORS : EXPLOSION_COLORS;
+    ctx.fillStyle = colors[Math.floor(explosion.elapsed * 30) % colors.length] ?? "#ffffff";
     ctx.beginPath();
     ctx.arc(explosion.x, explosion.y, explosion.radius * grow, 0, Math.PI * 2);
     ctx.fill();

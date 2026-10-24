@@ -50,6 +50,17 @@ describe("Weapon catalogue", () => {
     expect(row("Nuke")).toEqual(["blast", 1, 12_000, 75, 100]);
   });
 
+  it("has the Dirt Weapons' Bundles, prices and radii, last in Shop order", () => {
+    expect(WEAPONS.slice(-3).map((w) => w.name)).toEqual(["Dirt Clod", "Dirt Ball", "Ton of Dirt"]);
+    const row = (name: WeaponName) => {
+      const w = weaponNamed(name);
+      return [w.kind, w.bundle, w.price, w.radius];
+    };
+    expect(row("Dirt Clod")).toEqual(["dirt", 10, 5000, 20]);
+    expect(row("Dirt Ball")).toEqual(["dirt", 5, 5000, 35]);
+    expect(row("Ton of Dirt")).toEqual(["dirt", 2, 6750, 70]);
+  });
+
   it("throws for a name not in the catalogue", () => {
     expect(() => weaponNamed("Wet Noodle" as WeaponName)).toThrow();
   });

@@ -6,6 +6,7 @@ import {
   MAX_ROUNDS,
   MIN_PLAYERS,
   MIN_ROUNDS,
+  WEAPONS,
 } from "../sim/constants";
 import { Match } from "../sim/match";
 import { createPlayers } from "../sim/players";
@@ -193,7 +194,11 @@ describe("Shop view", () => {
       seed: 1,
     });
   const row = (name: string, owned: number, disabled: boolean) => ({ name, owned, disabled });
-  const summary = (rows: readonly ShopRow[]) => rows.map((r) => row(r.name, r.owned, r.disabled));
+  /** The blast family's rows, so these tests don't depend on the rest of the catalogue. */
+  const blasts = (rows: readonly ShopRow[]) =>
+    rows.filter((r) => ["Missile", "Baby Nuke", "Nuke"].includes(r.name));
+  const summary = (rows: readonly ShopRow[]) =>
+    blasts(rows).map((r) => row(r.name, r.owned, r.disabled));
 
   it("heads the screen with the current shopper and their Money", () => {
     const match = shopping();
@@ -204,7 +209,8 @@ describe("Shop view", () => {
 
   it("lists every Weapon but the Baby Missile, with its Bundle, price and owned count", () => {
     const view = shopView(shopping());
-    expect(view.rows.map((r) => [r.name, r.bundle, r.price, r.owned])).toEqual([
+    expect(view.rows.map((r) => r.name)).toEqual(WEAPONS.slice(1).map((w) => w.name));
+    expect(blasts(view.rows).map((r) => [r.name, r.bundle, r.price, r.owned])).toEqual([
       ["Missile", "×5", "$1,875", 0],
       ["Baby Nuke", "×3", "$10,000", 0],
       ["Nuke", "×1", "$12,000", 0],

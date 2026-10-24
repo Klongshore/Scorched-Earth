@@ -4,7 +4,7 @@ import { formatMoney, moneyEarned } from "./money";
 import type { Explosion, ExplosionHit } from "./types";
 
 function explosion(...hits: ExplosionHit[]): Explosion {
-  return { x: 0, y: 0, radius: 20, hits, elapsed: 0 };
+  return { kind: "blast", x: 0, y: 0, radius: 20, hits, elapsed: 0 };
 }
 
 describe("moneyEarned", () => {
