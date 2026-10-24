@@ -186,11 +186,12 @@ After this milestone Items can be bought but do nothing yet.
 ### 2.3 `src/ui/screens.ts` and `src/style.css`
 
 - `ShopRow.name` becomes a `ShopName`. `shopView` builds one row per entry in `FOR_SALE`, so Items follow the Weapons.
-- The panel now has 14 rows and must still fit in 640 × 480. Tighten `.shop-row` padding and the `.shop` gap until it does, and check it with a Playwright screenshot. Don't add scrolling.
+- The panel now has 14 rows, more than fit in 640 × 480. Don't shrink the rows: let the list scroll instead. Give `.shop` a `max-height` and `overflow-y: auto`, so the header, **Done** and the hint stay in view while the rows scroll between them. When focus moves to a row (with `↑`/`↓`, after a purchase, or when the screen opens), call `scrollIntoView({ block: "nearest" })` on it, so the focused row is always visible.
 
 ### 2.4 Tests
 
 - The Shop shows 14 rows: the 11 Weapons, then Shield, Heavy Shield and Parachute, each with the right Bundle, price and owned count.
+- Moving focus to a row scrolls it into view.
 - Buying a Parachute Bundle deducts $10,000 and adds 8 Parachutes. An unaffordable Item row is disabled.
 - `computerShopping` can buy Items. Across seeds it never overspends and stops only when nothing in `FOR_SALE` is affordable.
 - **Integration:** the existing 10-Computer-Player, 3-Round Match tests still finish within their tick budget, with Money never negative.
@@ -375,7 +376,7 @@ Commit: `Raise Shields with S and show them`.
    4. Plays Turns until the Round results appear, pressing `S` once (nothing should happen with no Shield owned).
    5. Takes screenshots along the way.
 3. **Manual checklist.** Play it yourself via Playwright keypresses and screenshots. Hand yourself Items through the Match in a dev-only console hook, or play enough Rounds to afford them:
-   - [ ] The Shop panel, with all 14 rows, fits in 640 × 480.
+   - [ ] The Shop panel fits in 640 × 480, its rows scroll, and `↓` reaches the Parachute row and keeps it in view. The header and **Done** stay visible throughout.
    - [ ] `S` raises your strongest Shield, the bubble appears, HUD line 2 shows its energy, and the Inventory drops by one.
    - [ ] A hit on a shielded Tank lowers the Shield first, and the bubble fades and then disappears.
    - [ ] A Tank dropped by a deep crater loses Health for the fall once everything comes to rest.
