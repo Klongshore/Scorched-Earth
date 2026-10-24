@@ -75,12 +75,18 @@ _Avoid_: HP, hit points, life, shields
 A kind of projectile a Tank can fire, defining what its Explosion does (e.g. Baby Missile).
 _Avoid_: Ammo, missile (as a general term), shot type
 
+**Roller**:
+A Weapon whose Projectile, on touching Terrain, rolls downhill and explodes when it comes to rest or meets a Tank (Baby Roller, Roller, Heavy Roller).
+
+**Dirt Weapon**:
+A Weapon whose Explosion adds dirt instead of removing it, and can bury Tanks (Dirt Clod, Dirt Ball, Ton of Dirt).
+
 **Projectile**:
 The object a Tank fires, flying under gravity and Wind until it touches Terrain or a Tank, or leaves the side of the field.
 _Avoid_: Bullet, shell, shot
 
 **Explosion**:
-The blast where a projectile lands, removing Terrain and damaging Tanks within its radius, with damage falling off from the centre.
+What happens where a Projectile lands, as set by its Weapon: most remove Terrain and damage Tanks within a radius, with damage falling off from the centre; Dirt Weapons instead add a circle of dirt and damage no one.
 _Avoid_: Blast, impact, detonation
 
 **Wind**:
@@ -89,7 +95,7 @@ A sideways push on projectiles, fixed for the duration of a Round.
 ### Battlefield
 
 **Terrain**:
-The destructible ground of a Round, made of dirt that explosions remove.
+The destructible ground of a Round, made of dirt that Explosions remove or add.
 _Avoid_: Map, level, ground
 
 **Settling**:
@@ -99,7 +105,7 @@ _Avoid_: Collapse, gravity
 ### Economy
 
 **Money**:
-What a Player spends in the Shop, kept for the whole Match. It never decides the Match: only Round Wins do.
+What a Player spends in the Shop, kept for the whole Match. Earned by damaging and destroying other Tanks and by Round Wins; harming your own Tank earns nothing. It never decides the Match: only Round Wins do.
 _Avoid_: Cash, credits, gold, score
 
 **Shop**:
