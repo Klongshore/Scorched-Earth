@@ -18,6 +18,7 @@ import {
   TOSSER_LOST_FACTOR,
   TOSSER_MAX_FACTOR,
   TOSSER_MIN_FACTOR,
+  WEAPONS,
   WIND_MAX,
   weaponNamed,
 } from "./constants";
@@ -809,6 +810,18 @@ describe("Computer Players choose Weapons", () => {
           expect(chooseWeapon(personality, self, target, inventory, new Rng(1))).toBe(
             "Baby Missile",
           );
+        }
+      });
+
+      it("never fires a real Dirt Weapon, whatever else of the catalogue it owns", () => {
+        const dirtOnly = inventoryOf({ "Dirt Clod": 10, "Dirt Ball": 5, "Ton of Dirt": 2 });
+        const everything = new Inventory();
+        for (const w of WEAPONS) if (w.bundle !== null) everything.add(w.name, w.bundle);
+        for (const inventory of [dirtOnly, everything]) {
+          for (let x = 0; x < FIELD_WIDTH; x += 10) {
+            const name = chooseWeapon(personality, self, targetAt(x), inventory, new Rng(1));
+            expect(weaponNamed(name).kind).not.toBe("dirt");
+          }
         }
       });
 

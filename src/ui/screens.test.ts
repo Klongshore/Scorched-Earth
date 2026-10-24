@@ -194,7 +194,14 @@ describe("Shop view", () => {
       seed: 1,
     });
   const row = (name: string, owned: number, disabled: boolean) => ({ name, owned, disabled });
-  const summary = (rows: readonly ShopRow[]) => rows.map((r) => row(r.name, r.owned, r.disabled));
+  /** The rows of these Weapons, in Shop order, so tests don't depend on the catalogue's length. */
+  const pick = (rows: readonly ShopRow[], names: readonly string[]) =>
+    rows.filter((r) => names.includes(r.name));
+  const SAMPLED = ["Missile", "Baby Nuke", "Nuke", "MIRV", "Funky Bomb"];
+  const summary = (rows: readonly ShopRow[]) =>
+    pick(rows, SAMPLED).map((r) => row(r.name, r.owned, r.disabled));
+  const listing = (rows: readonly ShopRow[], names: readonly string[]) =>
+    pick(rows, names).map((r) => [r.name, r.bundle, r.price, r.owned]);
 
   it("heads the screen with the current shopper and their Money", () => {
     const match = shopping();
@@ -206,17 +213,28 @@ describe("Shop view", () => {
   it("lists every Weapon but the Baby Missile, with its Bundle, price and owned count", () => {
     const view = shopView(shopping());
     expect(view.rows.map((r) => r.name)).toEqual(WEAPONS.slice(1).map((w) => w.name));
-    expect(view.rows.slice(0, 5).map((r) => [r.name, r.bundle, r.price, r.owned])).toEqual([
+    expect(listing(view.rows, SAMPLED)).toEqual([
       ["Missile", "×5", "$1,875", 0],
       ["Baby Nuke", "×3", "$10,000", 0],
       ["Nuke", "×1", "$12,000", 0],
       ["MIRV", "×3", "$10,000", 0],
       ["Funky Bomb", "×2", "$7,000", 0],
     ]);
+    const rollers = ["Baby Roller", "Roller", "Heavy Roller"];
+    expect(listing(view.rows, rollers)).toEqual([
+      ["Baby Roller", "×10", "$5,000", 0],
+      ["Roller", "×5", "$6,000", 0],
+      ["Heavy Roller", "×2", "$6,750", 0],
+    ]);
+    expect(listing(view.rows, ["Dirt Clod", "Dirt Ball", "Ton of Dirt"])).toEqual([
+      ["Dirt Clod", "×10", "$5,000", 0],
+      ["Dirt Ball", "×5", "$5,000", 0],
+      ["Ton of Dirt", "×2", "$6,750", 0],
+    ]);
   });
 
   it("disables the rows the shopper cannot afford", () => {
-    expect(summary(shopView(shopping()).rows.slice(0, 5))).toEqual([
+    expect(summary(shopView(shopping()).rows)).toEqual([
       row("Missile", 0, false),
       row("Baby Nuke", 0, true),
       row("Nuke", 0, true),
@@ -228,7 +246,7 @@ describe("Shop view", () => {
   it("updates Money, owned counts and disabled rows after a purchase", () => {
     const match = shopping();
     match.money[1] = 12_000;
-    expect(summary(shopView(match).rows.slice(0, 5))).toEqual([
+    expect(summary(shopView(match).rows)).toEqual([
       row("Missile", 0, false),
       row("Baby Nuke", 0, false),
       row("Nuke", 0, false),
@@ -238,7 +256,7 @@ describe("Shop view", () => {
     match.buy(1, "Missile");
     const view = shopView(match);
     expect(view.money).toBe("$10,125");
-    expect(summary(view.rows.slice(0, 5))).toEqual([
+    expect(summary(view.rows)).toEqual([
       row("Missile", 5, false),
       row("Baby Nuke", 0, false),
       row("Nuke", 0, true),

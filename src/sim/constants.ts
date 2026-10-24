@@ -46,6 +46,9 @@ export const WEAPONS: readonly Weapon[] = [
   { name: "Baby Roller", kind: "roller", bundle: 10, price: 5_000, radius: 20, maxDamage: 30 },
   { name: "Roller", kind: "roller", bundle: 5, price: 6_000, radius: 30, maxDamage: 50 },
   { name: "Heavy Roller", kind: "roller", bundle: 2, price: 6_750, radius: 45, maxDamage: 70 },
+  { name: "Dirt Clod", kind: "dirt", bundle: 10, price: 5000, radius: 20 },
+  { name: "Dirt Ball", kind: "dirt", bundle: 5, price: 5000, radius: 35 },
+  { name: "Ton of Dirt", kind: "dirt", bundle: 2, price: 6750, radius: 70 },
 ];
 
 /** The Weapon with this name; throws for a name not in WEAPONS. */

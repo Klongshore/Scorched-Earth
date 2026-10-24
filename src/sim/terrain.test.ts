@@ -142,6 +142,68 @@ describe("Terrain.settlePass after edits", () => {
   });
 });
 
+describe("Terrain.fillCircle", () => {
+  const nothingKeptClear = () => false;
+
+  it("fills the air within the radius and leaves dirt outside it alone", () => {
+    const t = flat(400);
+    const before = t.version;
+    t.fillCircle(100, 400, 20, nothingKeptClear);
+    expect(t.isSolid(100, 385)).toBe(true);
+    expect(t.isSolid(115, 395)).toBe(true);
+    expect(t.isSolid(100, 378)).toBe(false);
+    expect(t.isSolid(125, 395)).toBe(false);
+    expect(t.surfaceY(100)).toBe(380);
+    expect(t.version).toBeGreaterThan(before);
+  });
+
+  it("leaves the cells it is told to keep clear as air", () => {
+    const t = flat(400);
+    const keepClear = (x: number, y: number) => x >= 95 && x <= 105 && y >= 390;
+    t.fillCircle(100, 400, 20, keepClear);
+    for (let x = 95; x <= 105; x++) {
+      for (let y = 390; y < 400; y++) expect(t.isSolid(x, y)).toBe(false);
+    }
+    expect(t.isSolid(94, 395)).toBe(true);
+    expect(t.isSolid(106, 395)).toBe(true);
+    expect(t.isSolid(100, 389)).toBe(true);
+  });
+
+  it("marks the filled columns so dirt left hanging Settles", () => {
+    const t = flat(400);
+    expect(t.settlePass()).toBe(false);
+    t.fillCircle(300, 300, 10, nothingKeptClear);
+    let passes = 0;
+    while (t.settlePass()) passes++;
+    expect(passes).toBeGreaterThan(0);
+    for (let x = 290; x <= 310; x++) {
+      for (let y = 0; y < FIELD_HEIGHT - 1; y++) {
+        if (t.isSolid(x, y)) expect(t.isSolid(x, y + 1)).toBe(true);
+      }
+    }
+  });
+
+  it("does not change version when there is no air to fill", () => {
+    const t = flat(400);
+    const before = t.version;
+    t.fillCircle(100, 450, 10, nothingKeptClear);
+    expect(t.version).toBe(before);
+  });
+});
+
+describe("Terrain.settlePass with blocked cells", () => {
+  it("rests dirt on a blocked cell instead of falling into it", () => {
+    const t = new Terrain(4, 20);
+    t.set(1, 5, true);
+    const blockers = [{ x0: 1, x1: 1, y0: 12, y1: 14 }];
+    while (t.settlePass(blockers)) {
+      // keep settling
+    }
+    expect(t.isSolid(1, 11)).toBe(true);
+    expect(t.isSolid(1, 12)).toBe(false);
+  });
+});
+
 describe("generateHills", () => {
   it("is deterministic per seed and differs between seeds", () => {
     const a = generateHills(new Rng(7), FIELD_WIDTH, FIELD_HEIGHT);

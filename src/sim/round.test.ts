@@ -14,15 +14,18 @@ import {
   POWER_PER_HEALTH,
   ROLLER_MAX_SECONDS,
   ROLLER_SPEED,
+  TANK_HALF_WIDTH,
   TANK_HEIGHT,
   TICK_SECONDS,
+  WEAPONS,
   WIND_MAX,
   weaponNamed,
 } from "./constants";
 import { createPlayers } from "./players";
 import { Rng } from "./rng";
 import { Round, emptyLoadout, type RoundAction } from "./round";
-import { isSupported } from "./tank";
+import { barrelTip, centre, isSupported, occupiesCell } from "./tank";
+import type { Terrain } from "./terrain";
 import type { Explosion, PlayerSetup, Tank, WeaponName } from "./types";
 
 const HUMAN: PlayerSetup = { kind: "human" };
@@ -981,5 +984,118 @@ describe("Round Rollers", () => {
     const landing = round.memoryOf(firer.playerId)?.lastLanding;
     expect(landing?.kind).toBe("hit");
     expect(Math.abs((landing?.kind === "hit" ? landing.x : 0) - touchdown)).toBeLessThanOrEqual(1);
+  });
+});
+
+describe("Round with Dirt Weapons", () => {
+  /** Give the current Player one of a Weapon and choose it. */
+  function choose(round: Round, name: WeaponName): void {
+    round.inventoryOf(round.currentPlayerId).add(name, 1);
+    for (let i = 0; i < WEAPONS.length && round.currentWeapon().name !== name; i++) {
+      round.act({ kind: "cycleWeapon", delta: 1 });
+    }
+    expect(round.currentWeapon().name).toBe(name);
+  }
+
+  const turnOver = (r: Round): boolean => r.phase.kind === "aiming" || r.phase.kind === "over";
+
+  /** Every cell a Tank covers is air, and dirt touches it on its left, right and top. */
+  function expectEncased(terrain: Terrain, t: Tank): void {
+    for (let x = t.x - TANK_HALF_WIDTH; x <= t.x + TANK_HALF_WIDTH; x++) {
+      for (let y = t.y - TANK_HEIGHT; y < t.y; y++) {
+        expect(occupiesCell(t, x, y)).toBe(true);
+        expect(terrain.isSolid(x, y), `dirt inside the Tank at ${x},${y}`).toBe(false);
+      }
+      expect(terrain.isSolid(x, t.y - TANK_HEIGHT - 1), `no dirt above column ${x}`).toBe(true);
+    }
+    for (let y = t.y - TANK_HEIGHT; y < t.y; y++) {
+      expect(terrain.isSolid(t.x - TANK_HALF_WIDTH - 1, y)).toBe(true);
+      expect(terrain.isSolid(t.x + TANK_HALF_WIDTH + 1, y)).toBe(true);
+    }
+  }
+
+  /** Solid cells with air below them that no living Tank fills. */
+  function hangingCells(round: Round): number {
+    let hanging = 0;
+    for (let x = 0; x < FIELD_WIDTH; x++) {
+      for (let y = 0; y < FIELD_HEIGHT - 1; y++) {
+        if (!round.terrain.isSolid(x, y) || round.terrain.isSolid(x, y + 1)) continue;
+        if (round.tanks.some((t) => occupiesCell(t, x, y + 1))) continue;
+        hanging++;
+      }
+    }
+    return hanging;
+  }
+
+  it("leaves a mound and no crater with a Dirt Ball on flat ground, and no one loses Health", () => {
+    const { round, firer, other } = scenario(100, 500);
+    choose(round, "Dirt Ball");
+    const before = round.terrain.cells.slice();
+    firer.angle = 60;
+    firer.power = 300;
+    round.act({ kind: "fire" });
+    runUntil(round, (r) => r.phase.kind === "resolving" && r.phase.explosions.length > 0);
+    if (round.phase.kind !== "resolving") return expect.fail("expected resolving");
+    expect(round.phase.explosions[0]?.kind).toBe("dirt");
+    runUntil(round, turnOver);
+
+    let added = 0;
+    let removed = 0;
+    round.terrain.cells.forEach((cell, i) => {
+      if (cell === 1 && before[i] === 0) added++;
+      if (cell === 0 && before[i] === 1) removed++;
+    });
+    expect(added).toBeGreaterThan(0);
+    expect(removed).toBe(0);
+    expect(firer.health).toBe(MAX_HEALTH);
+    expect(other.health).toBe(MAX_HEALTH);
+    expect(round.earnings).toEqual([0, 0]);
+  });
+
+  it("buries a Tank under a Ton of Dirt: no dirt inside it, dirt all around it", () => {
+    const { round, firer } = scenario(200, 500);
+    choose(round, "Ton of Dirt");
+    fireStraightUp(round, firer);
+    runUntil(round, turnOver);
+    expect(firer.health).toBe(MAX_HEALTH);
+    expect(firer.y).toBe(GROUND);
+    expectEncased(round.terrain, firer);
+  });
+
+  it("lets a buried Tank fire: a Baby Missile explodes at the barrel tip and carves its way out", () => {
+    const { round, firer } = scenario(200, 500);
+    const c = centre(firer);
+    round.terrain.fillCircle(c.x, c.y, weaponNamed("Dirt Ball").radius, (x, y) =>
+      occupiesCell(firer, x, y),
+    );
+    expectEncased(round.terrain, firer);
+    const tip = barrelTip({ ...firer, angle: 90 });
+    fireStraightUp(round, firer);
+    round.tick(TICK_SECONDS);
+    if (round.phase.kind !== "resolving") return expect.fail("expected resolving");
+    expect(round.phase.projectiles).toHaveLength(0);
+    const [explosion] = round.phase.explosions;
+    if (!explosion) return expect.fail("expected an Explosion");
+    expect(explosion.kind).toBe("blast");
+    expect(Math.hypot(explosion.x - tip.x, explosion.y - tip.y)).toBeLessThan(2);
+    expect(firer.health).toBeLessThan(MAX_HEALTH);
+    runUntil(round, turnOver);
+    for (let y = firer.y - TANK_HEIGHT - 1; y >= 0; y--) {
+      expect(round.terrain.isSolid(firer.x, y), `dirt above the barrel at row ${y}`).toBe(false);
+    }
+  });
+
+  it("Settles dirt added in mid-air before the Turn ends", () => {
+    const { round, firer } = scenario(200, 500);
+    // Stand the firer on a narrow column of dirt 100 px above the ground.
+    round.terrain.flatten(190, 210, GROUND - 100);
+    firer.y = GROUND - 100;
+    choose(round, "Dirt Ball");
+    fireStraightUp(round, firer);
+    runUntil(round, (r) => r.phase.kind === "resolving" && r.phase.explosions.length > 0);
+    expect(hangingCells(round)).toBeGreaterThan(0);
+    runUntil(round, turnOver);
+    expect(hangingCells(round)).toBe(0);
+    expect(round.terrain.surfaceY(225)).toBeLessThan(GROUND);
   });
 });

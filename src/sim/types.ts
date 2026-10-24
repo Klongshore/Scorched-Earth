@@ -69,6 +69,7 @@ export interface ExplosionHit {
 }
 
 export interface Explosion {
+  readonly kind: "blast" | "dirt"; // dirt adds Terrain instead of removing it
   readonly x: number;
   readonly y: number;
   readonly radius: number;

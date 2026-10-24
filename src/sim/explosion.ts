@@ -1,4 +1,5 @@
-import { centre, clampAim, isAlive } from "./tank";
+import { TANK_HALF_WIDTH } from "./constants";
+import { centre, clampAim, isAlive, occupiesCell } from "./tank";
 import type { Terrain } from "./terrain";
 import type { Explosion, ExplosionHit, Tank, Weapon } from "./types";
 
@@ -19,6 +20,7 @@ export function damageAt(weapon: Weapon, distance: number): number {
 /**
  * Apply an Explosion: damage every living Tank (including the firer), carve Terrain, clamp aim.
  * The Explosion reports the Health it actually removed from each Tank and which it destroyed.
+ * A Dirt Weapon instead fills its circle with dirt around every living Tank and damages no one.
  */
 export function detonate(
   x: number,
@@ -27,6 +29,10 @@ export function detonate(
   terrain: Terrain,
   tanks: Tank[],
 ): Explosion {
+  if (weapon.kind === "dirt") {
+    terrain.fillCircle(x, y, weapon.radius, (cx, cy) => tanks.some((t) => occupiesCell(t, cx, cy)));
+    return { kind: "dirt", x, y, radius: weapon.radius, hits: [], elapsed: 0 };
+  }
   const hits: ExplosionHit[] = [];
   for (const t of tanks) {
     if (!isAlive(t)) continue;
@@ -39,7 +45,9 @@ export function detonate(
     if (healthRemoved > 0) {
       hits.push({ playerId: t.playerId, healthRemoved, destroyed: !isAlive(t) });
     }
+    // Dirt resting on a destroyed Tank falls through it.
+    if (!isAlive(t)) terrain.markUnsettled(t.x - TANK_HALF_WIDTH, t.x + TANK_HALF_WIDTH);
   }
   terrain.carveCircle(x, y, weapon.radius);
-  return { x, y, radius: weapon.radius, hits, elapsed: 0 };
+  return { kind: "blast", x, y, radius: weapon.radius, hits, elapsed: 0 };
 }
