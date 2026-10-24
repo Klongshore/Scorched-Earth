@@ -456,6 +456,7 @@ describe("Match integration", () => {
 
   it("plays seeded Moron-only Rounds holding only the Baby Missile exactly as before Shooter existed", () => {
     // Pinned before Shooter was added: Morons must draw from the Rng exactly as they always have.
+    // Re-pinned when Fall Damage was added, since it changes how Rounds play out.
     // Rounds are played directly, sharing one Rng as a Match does, because a Match now lets its
     // Computer Players shop, which draws from the Rng too.
     const players = createPlayers([moron, moron, moron, moron]);
@@ -471,13 +472,13 @@ describe("Match integration", () => {
       }
       results.push(round.phase.result);
     }
-    expect(ticks).toBe(75560);
-    expect(results).toEqual([win(2), win(0), win(2)]);
+    expect(ticks).toBe(72269);
+    expect(results).toEqual([win(2), win(0), win(3)]);
     expect(round?.tanks).toEqual([
-      { ...newTank(0, 256, 480), angle: 89, power: 70, health: 0 },
-      { ...newTank(1, 80, 362), angle: 93, power: 0, health: 0 },
-      { ...newTank(2, 531, 429), angle: 153, power: 123, health: 49 },
-      { ...newTank(3, 425, 480), angle: 5, power: 352, health: 0 },
+      { ...newTank(0, 231, 421), angle: 161, power: 0, health: 0 },
+      { ...newTank(1, 437, 395), angle: 47, power: 0, health: 0 },
+      { ...newTank(2, 66, 418), angle: 23, power: 0, health: 0 },
+      { ...newTank(3, 595, 343), angle: 84, power: 140, health: 27 },
     ]);
   });
 });

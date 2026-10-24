@@ -34,6 +34,10 @@ export const BARREL_LENGTH = 12;
 export const PAD_HALF_WIDTH = 10; // flattened ground each side of a Tank
 export const TANK_FALL_PIXELS_PER_TICK = 2;
 
+// Fall Damage
+export const FALL_SAFE_PIXELS = 10; // a fall up to this far does no damage
+export const FALL_DAMAGE_PER_PIXEL = 0.5; // Health per px fallen beyond FALL_SAFE_PIXELS, rounded down
+
 // Weapons
 /** Every Weapon, in Shop order. */
 export const WEAPONS: readonly Weapon[] = [
