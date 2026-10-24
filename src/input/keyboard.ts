@@ -30,8 +30,8 @@ function isFormControl(target: EventTarget | null): boolean {
 
 /**
  * Translate keydown events into Round actions. Each event, including OS auto-repeat,
- * is one step, except Space and Enter, which act once per press (so holding Enter cannot
- * skip through the overlay screens). Arrow keys, Tab and Space are left alone while a form
+ * is one step, except Space, S and Enter, which act once per press (so holding Enter cannot
+ * skip through the overlay screens). Arrow keys, Tab, S and Space are left alone while a form
  * control has focus, so the overlay screens stay keyboard-usable; Enter always confirms.
  * Returns a detach function.
  */
@@ -50,6 +50,12 @@ export function attachKeyboard(
     if (event.code === "Space" || event.key === " ") {
       event.preventDefault();
       if (!event.repeat) onAction({ kind: "fire" });
+      return;
+    }
+    if (event.key === "s" || event.key === "S") {
+      // Once per press, so holding S cannot use up a second Shield.
+      event.preventDefault();
+      if (!event.repeat) onAction({ kind: "raiseShield" });
       return;
     }
     const action = aimActionFor(event);

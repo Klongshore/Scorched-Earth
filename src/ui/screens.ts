@@ -70,7 +70,8 @@ export function formatMoney(amount: number): string {
   return `$${String(Math.round(amount)).replace(/\B(?=(\d{3})+(?!\d))/g, ",")}`;
 }
 
-const CONTROLS_REMINDER = "←/→ Angle   ↑/↓ Power (Shift ×10)   Tab Weapon   Space Fire";
+export const CONTROLS_REMINDER =
+  "←/→ Angle   ↑/↓ Power (Shift ×10)\nTab Weapon   S Shield   Space Fire";
 
 /** Turn whatever is in the Rounds box into a valid Round count (MIN_ROUNDS..MAX_ROUNDS). */
 export function clampRounds(value: string | number): number {

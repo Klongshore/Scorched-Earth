@@ -4,6 +4,7 @@ import {
   FIELD_HEIGHT,
   FIELD_WIDTH,
   MONEY_PER_DAMAGE,
+  TICK_SECONDS,
   weaponNamed,
 } from "./constants";
 import { detonate } from "./explosion";
@@ -210,5 +211,82 @@ describe("Shields at Round start", () => {
     expect(withShields.turnOrder).toEqual(bare.turnOrder);
     expect(withShields.wind).toBe(bare.wind);
     expect(rng.next()).toBe(bareRng.next());
+  });
+});
+
+describe("Raising a Shield mid-Round", () => {
+  it("lets a Human raise the Heavy Shield first, replacing a weaker or damaged Shield", () => {
+    const round = new Round(1, createPlayers([HUMAN, HUMAN]), new Rng(1));
+    const tank = round.currentTank();
+    const inventory = round.inventoryOf(round.currentPlayerId);
+    round.act({ kind: "raiseShield" });
+    expect(tank.shield).toBeNull(); // none owned
+
+    inventory.add("Shield", 2);
+    inventory.add("Heavy Shield", 1);
+    round.act({ kind: "raiseShield" });
+    expect(tank.shield).toEqual({ name: "Heavy Shield", strength: 100 });
+    expect(inventory.count("Heavy Shield")).toBe(0);
+
+    tank.shield = { name: "Heavy Shield", strength: 60 };
+    round.act({ kind: "raiseShield" });
+    expect(tank.shield).toEqual({ name: "Heavy Shield", strength: 60 }); // no gain
+    expect(inventory.count("Shield")).toBe(2);
+
+    tank.shield = { name: "Heavy Shield", strength: 30 };
+    round.act({ kind: "raiseShield" });
+    expect(tank.shield).toEqual({ name: "Shield", strength: 50 });
+    expect(inventory.count("Shield")).toBe(1);
+  });
+
+  it("keeps the Human aiming on the same Turn, and firing works as usual", () => {
+    const round = new Round(1, createPlayers([HUMAN, HUMAN]), new Rng(1));
+    const playerId = round.currentPlayerId;
+    round.inventoryOf(playerId).add("Shield", 1);
+    round.act({ kind: "raiseShield" });
+    expect(round.currentTank().shield?.strength).toBe(50);
+    expect(round.phase).toEqual({ kind: "aiming", thinkTicks: null });
+    expect(round.currentPlayerId).toBe(playerId);
+    round.act({ kind: "fire" });
+    expect(round.phase.kind).toBe("resolving");
+  });
+
+  /** Two Morons owning Shields: the first fires straight up onto itself, then the other's Turn begins. */
+  function nextMoronTurn(otherShield: Tank["shield"]) {
+    const players = createPlayers([MORON, MORON]);
+    const loadout = emptyLoadout(players);
+    for (const inventory of loadout.inventories) {
+      inventory.add("Shield", 2);
+      inventory.add("Heavy Shield", 2);
+    }
+    const round = new Round(1, players, new Rng(5), loadout);
+    round.wind = 0;
+    const firer = round.currentTank();
+    const other = round.tanks.find((t) => t !== firer) as Tank;
+    firer.angle = 90;
+    firer.power = 10;
+    other.shield = otherShield;
+    const inventory = round.inventoryOf(other.playerId);
+    const before = { shield: inventory.count("Shield"), heavy: inventory.count("Heavy Shield") };
+    for (let i = 0; i < 20000 && round.currentPlayerId !== other.playerId; i++) {
+      round.tick(TICK_SECONDS);
+    }
+    expect(round.currentPlayerId).toBe(other.playerId);
+    expect(round.phase.kind).toBe("aiming");
+    return { other, inventory, before };
+  }
+
+  it("has a Computer Player whose Shield is gone raise a fresh one at the start of its Turn", () => {
+    const { other, inventory, before } = nextMoronTurn(null);
+    expect(other.shield).toEqual({ name: "Heavy Shield", strength: 100 });
+    expect(inventory.count("Heavy Shield")).toBe(before.heavy - 1);
+    expect(inventory.count("Shield")).toBe(before.shield);
+  });
+
+  it("never has a Computer Player replace a damaged Shield still up, even owning a stronger one", () => {
+    const { other, inventory, before } = nextMoronTurn({ name: "Shield", strength: 5 });
+    expect(other.shield).toEqual({ name: "Shield", strength: 5 });
+    expect(inventory.count("Heavy Shield")).toBe(before.heavy);
+    expect(inventory.count("Shield")).toBe(before.shield);
   });
 });
