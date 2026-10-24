@@ -7,6 +7,7 @@ import {
   TICK_SECONDS,
 } from "./constants";
 import { launch, stepProjectile, type ProjectileOutcome } from "./projectile";
+import { newTank } from "./tank";
 import { Terrain } from "./terrain";
 import type { Projectile, Tank } from "./types";
 
@@ -21,7 +22,7 @@ function flat(): Terrain {
 }
 
 function tank(overrides: Partial<Tank> = {}): Tank {
-  return { playerId: 0, x: 320, y: GROUND, angle: 90, power: 500, health: 100, ...overrides };
+  return { ...newTank(0, 320, GROUND), ...overrides };
 }
 
 function flyUntilDone(

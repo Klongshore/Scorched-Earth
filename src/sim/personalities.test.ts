@@ -39,7 +39,7 @@ import { createPlayers } from "./players";
 import { launch, stepProjectile } from "./projectile";
 import { Rng } from "./rng";
 import { Round } from "./round";
-import { centre, powerCap } from "./tank";
+import { centre, newTank, powerCap } from "./tank";
 import { Terrain } from "./terrain";
 import type { PlayerSetup, Tank, Weapon, WeaponName } from "./types";
 
@@ -47,7 +47,7 @@ const HUMAN: PlayerSetup = { kind: "human" };
 const MORON: PlayerSetup = { kind: "computer", personality: "moron" };
 
 function tankWithHealth(health: number): Tank {
-  return { playerId: 0, x: 100, y: 400, angle: 90, power: 500, health };
+  return { ...newTank(0, 100, 400), health };
 }
 
 describe("Moron Personality", () => {
@@ -137,7 +137,7 @@ describe("Moron Rng use", () => {
 const GROUND = 400;
 
 function tankAt(playerId: number, x: number, health = MAX_HEALTH, y = GROUND): Tank {
-  return { playerId, x, y, angle: 90, power: 500, health };
+  return { ...newTank(playerId, x, y), health };
 }
 
 /** Five Tanks spread across the field, indexed by playerId. */
@@ -743,7 +743,7 @@ describe("Tosser Personality", () => {
 });
 
 describe("Computer Players choose Weapons", () => {
-  const self: Tank = { playerId: 0, x: 300, y: 400, angle: 90, power: 500, health: MAX_HEALTH };
+  const self: Tank = newTank(0, 300, 400);
   const targetAt = (x: number): Tank => ({ ...self, playerId: 1, x });
 
   function inventoryOf(bundles: Partial<Record<WeaponName, number>>): Inventory {

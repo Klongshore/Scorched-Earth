@@ -1,14 +1,22 @@
 import {
   BARREL_LENGTH,
   MAX_ANGLE,
+  MAX_HEALTH,
   MIN_ANGLE,
   MIN_POWER,
   POWER_PER_HEALTH,
   TANK_HALF_WIDTH,
   TANK_HEIGHT,
+  START_ANGLE,
+  START_POWER,
 } from "./constants";
 import type { CellRect, Terrain } from "./terrain";
 import type { Tank } from "./types";
+
+/** A Tank at full Health with the starting aim. The one source of a new Tank's defaults. */
+export function newTank(playerId: number, x: number, y: number): Tank {
+  return { playerId, x, y, angle: START_ANGLE, power: START_POWER, health: MAX_HEALTH };
+}
 
 export function isAlive(t: Tank): boolean {
   return t.health > 0;

@@ -9,7 +9,7 @@ import {
   TICK_SECONDS,
 } from "./constants";
 import { launch, stepProjectile } from "./projectile";
-import { centre } from "./tank";
+import { centre, newTank } from "./tank";
 import { Terrain } from "./terrain";
 import type { Tank } from "./types";
 
@@ -24,7 +24,7 @@ function flat(): Terrain {
 }
 
 function tank(playerId: number, x: number, y = GROUND): Tank {
-  return { playerId, x, y, angle: 90, power: 500, health: 100 };
+  return newTank(playerId, x, y);
 }
 
 /** Fire `self` at `angle` and `power` through the real Projectile step on flat Terrain, Wind 0. */

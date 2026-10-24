@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { FIELD_HEIGHT, FIELD_WIDTH, TANK_HALF_WIDTH, TANK_HEIGHT } from "./constants";
 import { settleTick } from "./settling";
-import { isSupported } from "./tank";
+import { isSupported, newTank } from "./tank";
 import { Terrain } from "./terrain";
 import type { Tank } from "./types";
 
@@ -12,7 +12,7 @@ function flat(y = GROUND): Terrain {
 }
 
 function tank(overrides: Partial<Tank> = {}): Tank {
-  return { playerId: 0, x: 320, y: GROUND, angle: 90, power: 500, health: 100, ...overrides };
+  return { ...newTank(0, 320, GROUND), ...overrides };
 }
 
 /** Run settleTick until nothing moves; returns the number of ticks that moved something. */

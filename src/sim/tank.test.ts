@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { TANK_HALF_WIDTH, TANK_HEIGHT } from "./constants";
 import { Terrain } from "./terrain";
-import { barrelTip, clampAim, hitTest, isSupported, powerCap } from "./tank";
+import { barrelTip, clampAim, hitTest, isSupported, newTank, powerCap } from "./tank";
 import type { Tank } from "./types";
 
 function tank(overrides: Partial<Tank> = {}): Tank {
-  return { playerId: 0, x: 100, y: 300, angle: 90, power: 500, health: 100, ...overrides };
+  return { ...newTank(0, 100, 300), ...overrides };
 }
 
 describe("tank", () => {

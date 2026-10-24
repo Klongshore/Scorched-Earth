@@ -4,6 +4,7 @@ import { Match, type MatchSetup } from "./match";
 import { createPlayers } from "./players";
 import { Rng } from "./rng";
 import { Round, type RoundResult } from "./round";
+import { newTank } from "./tank";
 import type { PlayerSetup } from "./types";
 
 const human: PlayerSetup = { kind: "human" };
@@ -438,10 +439,10 @@ describe("Match integration", () => {
     expect(ticks).toBe(75560);
     expect(results).toEqual([win(2), win(0), win(2)]);
     expect(round?.tanks).toEqual([
-      { playerId: 0, x: 256, y: 480, angle: 89, power: 70, health: 0 },
-      { playerId: 1, x: 80, y: 362, angle: 93, power: 0, health: 0 },
-      { playerId: 2, x: 531, y: 429, angle: 153, power: 123, health: 49 },
-      { playerId: 3, x: 425, y: 480, angle: 5, power: 352, health: 0 },
+      { ...newTank(0, 256, 480), angle: 89, power: 70, health: 0 },
+      { ...newTank(1, 80, 362), angle: 93, power: 0, health: 0 },
+      { ...newTank(2, 531, 429), angle: 153, power: 123, health: 49 },
+      { ...newTank(3, 425, 480), angle: 5, power: 352, health: 0 },
     ]);
   });
 });

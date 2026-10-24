@@ -278,7 +278,7 @@ export class Round {
   /** Detonate a Weapon (the Projectile's own by default) at (x, y), crediting its firer's earnings. */
   private explode(p: Projectile, x: number, y: number, weapon: Weapon = p.weapon): Explosion {
     const explosion = detonate(x, y, weapon, this.terrain, this.tanks);
-    this.earn(p.firedBy, moneyEarned(explosion, p.firedBy));
+    this.earn(p.firedBy, moneyEarned(explosion.hits, p.firedBy));
     return explosion;
   }
 

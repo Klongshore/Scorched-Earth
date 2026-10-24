@@ -9,7 +9,7 @@ import {
 } from "./constants";
 import { settleTick } from "./settling";
 import { damageAt, detonate } from "./explosion";
-import { centre, occupiesCell } from "./tank";
+import { centre, newTank, occupiesCell } from "./tank";
 import { Terrain } from "./terrain";
 import type { Tank } from "./types";
 
@@ -24,7 +24,7 @@ function flat(): Terrain {
 }
 
 function tank(overrides: Partial<Tank> = {}): Tank {
-  return { playerId: 0, x: 320, y: GROUND, angle: 90, power: 500, health: 100, ...overrides };
+  return { ...newTank(0, 320, GROUND), ...overrides };
 }
 
 describe("damageAt", () => {
