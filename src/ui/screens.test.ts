@@ -208,6 +208,8 @@ describe("Shop view", () => {
       ["Missile", "×5", "$1,875", 0],
       ["Baby Nuke", "×3", "$10,000", 0],
       ["Nuke", "×1", "$12,000", 0],
+      ["MIRV", "×3", "$10,000", 0],
+      ["Funky Bomb", "×2", "$7,000", 0],
     ]);
   });
 
@@ -216,6 +218,8 @@ describe("Shop view", () => {
       row("Missile", 0, false),
       row("Baby Nuke", 0, true),
       row("Nuke", 0, true),
+      row("MIRV", 0, true),
+      row("Funky Bomb", 0, true),
     ]);
   });
 
@@ -226,6 +230,8 @@ describe("Shop view", () => {
       row("Missile", 0, false),
       row("Baby Nuke", 0, false),
       row("Nuke", 0, false),
+      row("MIRV", 0, false),
+      row("Funky Bomb", 0, false),
     ]);
     match.buy(1, "Missile");
     const view = shopView(match);
@@ -234,6 +240,8 @@ describe("Shop view", () => {
       row("Missile", 5, false),
       row("Baby Nuke", 0, false),
       row("Nuke", 0, true),
+      row("MIRV", 0, false),
+      row("Funky Bomb", 0, false),
     ]);
   });
 

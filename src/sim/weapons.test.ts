@@ -50,6 +50,16 @@ describe("Weapon catalogue", () => {
     expect(row("Nuke")).toEqual(["blast", 1, 12_000, 75, 100]);
   });
 
+  it("has the splitters' Bundles, prices, radii and damage, after the blast family", () => {
+    expect(WEAPONS.slice(4, 6).map((w) => w.name)).toEqual(["MIRV", "Funky Bomb"]);
+    const row = (name: WeaponName) => {
+      const w = weaponNamed(name);
+      return [w.kind, w.bundle, w.price, w.radius, w.kind === "dirt" ? null : w.maxDamage];
+    };
+    expect(row("MIRV")).toEqual(["mirv", 3, 10_000, 30, 50]);
+    expect(row("Funky Bomb")).toEqual(["funky", 2, 7_000, 30, 50]);
+  });
+
   it("throws for a name not in the catalogue", () => {
     expect(() => weaponNamed("Wet Noodle" as WeaponName)).toThrow();
   });
