@@ -6,6 +6,7 @@ import {
   MAX_ROUNDS,
   MIN_PLAYERS,
   MIN_ROUNDS,
+  WEAPONS,
 } from "../sim/constants";
 import { Match } from "../sim/match";
 import { createPlayers } from "../sim/players";
@@ -204,7 +205,8 @@ describe("Shop view", () => {
 
   it("lists every Weapon but the Baby Missile, with its Bundle, price and owned count", () => {
     const view = shopView(shopping());
-    expect(view.rows.map((r) => [r.name, r.bundle, r.price, r.owned])).toEqual([
+    expect(view.rows.map((r) => r.name)).toEqual(WEAPONS.slice(1).map((w) => w.name));
+    expect(view.rows.slice(0, 5).map((r) => [r.name, r.bundle, r.price, r.owned])).toEqual([
       ["Missile", "×5", "$1,875", 0],
       ["Baby Nuke", "×3", "$10,000", 0],
       ["Nuke", "×1", "$12,000", 0],
@@ -214,7 +216,7 @@ describe("Shop view", () => {
   });
 
   it("disables the rows the shopper cannot afford", () => {
-    expect(summary(shopView(shopping()).rows)).toEqual([
+    expect(summary(shopView(shopping()).rows.slice(0, 5))).toEqual([
       row("Missile", 0, false),
       row("Baby Nuke", 0, true),
       row("Nuke", 0, true),
@@ -226,7 +228,7 @@ describe("Shop view", () => {
   it("updates Money, owned counts and disabled rows after a purchase", () => {
     const match = shopping();
     match.money[1] = 12_000;
-    expect(summary(shopView(match).rows)).toEqual([
+    expect(summary(shopView(match).rows.slice(0, 5))).toEqual([
       row("Missile", 0, false),
       row("Baby Nuke", 0, false),
       row("Nuke", 0, false),
@@ -236,7 +238,7 @@ describe("Shop view", () => {
     match.buy(1, "Missile");
     const view = shopView(match);
     expect(view.money).toBe("$10,125");
-    expect(summary(view.rows)).toEqual([
+    expect(summary(view.rows.slice(0, 5))).toEqual([
       row("Missile", 5, false),
       row("Baby Nuke", 0, false),
       row("Nuke", 0, true),

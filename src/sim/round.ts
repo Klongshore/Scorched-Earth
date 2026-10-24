@@ -28,9 +28,10 @@ import {
 } from "./personalities";
 import { placeTanks } from "./placement";
 import { launch, stepProjectile } from "./projectile";
+import { startRolling, stepRolling } from "./roller";
 import type { Rng } from "./rng";
 import { settleTick } from "./settling";
-import { clampAim, isAlive } from "./tank";
+import { clampAim, hitTest, isAlive } from "./tank";
 import type { Terrain } from "./terrain";
 import { generateHills } from "./terrainGen";
 import type { Explosion, Player, Projectile, Tank, Weapon, WeaponName } from "./types";
@@ -220,6 +221,13 @@ export class Round {
 
     const flying = projectiles.splice(0);
     for (const p of flying) {
+      if (p.rolling) {
+        // A rolling Roller already had its landing recorded where it first touched down.
+        const roll = stepRolling(p, this.terrain, this.tanks, dt);
+        if (roll.kind === "rolling") projectiles.push(p);
+        else if (roll.kind === "explode") explosions.push(this.explode(p, roll.x, roll.y));
+        continue;
+      }
       const outcome = stepProjectile(p, this.wind, this.terrain, this.tanks, dt);
       if (outcome.kind === "flying") {
         if (p.weapon.kind === "mirv" && p.vy >= 0) projectiles.push(...this.splitMirv(p));
@@ -228,13 +236,17 @@ export class Round {
         this.landed(p, { kind: "lost", side: outcome.side });
       } else {
         this.landed(p, { kind: "hit", x: outcome.x });
-        // A MIRV that lands before it splits explodes as one of its pieces.
-        const weapon = p.weapon.kind === "mirv" ? weaponNamed(MIRV_PIECE_WEAPON) : p.weapon;
-        const explosion = detonate(outcome.x, outcome.y, weapon, this.terrain, this.tanks);
-        this.earn(p.firedBy, moneyEarned(explosion, p.firedBy));
-        explosions.push(explosion);
-        if (weapon.kind === "funky")
-          projectiles.push(...this.funkyBomblets(p, outcome.x, outcome.y));
+        const onTank = this.tanks.some((t) => hitTest(t, outcome.x, outcome.y));
+        if (p.weapon.kind === "roller" && !onTank) {
+          startRolling(p, outcome.x, outcome.y, this.terrain);
+          projectiles.push(p);
+        } else {
+          // A MIRV that lands before it splits explodes as one of its pieces.
+          const weapon = p.weapon.kind === "mirv" ? weaponNamed(MIRV_PIECE_WEAPON) : p.weapon;
+          explosions.push(this.explode(p, outcome.x, outcome.y, weapon));
+          if (weapon.kind === "funky")
+            projectiles.push(...this.funkyBomblets(p, outcome.x, outcome.y));
+        }
       }
     }
   }
@@ -279,6 +291,13 @@ export class Round {
     if (p !== this.barrelShot) return;
     this.barrelShot = null;
     this.recordLanding(p.firedBy, landing);
+  }
+
+  /** Detonate a Weapon (the Projectile's own by default) at (x, y), crediting its firer's earnings. */
+  private explode(p: Projectile, x: number, y: number, weapon: Weapon = p.weapon): Explosion {
+    const explosion = detonate(x, y, weapon, this.terrain, this.tanks);
+    this.earn(p.firedBy, moneyEarned(explosion, p.firedBy));
+    return explosion;
   }
 
   private endTurn(): void {

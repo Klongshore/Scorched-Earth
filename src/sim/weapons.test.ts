@@ -60,6 +60,21 @@ describe("Weapon catalogue", () => {
     expect(row("Funky Bomb")).toEqual(["funky", 2, 7_000, 30, 50]);
   });
 
+  it("has the Rollers' Bundles, prices, radii and damage, after the splitters", () => {
+    expect(WEAPONS.slice(6, 9).map((w) => w.name)).toEqual([
+      "Baby Roller",
+      "Roller",
+      "Heavy Roller",
+    ]);
+    const row = (name: WeaponName) => {
+      const w = weaponNamed(name);
+      return [w.kind, w.bundle, w.price, w.radius, w.kind === "dirt" ? null : w.maxDamage];
+    };
+    expect(row("Baby Roller")).toEqual(["roller", 10, 5000, 20, 30]);
+    expect(row("Roller")).toEqual(["roller", 5, 6000, 30, 50]);
+    expect(row("Heavy Roller")).toEqual(["roller", 2, 6750, 45, 70]);
+  });
+
   it("throws for a name not in the catalogue", () => {
     expect(() => weaponNamed("Wet Noodle" as WeaponName)).toThrow();
   });
