@@ -1,3 +1,11 @@
+/** A block of cells, inclusive at both ends. */
+export interface CellRect {
+  readonly x0: number;
+  readonly x1: number;
+  readonly y0: number;
+  readonly y1: number;
+}
+
 export class Terrain {
   readonly width: number;
   readonly height: number;
@@ -39,7 +47,8 @@ export class Terrain {
     this.markUnsettled(x, x);
   }
 
-  private markUnsettled(x0: number, x1: number): void {
+  /** Let Settling scan columns [x0, x1] again, e.g. after something they rest on has moved. */
+  markUnsettled(x0: number, x1: number): void {
     this.unsettledFrom = Math.min(this.unsettledFrom, x0);
     this.unsettledTo = Math.max(this.unsettledTo, x1);
   }
@@ -88,6 +97,40 @@ export class Terrain {
     }
   }
 
+  /**
+   * Fill every air cell within radius of (cx, cy) with dirt (cell centre inside the circle), except
+   * the cells keepClear names, so a buried Tank is encased, not overlapped. Marks the filled
+   * columns unsettled so dirt left hanging in the air Settles.
+   */
+  fillCircle(
+    cx: number,
+    cy: number,
+    radius: number,
+    keepClear: (x: number, y: number) => boolean,
+  ): void {
+    const r2 = radius * radius;
+    const x0 = Math.max(0, Math.floor(cx - radius));
+    const x1 = Math.min(this.width - 1, Math.ceil(cx + radius));
+    const y0 = Math.max(0, Math.floor(cy - radius));
+    const y1 = Math.min(this.height - 1, Math.ceil(cy + radius));
+    let changed = false;
+    for (let y = y0; y <= y1; y++) {
+      for (let x = x0; x <= x1; x++) {
+        const dx = x + 0.5 - cx;
+        const dy = y + 0.5 - cy;
+        const index = y * this.width + x;
+        if (dx * dx + dy * dy <= r2 && this.cells[index] === 0 && !keepClear(x, y)) {
+          this.cells[index] = 1;
+          changed = true;
+        }
+      }
+    }
+    if (changed) {
+      this.version++;
+      this.markUnsettled(x0, x1);
+    }
+  }
+
   /** Make columns [x0, x1] solid from row y down; clear them above y. Used for Tank pads. */
   flatten(x0: number, x1: number, y: number): void {
     const from = Math.max(0, x0);
@@ -114,22 +157,18 @@ export class Terrain {
    * One Settling pass: every solid cell with air directly below moves down one row.
    * Each column is scanned from row height-2 up to row 0, so a whole floating chunk drops 1 px per pass.
    * Only columns edited since they last came to rest are scanned; a column that moves nothing is
-   * at rest, since dirt only moves straight down. Returns true if any cell moved.
+   * at rest, since dirt only moves straight down. Dirt never falls into a blocker (a living Tank's
+   * cells); call markUnsettled when a blocker moves or goes. Returns true if any cell moved.
    */
-  settlePass(): boolean {
+  settlePass(blockers: readonly CellRect[] = []): boolean {
     const w = this.width;
     let from = Infinity;
     let to = -Infinity;
     for (let x = Math.max(0, this.unsettledFrom); x <= Math.min(w - 1, this.unsettledTo); x++) {
-      let columnMoved = false;
-      for (let y = this.height - 2; y >= 0; y--) {
-        const index = y * w + x;
-        if (this.cells[index] === 1 && this.cells[index + w] === 0) {
-          this.cells[index] = 0;
-          this.cells[index + w] = 1;
-          columnMoved = true;
-        }
-      }
+      const columnMoved = this.settleColumn(
+        x,
+        blocks(blockers, x, -Infinity, Infinity) ? blockers : null,
+      );
       if (columnMoved) {
         from = Math.min(from, x);
         to = Math.max(to, x);
@@ -141,4 +180,35 @@ export class Terrain {
     if (moved) this.version++;
     return moved;
   }
+
+  /**
+   * Drop every solid cell in column x with air below it by one row; true if any moved. With
+   * blockers (only passed when one covers this column), nothing falls into a blocker.
+   */
+  private settleColumn(x: number, blockers: readonly CellRect[] | null): boolean {
+    const w = this.width;
+    let moved = false;
+    for (let y = this.height - 2; y >= 0; y--) {
+      const index = y * w + x;
+      if (
+        this.cells[index] === 1 &&
+        this.cells[index + w] === 0 &&
+        (blockers === null || !blocks(blockers, x, y + 1, y + 1))
+      ) {
+        this.cells[index] = 0;
+        this.cells[index + w] = 1;
+        moved = true;
+      }
+    }
+    return moved;
+  }
+}
+
+/** True if any blocker covers column x somewhere in rows [y0, y1]. */
+function blocks(blockers: readonly CellRect[], x: number, y0: number, y1: number): boolean {
+  for (let i = 0; i < blockers.length; i++) {
+    const b = blockers[i] as CellRect;
+    if (x >= b.x0 && x <= b.x1 && y1 >= b.y0 && y0 <= b.y1) return true;
+  }
+  return false;
 }

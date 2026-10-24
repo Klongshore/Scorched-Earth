@@ -1,5 +1,6 @@
 import { powerToHit } from "./aiming";
 import {
+  BABY_MISSILE,
   MAX_ANGLE,
   MIN_ANGLE,
   MIN_POWER,
@@ -12,9 +13,10 @@ import {
   TOSSER_MAX_FACTOR,
   TOSSER_MIN_FACTOR,
 } from "./constants";
+import type { Inventory } from "./inventory";
 import type { Rng } from "./rng";
 import { isAlive, powerCap } from "./tank";
-import type { PersonalityName, Tank } from "./types";
+import type { PersonalityName, Tank, Weapon, WeaponName } from "./types";
 
 export interface Aim {
   angle: number;
@@ -136,6 +138,46 @@ export function chooseAim(
       return aim;
     }
   }
+}
+
+/** A Weapon that damages Tanks: every kind but Dirt. */
+type DamagingWeapon = Exclude<Weapon, { kind: "dirt" }>;
+
+function isDamaging(weapon: Weapon): weapon is DamagingWeapon {
+  return weapon.kind !== "dirt";
+}
+
+/**
+ * The Weapon a Computer Player fires this Turn, from what it owns. Call after chooseAim, so the
+ * aim draws keep their order.
+ *
+ * - Moron: a random owned Weapon, drawing from rng only when it owns more than the Baby
+ *   Missile, so Morons that never shopped draw exactly as they always have.
+ * - Shooter and Tosser: the owned Weapon with the highest max damage, ties broken by catalogue
+ *   order, never a Dirt Weapon nor one whose radius reaches back to its own Tank (at least
+ *   the horizontal distance to the Target). With no Target, or nothing suitable, the Baby
+ *   Missile. They never draw from rng.
+ */
+export function chooseWeapon(
+  personality: PersonalityName,
+  self: Tank,
+  target: Tank | null,
+  inventory: Pick<Inventory, "owned">,
+  rng: Rng,
+): WeaponName {
+  const owned = inventory.owned();
+  if (personality === "moron") {
+    if (owned.length <= 1) return BABY_MISSILE.name;
+    return (owned[rng.int(0, owned.length - 1)] as Weapon).name;
+  }
+  if (!target) return BABY_MISSILE.name;
+  const distance = Math.abs(target.x - self.x);
+  let best: DamagingWeapon | null = null;
+  for (const weapon of owned) {
+    if (!isDamaging(weapon) || weapon.radius >= distance) continue;
+    if (!best || weapon.maxDamage > best.maxDamage) best = weapon;
+  }
+  return best?.name ?? BABY_MISSILE.name;
 }
 
 /**

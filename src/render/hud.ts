@@ -33,20 +33,39 @@ function drawRun(
   return x;
 }
 
+/** The chosen Weapon as HUD line 1 shows it: its name and how many are left, if limited. */
+export function weaponText(name: string, count: number): string {
+  return Number.isFinite(count) ? `Weapon: ${name} ×${count}` : `Weapon: ${name}`;
+}
+
 /**
- * HUD line 1. The current Player's name, Angle and Power show only while they are aiming,
- * so a finished shot or a finished Round never looks like a live Turn.
+ * HUD line 1: the current Player's name, Angle, Power and chosen Weapon, only while they are
+ * aiming, so a finished Turn or a finished Round never looks like a live Turn.
  */
 export function aimLine(match: Match): Piece[] {
   const { round } = match;
-  const status = `Wind: ${windText(round.wind)}   Round ${round.number}/${match.totalRounds}`;
-  if (round.phase.kind !== "aiming") return [[status, HUD_TEXT]];
+  if (!round || round.phase.kind !== "aiming") return [];
   const player = round.playerOf(round.currentPlayerId);
   const tank = round.currentTank();
+  const weapon = round.currentWeapon();
+  const weaponCount = round.inventoryOf(player.id).count(weapon.name);
   return [
     [player.name, player.color],
-    [`   Angle: ${tank.angle}   Power: ${tank.power}/${powerCap(tank)}   ${status}`, HUD_TEXT],
+    [
+      `   Angle: ${tank.angle}   Power: ${tank.power}/${powerCap(tank)}   ${weaponText(weapon.name, weaponCount)}`,
+      HUD_TEXT,
+    ],
   ];
+}
+
+/**
+ * The Wind and the Round, right-aligned on HUD line 2: line 1 has no room left for them at
+ * 640 px once it shows the chosen Weapon.
+ */
+export function statusText(match: Match): string {
+  const { round } = match;
+  if (!round) return "";
+  return `Wind: ${windText(round.wind)}   Round ${round.number}/${match.totalRounds}`;
 }
 
 export interface HealthLine {
@@ -61,7 +80,7 @@ export interface HealthLine {
  */
 export function healthLine(match: Match): HealthLine | null {
   const { round } = match;
-  if (round.phase.kind !== "aiming") return null;
+  if (!round || round.phase.kind !== "aiming") return null;
   const player = round.playerOf(round.currentPlayerId);
   const { health } = round.currentTank();
   return { text: `${player.name}: ${health}`, color: player.color, health };
@@ -69,6 +88,7 @@ export function healthLine(match: Match): HealthLine | null {
 
 export function drawHud(ctx: CanvasRenderingContext2D, match: Match): void {
   const { round } = match;
+  if (!round) return;
   ctx.save();
   ctx.fillStyle = HUD_STRIP;
   ctx.fillRect(0, 0, ctx.canvas.width, STRIP_HEIGHT);
@@ -84,12 +104,13 @@ export function drawHud(ctx: CanvasRenderingContext2D, match: Match): void {
     ctx.fillRect(x, barTop, BAR_WIDTH, BAR_HEIGHT);
     ctx.fillStyle = line2.color;
     ctx.fillRect(x, barTop, Math.round((BAR_WIDTH * line2.health) / MAX_HEALTH), BAR_HEIGHT);
+    // Line 1 has no room left at 640 px, so the thinking marker follows the Health bar.
+    if (round.isComputerThinking) {
+      drawRun(ctx, [["  (thinking…)", HUD_TEXT]], x + BAR_WIDTH, LINE_2_Y);
+    }
   }
-  // Line 1 has no room left at 640 px, so the thinking marker sits right-aligned on line 2.
-  if (round.isComputerThinking) {
-    ctx.fillStyle = HUD_TEXT;
-    ctx.textAlign = "right";
-    ctx.fillText("(thinking…)", ctx.canvas.width - LEFT, LINE_2_Y);
-  }
+  ctx.fillStyle = HUD_TEXT;
+  ctx.textAlign = "right";
+  ctx.fillText(statusText(match), ctx.canvas.width - LEFT, LINE_2_Y);
   ctx.restore();
 }

@@ -6,17 +6,26 @@ import {
   MAX_ROUNDS,
   MIN_PLAYERS,
   MIN_ROUNDS,
+  WEAPONS,
 } from "../sim/constants";
+import { Match } from "../sim/match";
 import { createPlayers } from "../sim/players";
 import {
   DEFAULT_PLAYERS_SETUP,
   PLAYER_COUNTS,
   PLAYER_OPTIONS,
   clampRounds,
+  formatMoney,
+  moveShopFocus,
   optionValue,
   resizePlayerChoices,
+  roundResultsRows,
+  settleShopFocus,
   setupChoiceFrom,
+  shopKeyAction,
+  shopView,
   startOnce,
+  type ShopRow,
 } from "./screens";
 
 describe("Player choices on the Setup screen", () => {
@@ -176,5 +185,175 @@ describe("Starting the Match from the Setup screen", () => {
     submit();
     submit();
     expect(started).toEqual(["ok"]);
+  });
+});
+
+describe("Shop view", () => {
+  const shopping = (): Match =>
+    new Match({
+      players: [{ kind: "computer", personality: "moron" }, { kind: "human" }, { kind: "human" }],
+      rounds: 3,
+      seed: 1,
+    });
+  const row = (name: string, owned: number, disabled: boolean) => ({ name, owned, disabled });
+  /** The rows of these Weapons, in Shop order, so tests don't depend on the catalogue's length. */
+  const pick = (rows: readonly ShopRow[], names: readonly string[]) =>
+    rows.filter((r) => names.includes(r.name));
+  const SAMPLED = ["Missile", "Baby Nuke", "Nuke", "MIRV", "Funky Bomb"];
+  const summary = (rows: readonly ShopRow[]) =>
+    pick(rows, SAMPLED).map((r) => row(r.name, r.owned, r.disabled));
+  const listing = (rows: readonly ShopRow[], names: readonly string[]) =>
+    pick(rows, names).map((r) => [r.name, r.bundle, r.price, r.owned]);
+
+  it("heads the screen with the current shopper and their Money", () => {
+    const match = shopping();
+    const view = shopView(match);
+    expect(view.player).toBe(match.players[1]);
+    expect(view.money).toBe("$2,000");
+  });
+
+  it("lists every Weapon but the Baby Missile, with its Bundle, price and owned count", () => {
+    const view = shopView(shopping());
+    expect(view.rows.map((r) => r.name)).toEqual(WEAPONS.slice(1).map((w) => w.name));
+    expect(listing(view.rows, SAMPLED)).toEqual([
+      ["Missile", "×5", "$1,875", 0],
+      ["Baby Nuke", "×3", "$10,000", 0],
+      ["Nuke", "×1", "$12,000", 0],
+      ["MIRV", "×3", "$10,000", 0],
+      ["Funky Bomb", "×2", "$7,000", 0],
+    ]);
+    const rollers = ["Baby Roller", "Roller", "Heavy Roller"];
+    expect(listing(view.rows, rollers)).toEqual([
+      ["Baby Roller", "×10", "$5,000", 0],
+      ["Roller", "×5", "$6,000", 0],
+      ["Heavy Roller", "×2", "$6,750", 0],
+    ]);
+    expect(listing(view.rows, ["Dirt Clod", "Dirt Ball", "Ton of Dirt"])).toEqual([
+      ["Dirt Clod", "×10", "$5,000", 0],
+      ["Dirt Ball", "×5", "$5,000", 0],
+      ["Ton of Dirt", "×2", "$6,750", 0],
+    ]);
+  });
+
+  it("disables the rows the shopper cannot afford", () => {
+    expect(summary(shopView(shopping()).rows)).toEqual([
+      row("Missile", 0, false),
+      row("Baby Nuke", 0, true),
+      row("Nuke", 0, true),
+      row("MIRV", 0, true),
+      row("Funky Bomb", 0, true),
+    ]);
+  });
+
+  it("updates Money, owned counts and disabled rows after a purchase", () => {
+    const match = shopping();
+    match.money[1] = 12_000;
+    expect(summary(shopView(match).rows)).toEqual([
+      row("Missile", 0, false),
+      row("Baby Nuke", 0, false),
+      row("Nuke", 0, false),
+      row("MIRV", 0, false),
+      row("Funky Bomb", 0, false),
+    ]);
+    match.buy(1, "Missile");
+    const view = shopView(match);
+    expect(view.money).toBe("$10,125");
+    expect(summary(view.rows)).toEqual([
+      row("Missile", 5, false),
+      row("Baby Nuke", 0, false),
+      row("Nuke", 0, true),
+      row("MIRV", 0, false),
+      row("Funky Bomb", 0, false),
+    ]);
+  });
+
+  it("shows the next Human once the first is done", () => {
+    const match = shopping();
+    match.finishShopping(1);
+    expect(shopView(match).player).toBe(match.players[2]);
+  });
+});
+
+describe("Shop focus", () => {
+  const rows = (...disabled: boolean[]): ShopRow[] =>
+    disabled.map((d, i) => ({
+      name: "Missile",
+      bundle: "×1",
+      price: `$${i}`,
+      owned: 0,
+      disabled: d,
+    }));
+
+  it("moves between enabled rows and Done, wrapping round", () => {
+    const r = rows(false, true, false); // Done is index 3
+    expect(moveShopFocus(r, 0, 1)).toBe(2);
+    expect(moveShopFocus(r, 2, 1)).toBe(3);
+    expect(moveShopFocus(r, 3, 1)).toBe(0);
+    expect(moveShopFocus(r, 0, -1)).toBe(3);
+    expect(moveShopFocus(r, 3, -1)).toBe(2);
+    expect(moveShopFocus(r, 2, -1)).toBe(0);
+  });
+
+  it("stays on Done when every row is disabled", () => {
+    const r = rows(true, true);
+    expect(moveShopFocus(r, 2, 1)).toBe(2);
+    expect(moveShopFocus(r, 2, -1)).toBe(2);
+  });
+
+  it("keeps focus on a row still affordable after a purchase", () => {
+    expect(settleShopFocus(rows(false, false), 1)).toBe(1);
+  });
+
+  it("moves focus to the next enabled row, or Done, when the row becomes unaffordable", () => {
+    expect(settleShopFocus(rows(true, true, false), 0)).toBe(2);
+    expect(settleShopFocus(rows(false, true, true), 1)).toBe(3);
+  });
+
+  it("opens on the first enabled row, or Done when nothing is affordable", () => {
+    expect(settleShopFocus(rows(true, false), 0)).toBe(1);
+    expect(settleShopFocus(rows(true, true), 0)).toBe(2);
+  });
+});
+
+describe("Round results", () => {
+  it("show each Player's Round Wins, Money earned this Round and total Money", () => {
+    const match = new Match({
+      players: [{ kind: "human" }, { kind: "human" }],
+      rounds: 3,
+      seed: 1,
+    });
+    match.finishShopping(0);
+    match.finishShopping(1);
+    const round = match.requireRound();
+    round.earnings[0] = 1250;
+    round.earnings[1] = 2500;
+    round.phase = { kind: "over", result: { kind: "win", playerId: 1 } };
+    match.recordRoundResult();
+    expect(
+      roundResultsRows(match).map((r) => [r.player.name, r.roundWins, r.earned, r.money]),
+    ).toEqual([
+      ["Player 2", "1", "$7,500", "$9,500"],
+      ["Player 1", "0", "$1,250", "$3,250"],
+    ]);
+  });
+});
+
+describe("formatMoney", () => {
+  it("uses a thousands separator and no decimals", () => {
+    expect(formatMoney(0)).toBe("$0");
+    expect(formatMoney(500)).toBe("$500");
+    expect(formatMoney(2000)).toBe("$2,000");
+    expect(formatMoney(12345)).toBe("$12,345");
+    expect(formatMoney(1234567)).toBe("$1,234,567");
+  });
+});
+
+describe("shopKeyAction", () => {
+  it("finishes on Esc, moves on ↑/↓ and ignores other keys", () => {
+    expect(shopKeyAction("Escape")).toBe("finish");
+    expect(shopKeyAction("ArrowUp")).toBe(-1);
+    expect(shopKeyAction("ArrowDown")).toBe(1);
+    expect(shopKeyAction("Enter")).toBeNull();
+    expect(shopKeyAction("ArrowLeft")).toBeNull();
   });
 });

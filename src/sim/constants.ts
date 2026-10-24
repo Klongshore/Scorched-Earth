@@ -1,3 +1,5 @@
+import type { Weapon, WeaponName } from "./types";
+
 // Field
 export const FIELD_WIDTH = 640;
 export const FIELD_HEIGHT = 480;
@@ -33,7 +35,45 @@ export const PAD_HALF_WIDTH = 10; // flattened ground each side of a Tank
 export const TANK_FALL_PIXELS_PER_TICK = 2;
 
 // Weapons
-export const BABY_MISSILE = { name: "Baby Missile", radius: 20, maxDamage: 30 } as const;
+/** Every Weapon, in Shop order. */
+export const WEAPONS: readonly Weapon[] = [
+  { name: "Baby Missile", kind: "blast", bundle: null, price: 0, radius: 20, maxDamage: 30 },
+  { name: "Missile", kind: "blast", bundle: 5, price: 1_875, radius: 30, maxDamage: 50 },
+  { name: "Baby Nuke", kind: "blast", bundle: 3, price: 10_000, radius: 45, maxDamage: 70 },
+  { name: "Nuke", kind: "blast", bundle: 1, price: 12_000, radius: 75, maxDamage: 100 },
+  { name: "MIRV", kind: "mirv", bundle: 3, price: 10_000, radius: 30, maxDamage: 50 },
+  { name: "Funky Bomb", kind: "funky", bundle: 2, price: 7_000, radius: 30, maxDamage: 50 },
+  { name: "Baby Roller", kind: "roller", bundle: 10, price: 5_000, radius: 20, maxDamage: 30 },
+  { name: "Roller", kind: "roller", bundle: 5, price: 6_000, radius: 30, maxDamage: 50 },
+  { name: "Heavy Roller", kind: "roller", bundle: 2, price: 6_750, radius: 45, maxDamage: 70 },
+  { name: "Dirt Clod", kind: "dirt", bundle: 10, price: 5_000, radius: 20 },
+  { name: "Dirt Ball", kind: "dirt", bundle: 5, price: 5_000, radius: 35 },
+  { name: "Ton of Dirt", kind: "dirt", bundle: 2, price: 6_750, radius: 70 },
+];
+
+/** The Weapon with this name; throws for a name not in WEAPONS. */
+export function weaponNamed(name: WeaponName): Weapon {
+  const weapon = WEAPONS.find((w) => w.name === name);
+  if (!weapon) throw new Error(`No Weapon named ${name}`);
+  return weapon;
+}
+
+export const BABY_MISSILE = weaponNamed("Baby Missile");
+
+// Splitters
+export const MIRV_PIECES = 5; // what a MIRV splits into at the top of its arc
+export const MIRV_PIECE_WEAPON: WeaponName = "Missile"; // also what an unsplit MIRV explodes as
+export const MIRV_SPREAD = 30; // px/s of sideways speed between neighbouring pieces
+export const FUNKY_MIN_BOMBLETS = 6;
+export const FUNKY_MAX_BOMBLETS = 8;
+export const FUNKY_BOMBLET_WEAPON: WeaponName = "Baby Missile";
+export const FUNKY_MIN_ANGLE = 30; // degrees, 0 = right, 180 = left
+export const FUNKY_MAX_ANGLE = 150;
+export const FUNKY_MIN_SPEED = 100; // px/s
+export const FUNKY_MAX_SPEED = 250;
+// Rollers
+export const ROLLER_SPEED = 60; // px/s along the surface
+export const ROLLER_MAX_SECONDS = 8; // explodes where it is after rolling this long
 
 // Explosion and Settling
 export const EXPLOSION_SECONDS = 0.5;
@@ -57,6 +97,12 @@ export const DEFAULT_PLAYERS = 2;
 export const DEFAULT_ROUNDS = 10;
 export const MIN_ROUNDS = 1;
 export const MAX_ROUNDS = 99;
+
+// Money
+export const STARTING_MONEY = 2_000;
+export const MONEY_PER_DAMAGE = 50; // per point of Health removed from another Tank
+export const MONEY_PER_DESTROYED_TANK = 2_000; // per other Tank an Explosion destroys
+export const MONEY_PER_ROUND_WIN = 5_000;
 
 // Computer Players
 export const COMPUTER_THINK_SECONDS = 1.5;

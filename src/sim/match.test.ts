@@ -1,21 +1,36 @@
 import { describe, expect, it } from "vitest";
-import { MAX_PLAYERS, MIN_PLAYERS, TICK_SECONDS } from "./constants";
+import { MAX_PLAYERS, MIN_PLAYERS, TICK_SECONDS, WEAPONS } from "./constants";
 import { Match, type MatchSetup } from "./match";
-import type { RoundResult } from "./round";
+import { createPlayers } from "./players";
+import { Rng } from "./rng";
+import { Round, type RoundResult } from "./round";
 import type { PlayerSetup } from "./types";
 
 const human: PlayerSetup = { kind: "human" };
 const moron: PlayerSetup = { kind: "computer", personality: "moron" };
 
+/** A Match past the Shop, with Round 1 started. */
 function newMatch(overrides: Partial<MatchSetup> = {}): Match {
-  return new Match({ players: [human, human], rounds: 3, seed: 1, ...overrides });
+  const match = new Match({ players: [human, human], rounds: 3, seed: 1, ...overrides });
+  skipShop(match);
+  return match;
+}
+
+/** Every Human leaves the Shop without buying anything. */
+function skipShop(match: Match): void {
+  for (let shopper = match.currentShopper; shopper !== null; shopper = match.currentShopper) {
+    match.finishShopping(shopper);
+  }
 }
 
 /** Force the current Round to end with `result`, record it, and start the next Round if any. */
 function finishRound(match: Match, result: RoundResult): void {
-  match.round.phase = { kind: "over", result };
+  match.requireRound().phase = { kind: "over", result };
   match.recordRoundResult();
-  if (!match.isOver()) match.startNextRound();
+  if (!match.isOver()) {
+    match.startNextRound();
+    skipShop(match);
+  }
 }
 
 const win = (playerId: number): RoundResult => ({ kind: "win", playerId });
@@ -29,7 +44,7 @@ describe("Match", () => {
     expect(match.totalRounds).toBe(3);
     expect(match.roundWins).toEqual([0, 0]);
     expect(match.results).toEqual([]);
-    expect(match.round.number).toBe(1);
+    expect(match.requireRound().number).toBe(1);
     expect(match.isOver()).toBe(false);
   });
 
@@ -72,15 +87,15 @@ describe("Match", () => {
   it("numbers Rounds consecutively", () => {
     const match = newMatch();
     finishRound(match, draw);
-    expect(match.round.number).toBe(2);
+    expect(match.requireRound().number).toBe(2);
     finishRound(match, draw);
-    expect(match.round.number).toBe(3);
+    expect(match.requireRound().number).toBe(3);
   });
 
   it("refuses to record a Round that is not over, or twice", () => {
     const match = newMatch();
     expect(() => match.recordRoundResult()).toThrow();
-    match.round.phase = { kind: "over", result: draw };
+    match.requireRound().phase = { kind: "over", result: draw };
     match.recordRoundResult();
     expect(() => match.recordRoundResult()).toThrow();
     expect(match.results).toHaveLength(1);
@@ -140,27 +155,198 @@ describe("Match", () => {
     expect(split.winner()).toBeNull();
   });
 
+  it("starts every Player with $2,000 and nothing earned", () => {
+    const match = newMatch({ players: [human, human, human] });
+    expect(match.money).toEqual([2000, 2000, 2000]);
+    expect(match.earnedThisRound).toEqual([0, 0, 0]);
+  });
+
+  it("adds the Round's earnings, plus $5,000 for the Round Win", () => {
+    const match = newMatch();
+    match.requireRound().earnings[0] = 1250;
+    match.requireRound().earnings[1] = 2500;
+    finishRound(match, win(1));
+    expect(match.earnedThisRound).toEqual([1250, 7500]);
+    expect(match.money).toEqual([3250, 9500]);
+  });
+
+  it("pays no Round Win bonus for a Draw", () => {
+    const match = newMatch();
+    match.requireRound().earnings[0] = 500;
+    finishRound(match, draw);
+    expect(match.earnedThisRound).toEqual([500, 0]);
+    expect(match.money).toEqual([2500, 2000]);
+  });
+
+  it("carries Money into later Rounds and replaces what was earned each Round", () => {
+    const match = newMatch();
+    match.requireRound().earnings[0] = 1000;
+    finishRound(match, win(0));
+    expect(match.requireRound().earnings).toEqual([0, 0]);
+    match.requireRound().earnings[1] = 300;
+    finishRound(match, draw);
+    expect(match.earnedThisRound).toEqual([0, 300]);
+    expect(match.money).toEqual([8000, 2300]);
+  });
+
+  it("never lets Money decide standings or the winner", () => {
+    const match = newMatch({ rounds: 1 });
+    match.requireRound().earnings[0] = 100_000;
+    finishRound(match, win(1));
+    expect(match.money[0]).toBeGreaterThan(match.money[1] ?? 0);
+    expect(match.standings().map((s) => s.player.id)).toEqual([1, 0]);
+    expect(match.winner()?.id).toBe(1);
+  });
+
   it("is reproducible from its seed across Rounds", () => {
     const a = newMatch({ seed: 42 });
     const b = newMatch({ seed: 42 });
     finishRound(a, draw);
     finishRound(b, draw);
-    expect(b.round.wind).toBe(a.round.wind);
-    expect(b.round.turnOrder).toEqual(a.round.turnOrder);
-    expect(b.round.tanks).toEqual(a.round.tanks);
-    expect(b.round.terrain.cells).toEqual(a.round.terrain.cells);
+    expect(b.requireRound().wind).toBe(a.requireRound().wind);
+    expect(b.requireRound().turnOrder).toEqual(a.requireRound().turnOrder);
+    expect(b.requireRound().tanks).toEqual(a.requireRound().tanks);
+    expect(b.requireRound().terrain.cells).toEqual(a.requireRound().terrain.cells);
   });
 });
 
-/** Tick a Match to completion, recording each Round, failing past maxTicks. */
-function playOut(match: Match, maxTicks: number): number {
+describe("Match Shop", () => {
+  const shopping = (players: PlayerSetup[]): Match => new Match({ players, rounds: 3, seed: 1 });
+
+  it("opens the Shop before Round 1 for the Humans only, in Player order", () => {
+    const match = shopping([moron, human, moron, human]);
+    expect(match.round).toBeNull();
+    expect(match.stage).toEqual({ kind: "shopping", shoppers: [1, 3] });
+    expect(match.currentShopper).toBe(1);
+    match.finishShopping(1);
+    expect(match.round).toBeNull();
+    expect(match.currentShopper).toBe(3);
+    match.finishShopping(3);
+    expect(match.currentShopper).toBeNull();
+    expect(match.stage).toEqual({ kind: "playing" });
+    expect(match.requireRound().number).toBe(1);
+  });
+
+  it("starts an all-Computer Match's Round at once", () => {
+    const match = shopping([moron, moron]);
+    expect(match.stage).toEqual({ kind: "playing" });
+    expect(match.currentShopper).toBeNull();
+    expect(match.requireRound().number).toBe(1);
+  });
+
+  it("lets every Computer Player shop before any Human's Shop screen", () => {
+    const match = shopping([moron, human, moron]);
+    expect(match.currentShopper).toBe(1);
+    // $2,000 buys exactly one Bundle of Missiles, the only Weapon that cheap.
+    expect(match.money).toEqual([125, 2000, 125]);
+    expect(match.inventoryOf(0).count("Missile")).toBe(5);
+    expect(match.inventoryOf(1).count("Missile")).toBe(0);
+    expect(match.inventoryOf(2).count("Missile")).toBe(5);
+  });
+
+  it("lets Computer Players shop again before every later Round, spending what they earned", () => {
+    const match = shopping([moron, moron]);
+    match.requireRound().earnings[0] = 40_000;
+    finishRound(match, win(0));
+    const cheapest = Math.min(...WEAPONS.filter((w) => w.bundle !== null).map((w) => w.price));
+    expect(match.money[0]).toBeGreaterThanOrEqual(0);
+    expect(match.money[0]).toBeLessThan(cheapest);
+    const owned = match
+      .inventoryOf(0)
+      .owned()
+      .filter((w) => w.bundle !== null);
+    expect(owned.length).toBeGreaterThan(0);
+  });
+
+  it("deducts the price and adds the Bundle on each purchase", () => {
+    const match = shopping([human, human]);
+    match.buy(0, "Missile");
+    expect(match.money[0]).toBe(2000 - 1875);
+    expect(match.inventoryOf(0).count("Missile")).toBe(5);
+    expect(match.money[1]).toBe(2000);
+  });
+
+  it("refuses a purchase the shopper cannot afford", () => {
+    const match = shopping([human, human]);
+    expect(() => match.buy(0, "Nuke")).toThrow();
+    match.buy(0, "Missile");
+    expect(() => match.buy(0, "Missile")).toThrow();
+    expect(match.money[0]).toBe(125);
+    expect(match.inventoryOf(0).count("Missile")).toBe(5);
+  });
+
+  it("refuses the Baby Missile, which is never sold", () => {
+    const match = shopping([human, human]);
+    expect(() => match.buy(0, "Baby Missile")).toThrow();
+  });
+
+  it("refuses to buy or finish out of turn", () => {
+    const match = shopping([human, human]);
+    expect(() => match.buy(1, "Missile")).toThrow();
+    expect(() => match.finishShopping(1)).toThrow();
+    match.finishShopping(0);
+    match.finishShopping(1);
+    expect(() => match.buy(0, "Missile")).toThrow();
+    expect(() => match.finishShopping(0)).toThrow();
+  });
+
+  it("opens the Shop again before every later Round", () => {
+    const match = shopping([moron, human]);
+    match.finishShopping(1);
+    match.requireRound().phase = { kind: "over", result: win(0) };
+    match.recordRoundResult();
+    match.startNextRound();
+    expect(match.stage).toEqual({ kind: "shopping", shoppers: [1] });
+    expect(() => match.startNextRound()).toThrow();
+    expect(() => match.recordRoundResult()).toThrow();
+    match.finishShopping(1);
+    expect(match.requireRound().number).toBe(2);
+  });
+
+  it("carries Money and the Inventory across Rounds, even for a destroyed Tank", () => {
+    const match = shopping([human, human]);
+    match.buy(0, "Missile");
+    match.finishShopping(0);
+    match.finishShopping(1);
+    const round = match.requireRound();
+    round.tankOf(0).health = 0;
+    round.phase = { kind: "over", result: win(1) };
+    match.recordRoundResult();
+    match.startNextRound();
+    expect(match.money).toEqual([125, 7000]);
+    expect(match.inventoryOf(0).count("Missile")).toBe(5);
+    expect(match.currentShopper).toBe(0);
+    match.finishShopping(0);
+    match.buy(1, "Missile");
+    expect(match.money[1]).toBe(7000 - 1875);
+  });
+
+  it("lends the Round the Match's Inventories, so firing uses them up", () => {
+    const match = shopping([human, human]);
+    const shopper = 0;
+    match.buy(shopper, "Missile");
+    match.finishShopping(0);
+    match.finishShopping(1);
+    const round = match.requireRound();
+    expect(round.inventoryOf(shopper)).toBe(match.inventoryOf(shopper));
+  });
+});
+
+/**
+ * Tick a Match to completion, recording each Round, failing past maxTicks. `afterShop` runs
+ * whenever the Shop has just closed and after the last Round is recorded.
+ */
+function playOut(match: Match, maxTicks: number, afterShop: () => void = () => {}): number {
   let ticks = 0;
+  afterShop();
   while (!match.isOver()) {
     if (ticks++ >= maxTicks) expect.fail(`Match did not finish within ${maxTicks} ticks`);
-    match.round.tick(TICK_SECONDS);
-    if (match.round.phase.kind === "over") {
+    const round = match.requireRound();
+    round.tick(TICK_SECONDS);
+    if (round.phase.kind === "over") {
       match.recordRoundResult();
       if (!match.isOver()) match.startNextRound();
+      afterShop();
     }
   }
   return ticks;
@@ -207,10 +393,11 @@ describe("Match integration", () => {
     expect(match.results.length).toBe(3);
   });
 
-  describe("1-Round Matches of 10 Computer Players finish within the tick budget", () => {
+  describe("3-Round Matches of 10 Computer Players, shopping and firing what they bought, finish within the tick budget", () => {
     const shooter: PlayerSetup = { kind: "computer", personality: "shooter" };
     const tosser: PlayerSetup = { kind: "computer", personality: "tosser" };
     const lineups: Record<string, PlayerSetup[]> = {
+      Morons: Array.from({ length: MAX_PLAYERS }, () => moron),
       Shooters: Array.from({ length: MAX_PLAYERS }, () => shooter),
       Tossers: Array.from({ length: MAX_PLAYERS }, () => tosser),
       "a mix": Array.from(
@@ -219,23 +406,38 @@ describe("Match integration", () => {
       ),
     };
     for (const [name, players] of Object.entries(lineups)) {
-      it(`of ${name}, across 40 seeds`, () => {
+      it(`of ${name}, across 40 seeds, with Money never negative`, () => {
         for (let seed = 1; seed <= 40; seed++) {
-          const match = new Match({ players, rounds: 1, seed });
-          playOut(match, 200_000);
-          expect(match.results.length).toBe(1);
+          const match = new Match({ players, rounds: 3, seed });
+          playOut(match, 3 * 200_000, () => {
+            for (const money of match.money) expect(money).toBeGreaterThanOrEqual(0);
+          });
+          expect(match.results.length).toBe(3);
         }
       });
     }
   });
 
-  it("plays a seeded Moron-only Match exactly as before Shooter existed", () => {
+  it("plays seeded Moron-only Rounds holding only the Baby Missile exactly as before Shooter existed", () => {
     // Pinned before Shooter was added: Morons must draw from the Rng exactly as they always have.
-    const match = new Match({ players: [moron, moron, moron, moron], rounds: 3, seed: 77 });
-    const ticks = playOut(match, 3 * 200_000);
+    // Rounds are played directly, sharing one Rng as a Match does, because a Match now lets its
+    // Computer Players shop, which draws from the Rng too.
+    const players = createPlayers([moron, moron, moron, moron]);
+    const rng = new Rng(77);
+    let ticks = 0;
+    const results: RoundResult[] = [];
+    let round: Round | null = null;
+    for (let number = 1; number <= 3; number++) {
+      round = new Round(number, players, rng);
+      while (round.phase.kind !== "over") {
+        round.tick(TICK_SECONDS);
+        ticks++;
+      }
+      results.push(round.phase.result);
+    }
     expect(ticks).toBe(75560);
-    expect(match.results).toEqual([win(2), win(0), win(2)]);
-    expect(match.round.tanks).toEqual([
+    expect(results).toEqual([win(2), win(0), win(2)]);
+    expect(round?.tanks).toEqual([
       { playerId: 0, x: 256, y: 480, angle: 89, power: 70, health: 0 },
       { playerId: 1, x: 80, y: 362, angle: 93, power: 0, health: 0 },
       { playerId: 2, x: 531, y: 429, angle: 153, power: 123, health: 49 },

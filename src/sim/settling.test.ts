@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { FIELD_HEIGHT, FIELD_WIDTH, TANK_HALF_WIDTH } from "./constants";
+import { FIELD_HEIGHT, FIELD_WIDTH, TANK_HALF_WIDTH, TANK_HEIGHT } from "./constants";
 import { settleTick } from "./settling";
 import { isSupported } from "./tank";
 import { Terrain } from "./terrain";
@@ -79,5 +79,34 @@ describe("settleTick", () => {
     terrain.carveCircle(t.x, GROUND, 20);
     settle(terrain, [t]);
     expect(t.y).toBe(GROUND);
+  });
+
+  it("rests dirt on a living Tank's roof instead of inside the Tank", () => {
+    const terrain = flat();
+    const t = tank();
+    const roof = t.y - TANK_HEIGHT - 1;
+    for (let x = t.x - TANK_HALF_WIDTH; x <= t.x + TANK_HALF_WIDTH; x++)
+      terrain.set(x, roof - 20, true);
+    settle(terrain, [t]);
+    for (let x = t.x - TANK_HALF_WIDTH; x <= t.x + TANK_HALF_WIDTH; x++) {
+      expect(terrain.isSolid(x, roof)).toBe(true);
+      for (let y = roof + 1; y < t.y; y++) expect(terrain.isSolid(x, y)).toBe(false);
+    }
+  });
+
+  it("brings dirt on a Tank's roof down with the Tank when it falls", () => {
+    const terrain = flat();
+    const t = tank();
+    const roof = t.y - TANK_HEIGHT - 1;
+    terrain.set(t.x, roof, true);
+    settle(terrain, [t]);
+    expect(terrain.isSolid(t.x, roof)).toBe(true);
+    for (let x = t.x - TANK_HALF_WIDTH; x <= t.x + TANK_HALF_WIDTH; x++) {
+      for (let y = GROUND; y < GROUND + 10; y++) terrain.set(x, y, false);
+    }
+    settle(terrain, [t]);
+    expect(t.y).toBe(GROUND + 10);
+    expect(terrain.isSolid(t.x, t.y - TANK_HEIGHT - 1)).toBe(true);
+    expect(terrain.isSolid(t.x, roof)).toBe(false);
   });
 });

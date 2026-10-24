@@ -5,10 +5,12 @@ import {
   MAX_ROUNDS,
   MIN_PLAYERS,
   MIN_ROUNDS,
+  WEAPONS,
 } from "../sim/constants";
 import type { Match } from "../sim/match";
+import { canAfford } from "../sim/shop";
 import { playerLook } from "../sim/players";
-import type { Player, PlayerSetup } from "../sim/types";
+import type { Player, PlayerSetup, WeaponName } from "../sim/types";
 
 /** What the Setup screen chooses; the Game adds the seed to make a MatchSetup. */
 export interface SetupChoice {
@@ -63,7 +65,12 @@ export function setupChoiceFrom(optionValues: readonly string[], rounds: string)
   return { players: optionValues.map(setupFromOption), rounds: clampRounds(rounds) };
 }
 
-const CONTROLS_REMINDER = "←/→ Angle   ↑/↓ Power (Shift ×10)   Space Fire";
+/** Money as shown to Players: a dollar sign, a thousands separator and no decimals. */
+export function formatMoney(amount: number): string {
+  return `$${String(Math.round(amount)).replace(/\B(?=(\d{3})+(?!\d))/g, ",")}`;
+}
+
+const CONTROLS_REMINDER = "←/→ Angle   ↑/↓ Power (Shift ×10)   Tab Weapon   Space Fire";
 
 /** Turn whatever is in the Rounds box into a valid Round count (MIN_ROUNDS..MAX_ROUNDS). */
 export function clampRounds(value: string | number): number {
@@ -216,15 +223,47 @@ function winsTable(match: Match): HTMLTableElement {
   return table;
 }
 
+export interface RoundResultsRow {
+  readonly player: Player;
+  readonly roundWins: string;
+  readonly earned: string; // Money earned in the Round just finished, Round Win bonus included
+  readonly money: string; // total Money
+}
+
+/** One row per Player for the Round results table, in standings order. */
+export function roundResultsRows(match: Match): RoundResultsRow[] {
+  return match.standings().map(({ player, roundWins }) => ({
+    player,
+    roundWins: String(roundWins),
+    earned: formatMoney(match.earnedThisRound[player.id] ?? 0),
+    money: formatMoney(match.money[player.id] ?? 0),
+  }));
+}
+
+function roundResultsTable(match: Match): HTMLTableElement {
+  const table = el("table");
+  const head = el("tr");
+  head.append(el("th", "Player"), el("th", "Round Wins"), el("th", "Earned"), el("th", "Money"));
+  table.append(head);
+  for (const { player, roundWins, earned, money } of roundResultsRows(match)) {
+    const row = el("tr");
+    const name = el("td");
+    name.append(playerName(player));
+    row.append(name, el("td", roundWins), el("td", earned), el("td", money));
+    table.append(row);
+  }
+  return table;
+}
+
 /** Show the result of the Round that just ended (it must already be recorded). */
 export function showRoundResults(overlay: HTMLElement, match: Match): void {
-  const { number } = match.round;
+  const { number } = match.requireRound();
   const result = match.results[number - 1];
   const heading = el("h2");
   const winner = result?.kind === "win" ? match.players[result.playerId] : undefined;
   if (winner) heading.append(playerName(winner), ` wins Round ${number}!`);
   else heading.textContent = `Round ${number} is a draw`;
-  panel(overlay, heading, winsTable(match), el("p", "Press Enter to continue", "hint"));
+  panel(overlay, heading, roundResultsTable(match), el("p", "Press Enter to continue", "hint"));
 }
 
 /** Show the Final standings of a finished Match. */
@@ -240,4 +279,168 @@ export function showStandings(overlay: HTMLElement, match: Match): void {
     winsTable(match),
     el("p", "Press Enter for a new Match", "hint"),
   );
+}
+
+/** One Shop row: a Weapon on sale, one Bundle at a time. */
+export interface ShopRow {
+  readonly name: WeaponName;
+  readonly bundle: string; // "×5"
+  readonly price: string; // "$1,875", per Bundle
+  readonly owned: number;
+  readonly disabled: boolean; // the shopper can't afford a Bundle
+}
+
+/** What the current shopper's Shop screen shows. */
+export interface ShopView {
+  readonly player: Player;
+  readonly money: string;
+  readonly rows: readonly ShopRow[];
+}
+
+/**
+ * The Shop screen for the Match's current shopper: their name and Money, then one row per
+ * Weapon in catalogue order except the Baby Missile, which is never sold.
+ */
+export function shopView(match: Match): ShopView {
+  const playerId = match.currentShopper;
+  const player = playerId === null ? undefined : match.players[playerId];
+  if (!player) throw new Error("No one is shopping");
+  const money = match.money[player.id] ?? 0;
+  const inventory = match.inventoryOf(player.id);
+  const rows = WEAPONS.flatMap((weapon): ShopRow[] =>
+    weapon.bundle === null
+      ? []
+      : [
+          {
+            name: weapon.name,
+            bundle: `×${weapon.bundle}`,
+            price: formatMoney(weapon.price),
+            owned: inventory.count(weapon.name),
+            disabled: !canAfford(weapon, money),
+          },
+        ],
+  );
+  return { player, money: formatMoney(money), rows };
+}
+
+/**
+ * Shop focus is an index into the rows, or rows.length for Done. Moving skips disabled rows
+ * and wraps round at either end.
+ */
+export function moveShopFocus(rows: readonly ShopRow[], focus: number, delta: 1 | -1): number {
+  const stops = rows.length + 1;
+  let next = focus;
+  for (let i = 0; i < stops; i++) {
+    next = (next + delta + stops) % stops;
+    if (next === rows.length || !rows[next]?.disabled) return next;
+  }
+  return rows.length;
+}
+
+/**
+ * Where focus goes once the rows change (after a purchase, or when the screen opens): it stays
+ * on the same row if that is still enabled, else moves to the next enabled row, else Done.
+ */
+export function settleShopFocus(rows: readonly ShopRow[], focus: number): number {
+  for (let i = Math.max(0, focus); i < rows.length; i++) if (!rows[i]?.disabled) return i;
+  return rows.length;
+}
+
+/** What a key does on the Shop screen: finish, move focus up (-1) or down (1), or nothing. */
+export function shopKeyAction(key: string): "finish" | 1 | -1 | null {
+  switch (key) {
+    case "Escape":
+      return "finish";
+    case "ArrowUp":
+      return -1;
+    case "ArrowDown":
+      return 1;
+    default:
+      return null;
+  }
+}
+
+/**
+ * Show the current shopper's Shop screen. ↑/↓ move between the enabled rows and Done; Enter
+ * (routed through the returned handler) buys one Bundle of the focused row or finishes on
+ * Done; Esc also finishes. ↑/↓ and Esc work wherever focus is while the Shop is showing.
+ * `onDone` is called at most once.
+ */
+export function showShop(overlay: HTMLElement, match: Match, onDone: () => void): () => void {
+  const playerId = match.currentShopper;
+  if (playerId === null) throw new Error("No one is shopping");
+  let finished = false;
+  let focus = 0;
+  let buttons: HTMLButtonElement[] = [];
+
+  const header = el("h2");
+  const list = el("div", undefined, "shop");
+  const done = el("button", "Done");
+  done.type = "button";
+
+  const keyTarget = overlay.ownerDocument;
+  const onKeyDown = (event: KeyboardEvent): void => {
+    const action = shopKeyAction(event.key);
+    if (action === null) return;
+    event.preventDefault();
+    if (action === "finish") finish();
+    else focusOn(moveShopFocus(shopView(match).rows, focus, action));
+  };
+
+  const finish = (): void => {
+    if (finished) return;
+    finished = true;
+    keyTarget.removeEventListener("keydown", onKeyDown);
+    onDone();
+  };
+
+  const focusOn = (index: number): void => {
+    focus = index;
+    (buttons[index] ?? done).focus();
+  };
+
+  const buy = (index: number): void => {
+    const row = shopView(match).rows[index];
+    if (finished || !row || row.disabled) return;
+    match.buy(playerId, row.name);
+    focusOn(settleShopFocus(render().rows, index));
+  };
+
+  const render = (): ShopView => {
+    const view = shopView(match);
+    header.replaceChildren(playerName(view.player), `   Money: ${view.money}`);
+    buttons = view.rows.map((row, i) => {
+      const button = el("button", undefined, "shop-row");
+      button.type = "button";
+      button.disabled = row.disabled;
+      button.append(
+        el("span", row.name),
+        el("span", row.bundle),
+        el("span", row.price),
+        el("span", `owned ${row.owned}`),
+      );
+      button.addEventListener("click", () => buy(i));
+      button.addEventListener("focus", () => {
+        focus = i;
+      });
+      return button;
+    });
+    list.replaceChildren(...buttons);
+    return view;
+  };
+
+  done.addEventListener("click", finish);
+  done.addEventListener("focus", () => {
+    focus = buttons.length;
+  });
+
+  const box = el("div", undefined, "panel");
+  keyTarget.addEventListener("keydown", onKeyDown);
+  box.append(header, list, done, el("p", "↑/↓ choose   Enter buy   Esc done", "hint"));
+  overlay.replaceChildren(box);
+  focusOn(settleShopFocus(render().rows, 0));
+  return () => {
+    if (focus >= buttons.length) finish();
+    else buy(focus);
+  };
 }

@@ -342,7 +342,7 @@ Mark the changed columns unsettled, as `carveCircle` does, so dirt hanging in th
 ### 6.2 Behaviour
 
 - A Dirt Weapon's Explosion fills its circle instead of carving it and damages no one, so it earns nothing.
-- `Explosion` gains `readonly kind: "blast" | "dirt"`. The renderer draws a dirt Explosion in the dirt colours instead of the fire colours.
+- `Explosion` gains `readonly kind: "carve" | "dirt"`. The renderer draws a dirt Explosion in the dirt colours instead of the fire colours.
 - A buried Tank can still fire. Its Projectile spawns inside the dirt, touches it at once and explodes at the barrel tip, so the Tank must blast its way out, taking its own damage. Don't special-case this.
 
 ### 6.3 Tests

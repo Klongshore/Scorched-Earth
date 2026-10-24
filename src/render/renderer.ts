@@ -6,6 +6,7 @@ import type { Match } from "../sim/match";
 import { drawHud } from "./hud";
 import {
   DIRT_DEEP,
+  DIRT_EXPLOSION_COLORS,
   DIRT_SURFACE,
   EXPLOSION_COLORS,
   HUD_TEXT,
@@ -43,17 +44,21 @@ export class Renderer {
     this.sky.addColorStop(1, SKY_BOTTOM);
   }
 
-  /** Draw only the sky, for when no Match is in play (the Setup screen). */
+  /** Draw only the sky, for when no Round is in play (Setup, or the Shop before Round 1). */
   drawBackdrop(): void {
     this.context.fillStyle = this.sky;
     this.context.fillRect(0, 0, this.canvas.width, this.canvas.height);
   }
 
-  /** Draw the Match's current Round and the HUD. Reads state only; never changes it. */
+  /**
+   * Draw the Match's current Round and the HUD, or only the backdrop before Round 1 starts.
+   * Reads state only; never changes it.
+   */
   draw(match: Match): void {
     const { round } = match;
-    const { terrain, tanks, phase } = round;
     this.drawBackdrop();
+    if (!round) return;
+    const { terrain, tanks, phase } = round;
     if (this.builtTerrain !== terrain || this.builtVersion !== terrain.version) {
       this.rebuildTerrain(terrain);
     }
@@ -65,12 +70,13 @@ export class Renderer {
       this.drawTankHealth(tank, color);
     }
     if (phase.kind === "aiming") this.drawTurnMarker(round.currentTank());
-    if (phase.kind === "flying") {
-      const { projectile } = phase;
+    if (phase.kind === "resolving") {
       this.context.fillStyle = PROJECTILE_COLOR;
-      this.context.fillRect(Math.floor(projectile.x) - 1, Math.floor(projectile.y) - 1, 2, 2);
+      for (const projectile of phase.projectiles) {
+        this.context.fillRect(Math.floor(projectile.x) - 1, Math.floor(projectile.y) - 1, 2, 2);
+      }
+      for (const explosion of phase.explosions) this.drawExplosion(explosion);
     }
-    if (phase.kind === "exploding") this.drawExplosion(phase.explosion);
     drawHud(this.context, match);
   }
 
@@ -103,8 +109,8 @@ export class Renderer {
   private drawExplosion(explosion: Explosion): void {
     const ctx = this.context;
     const grow = Math.min(1, explosion.elapsed / (EXPLOSION_SECONDS / 2));
-    ctx.fillStyle =
-      EXPLOSION_COLORS[Math.floor(explosion.elapsed * 30) % EXPLOSION_COLORS.length] ?? "#ffffff";
+    const colors = explosion.kind === "dirt" ? DIRT_EXPLOSION_COLORS : EXPLOSION_COLORS;
+    ctx.fillStyle = colors[Math.floor(explosion.elapsed * 30) % colors.length] ?? "#ffffff";
     ctx.beginPath();
     ctx.arc(explosion.x, explosion.y, explosion.radius * grow, 0, Math.PI * 2);
     ctx.fill();
