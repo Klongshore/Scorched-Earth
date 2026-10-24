@@ -95,3 +95,21 @@ _Avoid_: Map, level, ground
 **Settling**:
 Unsupported dirt, and any Tank resting on it, falling straight down after an Explosion until it rests.
 _Avoid_: Collapse, gravity
+
+### Economy
+
+**Money**:
+What a Player spends in the Shop, kept for the whole Match. It never decides the Match: only Round Wins do.
+_Avoid_: Cash, credits, gold, score
+
+**Shop**:
+Where Players buy Weapons, open before every Round, including the first.
+_Avoid_: Store, market
+
+**Inventory**:
+The Weapons a Player owns and how many of each, kept from Round to Round for the whole Match. Firing a Weapon uses one up, except the Baby Missile, which every Player always has without limit.
+_Avoid_: Ammo, arsenal, stock
+
+**Bundle**:
+The fixed number of one Weapon bought in a single purchase at the Shop, for a fixed price.
+_Avoid_: Pack, lot
