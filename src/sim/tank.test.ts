@@ -9,6 +9,13 @@ function tank(overrides: Partial<Tank> = {}): Tank {
 }
 
 describe("tank", () => {
+  it("starts a new Tank at rest, with no Parachute open and no Shield raised", () => {
+    const t = newTank(0, 100, 300);
+    expect(t.fallen).toBe(0);
+    expect(t.parachute).toBe(false);
+    expect(t.shield).toBeNull();
+  });
+
   it("caps Power at 1000 at full Health and 400 at Health 40", () => {
     expect(powerCap(tank())).toBe(1000);
     expect(powerCap(tank({ health: 40 }))).toBe(400);

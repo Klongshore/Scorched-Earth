@@ -248,6 +248,28 @@ describe("Round", () => {
     expect(inventory.count("Parachute")).toBe(3);
   });
 
+  it("carries the Parachutes left into the next Round, where they still open", () => {
+    const players = createPlayers([HUMAN, HUMAN]);
+    const loadout = emptyLoadout(players);
+    loadout.inventories[1]?.add("Parachute", 5);
+    for (const [number, left] of [
+      [1, 4],
+      [2, 3],
+    ] as const) {
+      const round = new Round(number, players, new Rng(1), loadout);
+      round.wind = 0;
+      round.terrain.flatten(0, FIELD_WIDTH - 1, GROUND);
+      const tank = round.tankOf(1);
+      tank.x = 500;
+      tank.y = GROUND;
+      undercutTank(round, tank, 60);
+      round.phase = { kind: "settling" };
+      runUntil(round, (r) => r.phase.kind === "aiming");
+      expect(tank.health).toBe(MAX_HEALTH);
+      expect(round.inventoryOf(1).count("Parachute")).toBe(left);
+    }
+  });
+
   it("ends the Turn only after dirt on a Tank its Fall Damage destroyed has fallen", () => {
     const { round, other } = scenario(150, 500);
     other.health = 1;
@@ -446,6 +468,17 @@ describe("Round earnings", () => {
     runUntil(round, settled);
     expect(other.health).toBe(0);
     expect(round.earnings[firer.playerId]).toBe(MONEY_PER_DAMAGE + MONEY_PER_DESTROYED_TANK);
+  });
+
+  it("pays the current Player nothing for a fall a Parachute saves", () => {
+    const { round, firer, other } = scenario(150, 500);
+    round.inventoryOf(other.playerId).add("Parachute", 5);
+    undercutTank(round, other, 60);
+    round.phase = { kind: "settling" };
+    runUntil(round, settled);
+    expect(other.health).toBe(MAX_HEALTH);
+    expect(round.earnings[firer.playerId]).toBe(0);
+    expect(round.earnings).toEqual([0, 0]);
   });
 
   it("pays nothing for Fall Damage to the current Player's own Tank", () => {
