@@ -30,8 +30,12 @@ skipped.
   on where its last Projectile landed, closing in over a few Turns.
 
 A Shooter or Tosser keeps its Target until that Tank is destroyed or can no longer be reached, then
-picks a new one. With no Tank in reach, it fires like a Moron that Turn. Computer Players pause for
-about 1.5 seconds, showing their aim, before they fire.
+picks a new one. With no Tank in reach, it fires like a Moron that Turn.
+
+Each Turn a Moron fires a random Weapon it owns. A Shooter or Tosser fires its most damaging
+Weapon whose blast can't reach back to its own Tank, never a Dirt Weapon, and the Baby Missile when
+it has no Target or nothing else suits. Computer Players pause for about 1.5 seconds, showing their
+aim, before they fire.
 
 Every Tank shows its Health above it. The HUD shows the current Player's Angle, Power, Weapon and
 Health, along with the Wind and the Round.
@@ -48,7 +52,9 @@ The **Shop** opens before every Round, including the first. Each Human gets thei
 in Player order, showing their Money and every Weapon on sale with its Bundle (how many one
 purchase buys), its price and how many they own. Weapons you can't afford are greyed out. Use
 `↑` / `↓` to choose, `Enter` to buy one Bundle, and **Done** or `Esc` to finish. Computer Players
-don't shop yet, so a Match of only Computer Players goes straight into battle.
+shop first, instantly and off screen: they keep buying a random Bundle they can afford until they
+can afford none. A Match of only Computer Players shows no Shop screen and goes straight into
+battle.
 
 Your **Inventory** and Money last the whole Match, even if your Tank is destroyed. Firing a Weapon
 uses one up, except the Baby Missile, which every Player always has without limit.
