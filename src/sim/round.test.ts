@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   COMPUTER_THINK_SECONDS,
+  EXPLOSION_SECONDS,
   FIELD_WIDTH,
   MAX_ANGLE,
   MAX_HEALTH,
@@ -85,14 +86,14 @@ describe("Round", () => {
     const round = newRound();
     const tank = round.currentTank();
     round.act({ kind: "fire" });
-    expect(round.phase.kind).toBe("flying");
+    expect(round.phase.kind).toBe("resolving");
     const before = { angle: tank.angle, power: tank.power };
-    const projectile = round.phase.kind === "flying" ? round.phase.projectile : null;
+    const projectile = round.phase.kind === "resolving" ? round.phase.projectiles[0] : null;
     round.act({ kind: "adjustAngle", delta: 10 });
     round.act({ kind: "adjustPower", delta: 10 });
     round.act({ kind: "fire" });
     expect({ angle: tank.angle, power: tank.power }).toEqual(before);
-    expect(round.phase.kind === "flying" && round.phase.projectile).toBe(projectile);
+    expect(round.phase.kind === "resolving" && round.phase.projectiles[0]).toBe(projectile);
   });
 
   it("returns to aiming with the other Player current after a shot, or ends", () => {
@@ -110,7 +111,7 @@ describe("Round", () => {
     let sawTransition = false;
     let previous = round.phase.kind;
     runUntil(round, (r) => {
-      if (previous === "exploding" && r.phase.kind === "settling") {
+      if (previous === "resolving" && r.phase.kind === "settling") {
         sawTransition = true;
         expect(r.currentPlayerId).toBe(first);
       }
@@ -120,6 +121,27 @@ describe("Round", () => {
     });
     expect(sawTransition).toBe(true);
     expect(round.currentPlayerId).not.toBe(first);
+  });
+
+  it("holds the Projectile, then its Explosion, while resolving; settles once both lists empty", () => {
+    const { round, firer } = scenario(200, 450);
+    fireStraightUp(round, firer);
+    if (round.phase.kind !== "resolving") expect.fail("not resolving after fire");
+    expect(round.phase.projectiles).toHaveLength(1);
+    expect(round.phase.explosions).toHaveLength(0);
+    runUntil(round, (r) => r.phase.kind === "resolving" && r.phase.explosions.length > 0);
+    if (round.phase.kind !== "resolving") expect.fail("not resolving after the hit");
+    expect(round.phase.projectiles).toHaveLength(0);
+    expect(round.phase.explosions).toHaveLength(1);
+    let ticks = 0;
+    runUntil(round, (r) => {
+      if (r.phase.kind === "resolving") ticks++;
+      return r.phase.kind !== "resolving";
+    });
+    expect(round.phase.kind).toBe("settling");
+    let agingTicks = 0;
+    for (let elapsed = 0; elapsed < EXPLOSION_SECONDS; elapsed += TICK_SECONDS) agingTicks++;
+    expect(ticks).toBe(agingTicks);
   });
 
   it("ends in a Round Win for the firer when the opponent dies", () => {
@@ -203,7 +225,7 @@ describe("Round", () => {
       ticks++;
       if (ticks > 10_000) expect.fail("Computer Player never fired");
     }
-    expect(round.phase.kind).toBe("flying");
+    expect(round.phase.kind).toBe("resolving");
     expect(ticks).toBe(Math.round(COMPUTER_THINK_SECONDS / TICK_SECONDS));
   });
 
@@ -214,7 +236,7 @@ describe("Round", () => {
     round.act({ kind: "fire" });
     expect(round.phase.kind).toBe("aiming");
     runUntil(round, (r) => r.phase.kind !== "aiming");
-    expect(round.phase.kind).toBe("flying");
+    expect(round.phase.kind).toBe("resolving");
   });
 });
 
@@ -378,8 +400,8 @@ describe("Round Landings", () => {
   function fireAndFinish(round: Round, firer: Tank, angle: number, power: number): void {
     firer.angle = angle;
     firer.power = power;
-    runUntil(round, (r) => r.phase.kind === "flying");
-    runUntil(round, (r) => r.phase.kind !== "flying");
+    runUntil(round, (r) => r.phase.kind === "resolving");
+    runUntil(round, (r) => r.phase.kind !== "resolving");
   }
 
   it("records where a Computer Player's Projectile hit", () => {
@@ -416,7 +438,7 @@ describe("Round Landings", () => {
     const rng = new Rng(8);
     const first = new Round(1, players, rng);
     for (let i = 0; i < 3; i++) {
-      runUntil(first, (r) => r.phase.kind === "flying");
+      runUntil(first, (r) => r.phase.kind === "resolving");
       runUntil(first, (r) => r.phase.kind === "aiming" || r.phase.kind === "over");
       if (first.phase.kind === "over") break;
     }

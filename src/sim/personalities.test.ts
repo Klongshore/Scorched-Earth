@@ -100,7 +100,7 @@ describe("Computer Turn", () => {
     for (let i = 0; i < pauseTicks - 1; i++) round.tick(TICK_SECONDS);
     expect(round.phase.kind).toBe("aiming");
     round.tick(TICK_SECONDS);
-    expect(round.phase.kind).toBe("flying");
+    expect(round.phase.kind).toBe("resolving");
     expect(round.isComputerThinking).toBe(false);
   });
 
