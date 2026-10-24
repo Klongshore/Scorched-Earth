@@ -1,0 +1,52 @@
+import { describe, expect, it } from "vitest";
+import { BABY_MISSILE, WEAPONS, weaponNamed } from "./constants";
+import type { WeaponName } from "./types";
+
+describe("Weapon catalogue", () => {
+  it("has unique names", () => {
+    const names = WEAPONS.map((w) => w.name);
+    expect(new Set(names).size).toBe(names.length);
+  });
+
+  it("starts with the Baby Missile", () => {
+    expect(WEAPONS[0]?.name).toBe("Baby Missile");
+  });
+
+  it("gives only the Baby Missile no Bundle and a price of 0", () => {
+    for (const w of WEAPONS) {
+      if (w.name === "Baby Missile") {
+        expect(w.bundle).toBeNull();
+        expect(w.price).toBe(0);
+      } else {
+        expect(Number.isInteger(w.bundle) && (w.bundle as number) > 0, w.name).toBe(true);
+        expect(Number.isInteger(w.price) && w.price > 0, w.name).toBe(true);
+      }
+    }
+  });
+
+  it("gives every damaging kind a positive max damage", () => {
+    for (const w of WEAPONS) {
+      if (w.kind !== "dirt") expect(w.maxDamage, w.name).toBeGreaterThan(0);
+    }
+  });
+
+  it("looks Weapons up by name", () => {
+    for (const w of WEAPONS) expect(weaponNamed(w.name)).toBe(w);
+  });
+
+  it("throws for a name not in the catalogue", () => {
+    expect(() => weaponNamed("Wet Noodle" as WeaponName)).toThrow();
+  });
+
+  it("keeps the Baby Missile's numbers", () => {
+    expect(BABY_MISSILE).toEqual({
+      name: "Baby Missile",
+      kind: "blast",
+      radius: 20,
+      maxDamage: 30,
+      bundle: null,
+      price: 0,
+    });
+    expect(BABY_MISSILE).toBe(weaponNamed("Baby Missile"));
+  });
+});

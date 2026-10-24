@@ -4,8 +4,13 @@ import type { Explosion, Tank, Weapon } from "./types";
 
 /** Damage dealt to a Tank whose centre is `distance` from the Explosion centre. */
 export function damageAt(weapon: Weapon, distance: number): number {
-  if (distance >= weapon.radius) return 0;
-  return Math.round(weapon.maxDamage * (1 - distance / weapon.radius));
+  switch (weapon.kind) {
+    case "blast":
+      if (distance >= weapon.radius) return 0;
+      return Math.round(weapon.maxDamage * (1 - distance / weapon.radius));
+    default:
+      throw new Error(`Explosions for ${weapon.kind} Weapons are not built yet`);
+  }
 }
 
 /** Apply an Explosion: damage every living Tank (including the firer), carve Terrain, clamp aim. */
