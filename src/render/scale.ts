@@ -1,13 +1,18 @@
 import { FIELD_HEIGHT, FIELD_WIDTH } from "../sim/constants";
 
-/** Largest whole-number multiple of the field that fits the window (at least 1). */
-export function computeScale(innerWidth: number, innerHeight: number): number {
-  return Math.max(1, Math.floor(Math.min(innerWidth / FIELD_WIDTH, innerHeight / FIELD_HEIGHT)));
+/**
+ * How much to enlarge the field to fit the window (at least 1). `whole` keeps it to whole-number
+ * multiples, so every field pixel is the same size; otherwise the field fills the window.
+ */
+export function computeScale(innerWidth: number, innerHeight: number, whole = true): number {
+  const fit = Math.min(innerWidth / FIELD_WIDTH, innerHeight / FIELD_HEIGHT);
+  return Math.max(1, whole ? Math.floor(fit) : fit);
 }
 
 /**
- * Size the canvas and overlay in whole-number steps now and on every window resize, leaving
- * room below for the on-screen controls when they are shown (they match the field's width).
+ * Size the canvas and overlay now and on every window resize, leaving room below for the
+ * on-screen controls when they are shown (they match the field's width). With the controls
+ * shown, as on a tablet, the field fills the screen; otherwise it grows in whole-number steps.
  */
 export function installScaling(
   canvas: HTMLCanvasElement,
@@ -16,13 +21,14 @@ export function installScaling(
 ): void {
   const apply = (): void => {
     const below = controls?.offsetHeight ?? 0;
-    const s = computeScale(window.innerWidth, window.innerHeight - below);
+    const s = computeScale(window.innerWidth, window.innerHeight - below, below === 0);
+    const width = `${Math.floor(FIELD_WIDTH * s)}px`;
     for (const el of [canvas, overlay]) {
       if (!el) continue;
-      el.style.width = `${FIELD_WIDTH * s}px`;
-      el.style.height = `${FIELD_HEIGHT * s}px`;
+      el.style.width = width;
+      el.style.height = `${Math.floor(FIELD_HEIGHT * s)}px`;
     }
-    if (controls) controls.style.width = `${FIELD_WIDTH * s}px`;
+    if (controls) controls.style.width = width;
   };
   apply();
   window.addEventListener("resize", apply);
