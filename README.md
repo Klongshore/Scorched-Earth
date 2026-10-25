@@ -154,6 +154,10 @@ Other scripts:
 | `Enter`             | Start / continue on the overlay screens |
 | `↑` / `↓`, `Esc`    | Choose what to buy / finish in the Shop |
 
+On a touch screen, such as a tablet, buttons under the field do the same during a Round: Angle
+◀/▶, Power −10/−/+/+10 (hold a button to keep turning or adjusting), Weapon ◀/▶, Shield Raise
+and FIRE. The overlay screens' buttons (Start, Shop rows, Done, Continue, New Match) can be tapped.
+
 In hot-seat play every Human uses the same keys on their own Turn. Your Power can never exceed
 10 × your Tank's Health, shown as `Power: {power}/{cap}` in the HUD. Each Turn starts on the last
 Weapon you fired, or the Baby Missile once you have none of it left; the HUD shows it as

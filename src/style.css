@@ -9,6 +9,7 @@ body {
 
 body {
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
 }
@@ -164,4 +165,75 @@ body {
   margin: 12px 0 0;
   color: #c0c0c0;
   white-space: pre;
+}
+
+/*
+ * On-screen controls for touch screens, below the field. Hidden where there is no touch screen;
+ * greyed out (but still taking their space, so the field doesn't jump) outside a Round.
+ */
+#touch-controls {
+  display: none;
+}
+
+@media (any-pointer: coarse) {
+  #touch-controls {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: flex-end;
+    gap: 8px;
+    box-sizing: border-box;
+    max-width: 100%;
+    padding: 8px 4px;
+    font-size: 12px;
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-touch-callout: none;
+  }
+}
+
+#touch-controls.idle {
+  opacity: 0.3;
+  pointer-events: none;
+}
+
+.touch-group {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.touch-caption {
+  color: #c0c0c0;
+  min-height: 1.2em;
+}
+
+.touch-buttons {
+  display: flex;
+  gap: 4px;
+}
+
+#touch-controls button {
+  font: inherit;
+  font-size: 16px;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0 8px;
+  color: #fff;
+  background: #202020;
+  border: 1px solid #808080;
+  border-radius: 4px;
+  touch-action: none; /* no scroll, zoom or double-tap delay while holding a button */
+}
+
+#touch-controls button:active {
+  background: #404040;
+}
+
+#touch-controls button.fire {
+  min-width: 88px;
+  font-weight: bold;
+  background: #602020;
+  border-color: #c04040;
 }

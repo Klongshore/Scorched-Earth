@@ -256,19 +256,36 @@ function roundResultsTable(match: Match): HTMLTableElement {
   return table;
 }
 
-/** Show the result of the Round that just ended (it must already be recorded). */
-export function showRoundResults(overlay: HTMLElement, match: Match): void {
+/** A button that does what Enter does on this screen, for touch screens and mice. */
+function continueButton(label: string, onContinue: () => void): HTMLButtonElement {
+  const button = el("button", label);
+  button.type = "button";
+  button.addEventListener("click", onContinue);
+  return button;
+}
+
+/**
+ * Show the result of the Round that just ended (it must already be recorded). Continue, or
+ * Enter, calls `onContinue`.
+ */
+export function showRoundResults(overlay: HTMLElement, match: Match, onContinue: () => void): void {
   const { number } = match.requireRound();
   const result = match.results[number - 1];
   const heading = el("h2");
   const winner = result?.kind === "win" ? match.players[result.playerId] : undefined;
   if (winner) heading.append(playerName(winner), ` wins Round ${number}!`);
   else heading.textContent = `Round ${number} is a draw`;
-  panel(overlay, heading, roundResultsTable(match), el("p", "Press Enter to continue", "hint"));
+  panel(
+    overlay,
+    heading,
+    roundResultsTable(match),
+    continueButton("Continue", onContinue),
+    el("p", "Press Enter to continue", "hint"),
+  );
 }
 
-/** Show the Final standings of a finished Match. */
-export function showStandings(overlay: HTMLElement, match: Match): void {
+/** Show the Final standings of a finished Match. New Match, or Enter, calls `onNewMatch`. */
+export function showStandings(overlay: HTMLElement, match: Match, onNewMatch: () => void): void {
   const heading = el("h2");
   const winner = match.winner();
   if (winner) heading.append(playerName(winner), " wins the Match!");
@@ -278,6 +295,7 @@ export function showStandings(overlay: HTMLElement, match: Match): void {
     el("h1", "FINAL STANDINGS"),
     heading,
     winsTable(match),
+    continueButton("New Match", onNewMatch),
     el("p", "Press Enter for a new Match", "hint"),
   );
 }
