@@ -287,28 +287,28 @@ describe("Round", () => {
     expect(other.y).toBe(GROUND + 30);
     expect(other.health).toBe(0);
     expect(settlingTicksAfterDeath).toBeGreaterThan(1);
-    // The dirt that rode down on its roof fell through it to the ground.
+    // The dirt that rode down on its roof fell through it onto the Terrain below.
     expect(round.terrain.isSolid(roofX, other.y - 1)).toBe(true);
     expect(round.terrain.isSolid(roofX, other.y - TANK_HEIGHT - 1)).toBe(false);
   });
 
-  it("leaves a Tank over a Nuke on flat ground with 100 - blast damage - Fall Damage", () => {
+  it("leaves a Tank over a Nuke on flat Terrain with 100 - Explosion damage - Fall Damage", () => {
     const { round, firer, other } = scenario(150, 500);
-    // Higher ground than GROUND, so the crater stops short of the bottom of the field.
-    const ground = 250;
-    round.terrain.flatten(0, FIELD_WIDTH - 1, ground);
-    firer.y = ground;
-    other.y = ground;
+    // A surface higher than GROUND, so the crater stops short of the bottom of the field.
+    const surface = 250;
+    round.terrain.flatten(0, FIELD_WIDTH - 1, surface);
+    firer.y = surface;
+    other.y = surface;
     const nuke = weaponNamed("Nuke");
-    const blastY = ground + 40;
-    const blast = damageAt(nuke, Math.hypot(0, centre(other).y - blastY));
-    detonate(other.x, blastY, nuke, round.terrain, round.tanks);
-    expect(other.health).toBe(MAX_HEALTH - blast);
+    const explosionY = surface + 40;
+    const explosionDamage = damageAt(nuke, Math.hypot(0, centre(other).y - explosionY));
+    detonate(other.x, explosionY, nuke, round.terrain, round.tanks);
+    expect(other.health).toBe(MAX_HEALTH - explosionDamage);
     round.phase = { kind: "settling" };
     runUntil(round, (r) => r.phase.kind === "aiming");
-    const drop = other.y - ground;
+    const drop = other.y - surface;
     expect(fallDamage(drop)).toBeGreaterThan(0);
-    expect(other.health).toBe(MAX_HEALTH - blast - fallDamage(drop));
+    expect(other.health).toBe(MAX_HEALTH - explosionDamage - fallDamage(drop));
     expect(other.health).toBeGreaterThan(0);
   });
 
@@ -384,7 +384,7 @@ describe("Round earnings", () => {
   });
 
   it("pays nothing for damage a Shield absorbs, only for the Health removed past it", () => {
-    const shot = (strength: number) => {
+    const fireAtShielded = (strength: number) => {
       const { round, firer, other } = scenario(300, 300 + BARREL_LENGTH + 2);
       other.y = GROUND - 1;
       other.shield = { name: "Shield", strength };
@@ -395,12 +395,12 @@ describe("Round earnings", () => {
       return { round, firer, other };
     };
     // The same 25-damage hit as above, fully absorbed: no Health lost, no Money.
-    const full = shot(50);
+    const full = fireAtShielded(50);
     expect(full.other.health).toBe(MAX_HEALTH);
     expect(full.other.shield?.strength).toBe(25);
     expect(full.round.earnings[full.firer.playerId]).toBe(0);
     // Partly absorbed: 10 to the Shield (dropping it), 15 to Health, paid for the 15.
-    const part = shot(10);
+    const part = fireAtShielded(10);
     expect(part.other.shield).toBeNull();
     expect(part.other.health).toBe(MAX_HEALTH - 15);
     expect(part.round.earnings[part.firer.playerId]).toBe(MONEY_PER_DAMAGE * 15);
@@ -751,7 +751,7 @@ describe("Round splitters", () => {
     const mirv = scenario(100, Math.round(pieceX));
     arm(mirv.round, "MIRV");
     const pieces = fireAndCollect(mirv.round, mirv.firer, 60, 400);
-    // The pieces' blasts pay, and so does the Fall Damage from the crater: each exactly once.
+    // The pieces' Explosions pay, and so does the Fall Damage from the crater: each exactly once.
     const removed = pieces
       .flatMap((e) => e.hits)
       .filter((h) => h.playerId === mirv.other.playerId)
@@ -775,7 +775,7 @@ describe("Round splitters", () => {
       arm(round, "Funky Bomb");
       const explosions = fireAndCollect(round, firer, 60, 400);
       expect(explosions[0]?.hits.some((h) => h.playerId === other.playerId)).toBe(false);
-      // Every point the other Tank lost, to blasts or to Settling, pays once.
+      // Every point the other Tank lost, to Explosions or to Settling, pays once.
       const expected =
         MONEY_PER_DAMAGE * (MAX_HEALTH - other.health) +
         (other.health === 0 ? MONEY_PER_DESTROYED_TANK : 0);

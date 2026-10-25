@@ -249,11 +249,11 @@ describe("Match Shop", () => {
     const match = shopping([moron, moron]);
     match.requireRound().earnings[0] = 40_000;
     finishRound(match, win(0));
-    const cheapest = Math.min(...FOR_SALE.map((thing) => thing.price));
+    const cheapest = Math.min(...FOR_SALE.map((forSale) => forSale.price));
     expect(match.money[0]).toBeGreaterThanOrEqual(0);
     expect(match.money[0]).toBeLessThan(cheapest);
     const inventory = match.inventoryOf(0);
-    expect(FOR_SALE.some((thing) => inventory.count(thing.name) > 0)).toBe(true);
+    expect(FOR_SALE.some((forSale) => inventory.count(forSale.name) > 0)).toBe(true);
   });
 
   it("lets Computer Players buy Items, which never join their owned Weapons", () => {
@@ -350,7 +350,7 @@ describe("Match Shop", () => {
     expect(match.money).toEqual([125, 7000]);
     expect(match.inventoryOf(0).count("Missile")).toBe(5);
     // One Shield went up at the start of Round 1.
-    expect(match.inventoryOf(0).count("Shield")).toBe((forSaleNamed("Shield").bundle ?? 0) - 1);
+    expect(match.inventoryOf(0).count("Shield")).toBe(forSaleNamed("Shield").bundle - 1);
     expect(match.inventoryOf(0).count("Parachute")).toBe(forSaleNamed("Parachute").bundle);
     expect(match.currentShopper).toBe(0);
     match.finishShopping(0);

@@ -36,15 +36,7 @@ import { raiseShield } from "./shield";
 import { clampAim, hitTest, isAlive } from "./tank";
 import type { Terrain } from "./terrain";
 import { generateHills } from "./terrainGen";
-import type {
-  Explosion,
-  ExplosionHit,
-  Player,
-  Projectile,
-  Tank,
-  Weapon,
-  WeaponName,
-} from "./types";
+import type { Explosion, HealthLoss, Player, Projectile, Tank, Weapon, WeaponName } from "./types";
 
 export type Phase =
   | { kind: "aiming"; thinkTicks: number | null } // ticks left to think; non-null only for Computer Players
@@ -319,13 +311,17 @@ export class Round {
    * the field alike. Harm to their own Tank pays nothing.
    */
   private paySettling(healthBefore: readonly number[]): void {
-    const hits: ExplosionHit[] = [];
+    const losses: HealthLoss[] = [];
     this.tanks.forEach((t, i) => {
       const before = healthBefore[i] ?? t.health;
       if (t.health >= before) return;
-      hits.push({ playerId: t.playerId, healthRemoved: before - t.health, destroyed: !isAlive(t) });
+      losses.push({
+        playerId: t.playerId,
+        healthRemoved: before - t.health,
+        destroyed: !isAlive(t),
+      });
     });
-    this.earn(this.currentPlayerId, moneyEarned(hits, this.currentPlayerId));
+    this.earn(this.currentPlayerId, moneyEarned(losses, this.currentPlayerId));
   }
 
   /** Use up one of a Player's Parachutes; false if they own none. */

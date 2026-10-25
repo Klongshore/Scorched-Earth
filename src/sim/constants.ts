@@ -1,4 +1,4 @@
-import type { ForSale, Item, ShopName, Weapon, WeaponName } from "./types";
+import type { ForSale, Item, ShieldItem, ShieldName, ShopName, Weapon, WeaponName } from "./types";
 
 // Field
 export const FIELD_WIDTH = 640;
@@ -72,14 +72,29 @@ export const ITEMS: readonly Item[] = [
   { name: "Parachute", kind: "parachute", bundle: 5, price: 3_000 },
 ];
 
-/** Everything the Shop sells, in Shop order: Weapons (never the Baby Missile), then Items. */
-export const FOR_SALE: readonly ForSale[] = [...WEAPONS.filter((w) => w.bundle !== null), ...ITEMS];
+/** Every Shield Item, in Shop order. */
+export const SHIELDS: readonly ShieldItem[] = ITEMS.filter(
+  (i): i is ShieldItem => i.kind === "shield",
+);
 
-/** The Weapon or Item with this name; throws for a name not in WEAPONS or ITEMS. */
+/** The Shield with this name. */
+export function shieldNamed(name: ShieldName): ShieldItem {
+  const shield = SHIELDS.find((s) => s.name === name);
+  if (!shield) throw new Error(`No Shield named ${name}`);
+  return shield;
+}
+
+/** Everything the Shop sells, in Shop order: Weapons (never the Baby Missile), then Items. */
+export const FOR_SALE: readonly ForSale[] = [
+  ...WEAPONS.filter((w): w is Weapon & ForSale => w.bundle !== null),
+  ...ITEMS,
+];
+
+/** The Weapon or Item the Shop sells with this name; throws for the Baby Missile. */
 export function forSaleNamed(name: ShopName): ForSale {
-  const thing = WEAPONS.find((w) => w.name === name) ?? ITEMS.find((i) => i.name === name);
-  if (!thing) throw new Error(`Nothing named ${name}`);
-  return thing;
+  const forSale = FOR_SALE.find((f) => f.name === name);
+  if (!forSale) throw new Error(`${name} is not sold in the Shop`);
+  return forSale;
 }
 
 // Splitters

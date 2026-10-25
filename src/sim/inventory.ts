@@ -1,4 +1,4 @@
-import { BABY_MISSILE, ITEMS, WEAPONS } from "./constants";
+import { BABY_MISSILE, SHIELDS, WEAPONS } from "./constants";
 import type { Player, ShieldItem, ShopName, Weapon, WeaponName } from "./types";
 
 /**
@@ -46,9 +46,9 @@ export class Inventory {
   /** The owned Shield with the most Shield Strength, or null when none is owned. */
   strongestShield(): ShieldItem | null {
     let best: ShieldItem | null = null;
-    for (const item of ITEMS) {
-      if (item.kind !== "shield" || this.count(item.name) <= 0) continue;
-      if (!best || item.strength > best.strength) best = item;
+    for (const shield of SHIELDS) {
+      if (this.count(shield.name) <= 0) continue;
+      if (!best || shield.strength > best.strength) best = shield;
     }
     return best;
   }

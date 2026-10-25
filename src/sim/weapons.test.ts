@@ -1,5 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { BABY_MISSILE, FOR_SALE, ITEMS, WEAPONS, forSaleNamed, weaponNamed } from "./constants";
+import {
+  BABY_MISSILE,
+  FOR_SALE,
+  ITEMS,
+  SHIELDS,
+  WEAPONS,
+  forSaleNamed,
+  shieldNamed,
+  weaponNamed,
+} from "./constants";
 import type { WeaponName } from "./types";
 
 describe("Item catalogue", () => {
@@ -36,9 +45,15 @@ describe("What the Shop sells", () => {
     expect(FOR_SALE).not.toContain(BABY_MISSILE);
   });
 
-  it("finds every Weapon and Item by name, and throws for an unknown one", () => {
-    for (const thing of [...WEAPONS, ...ITEMS]) expect(forSaleNamed(thing.name)).toBe(thing);
+  it("finds everything sold by name, and throws for the Baby Missile or an unknown name", () => {
+    for (const forSale of FOR_SALE) expect(forSaleNamed(forSale.name)).toBe(forSale);
+    expect(() => forSaleNamed("Baby Missile")).toThrow();
     expect(() => forSaleNamed("Battery" as WeaponName)).toThrow();
+  });
+
+  it("finds every Shield by name", () => {
+    expect(SHIELDS.map((s) => s.name)).toEqual(["Shield", "Heavy Shield"]);
+    for (const shield of SHIELDS) expect(shieldNamed(shield.name)).toBe(shield);
   });
 });
 

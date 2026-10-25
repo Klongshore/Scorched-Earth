@@ -56,7 +56,7 @@ one purchase buys), its price and how many they own. Anything you can't afford i
 the list scrolls to keep the row you've chosen in view. Use `↑` / `↓` to choose, `Enter` to buy
 one Bundle, and **Done** or `Esc` to finish. Computer Players shop first, instantly and off
 screen: they keep buying a random Bundle they can afford until they can afford none. A Match of
-only Computer Players shows no Shop screen and goes straight into battle.
+only Computer Players shows no Shop screen and goes straight into the Round.
 
 Your **Inventory** (the Weapons and Items you own) and Money last the whole Match, even if your
 Tank is destroyed. Firing a Weapon uses one up, except the Baby Missile, which every Player always

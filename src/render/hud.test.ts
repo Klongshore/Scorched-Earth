@@ -2,7 +2,8 @@ import { describe, expect, it } from "vitest";
 import { Match } from "../sim/match";
 import type { Round } from "../sim/round";
 import type { PlayerSetup } from "../sim/types";
-import { aimLine, healthLine, statusText, weaponText } from "./hud";
+import { FIELD_WIDTH, MAX_HEALTH, MAX_ROUNDS, WIND_MAX } from "../sim/constants";
+import { aimLine, afterHealthBar, healthLine, line2Layout, statusText, weaponText } from "./hud";
 
 const human: PlayerSetup = { kind: "human" };
 const moron: PlayerSetup = { kind: "computer", personality: "moron" };
@@ -105,6 +106,21 @@ describe("healthLine (HUD line 2)", () => {
     round.act({ kind: "fire" });
     expect(round.phase.kind).toBe("resolving");
     expect(healthLine(match)).toBeNull();
+  });
+
+  it("fits in 640 px at its longest: Player 10, a Shield, thinking, and the Wind and Round", () => {
+    // 14px monospace: every character advances about 0.6em.
+    const measure = (t: string) => [...t].length * 14 * 0.6;
+    const line = {
+      text: `Player 10: ${MAX_HEALTH}`,
+      color: "#fff",
+      health: MAX_HEALTH,
+      shield: 100,
+    };
+    expect(afterHealthBar(line, true).map(([t]) => t)).toEqual(["  Shield 100", "  (thinking…)"]);
+    const status = `Wind: ←${WIND_MAX}   Round ${MAX_ROUNDS}/${MAX_ROUNDS}`;
+    const { leftEnd, statusStart } = line2Layout(line, true, status, FIELD_WIDTH, measure);
+    expect(leftEnd).toBeLessThan(statusStart);
   });
 
   it("is empty while Settling, once the Round is over, and before Round 1", () => {

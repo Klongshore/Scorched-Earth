@@ -81,12 +81,11 @@ export class Match {
 
   /** Any Player buys one Bundle: deduct its price and add it to their Inventory. */
   private purchase(playerId: number, name: ShopName): void {
-    const thing = forSaleNamed(name);
+    const forSale = forSaleNamed(name); // throws for the Baby Missile, which is never sold
     const money = this.money[playerId] ?? 0;
-    if (thing.bundle === null) throw new Error(`${name} is not sold in the Shop`);
-    if (!canAfford(thing, money)) throw new Error(`Player ${playerId} cannot afford ${name}`);
-    this.money[playerId] = money - thing.price;
-    this.inventoryOf(playerId).add(name, thing.bundle);
+    if (!canAfford(forSale, money)) throw new Error(`Player ${playerId} cannot afford ${name}`);
+    this.money[playerId] = money - forSale.price;
+    this.inventoryOf(playerId).add(name, forSale.bundle);
   }
 
   /** The current shopper is done; after the last Human the Round starts. */

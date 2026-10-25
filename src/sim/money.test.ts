@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { MONEY_PER_DAMAGE, MONEY_PER_DESTROYED_TANK } from "./constants";
 import { moneyEarned } from "./money";
-import type { ExplosionHit } from "./types";
+import type { HealthLoss } from "./types";
 
-function hits(...list: ExplosionHit[]): readonly ExplosionHit[] {
+function hits(...list: HealthLoss[]): readonly HealthLoss[] {
   return list;
 }
 

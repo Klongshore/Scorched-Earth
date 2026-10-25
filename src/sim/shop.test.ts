@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { FOR_SALE, ITEMS, forSaleNamed, weaponNamed } from "./constants";
+import { FOR_SALE, ITEMS, forSaleNamed } from "./constants";
 import { Rng } from "./rng";
 import { canAfford, computerShopping } from "./shop";
 import type { ShopName } from "./types";
 
-const cheapest = Math.min(...FOR_SALE.map((thing) => thing.price));
+const cheapest = Math.min(...FOR_SALE.map((forSale) => forSale.price));
 
 function spent(names: readonly ShopName[]): number {
   return names.reduce((sum, name) => sum + forSaleNamed(name).price, 0);
@@ -12,7 +12,7 @@ function spent(names: readonly ShopName[]): number {
 
 describe("canAfford", () => {
   it("is true only when the Money covers one Bundle", () => {
-    const missile = weaponNamed("Missile");
+    const missile = forSaleNamed("Missile");
     expect(canAfford(missile, missile.price)).toBe(true);
     expect(canAfford(missile, missile.price - 1)).toBe(false);
   });
@@ -21,10 +21,6 @@ describe("canAfford", () => {
     const parachute = forSaleNamed("Parachute");
     expect(canAfford(parachute, parachute.price)).toBe(true);
     expect(canAfford(parachute, parachute.price - 1)).toBe(false);
-  });
-
-  it("is never true for the Baby Missile", () => {
-    expect(canAfford(weaponNamed("Baby Missile"), 1_000_000)).toBe(false);
   });
 });
 
@@ -55,7 +51,7 @@ describe("computerShopping", () => {
     for (let seed = 1; seed <= 50; seed++) {
       for (const name of computerShopping(100_000, new Rng(seed))) seen.add(name);
     }
-    expect([...seen].sort()).toEqual(FOR_SALE.map((thing) => thing.name).sort());
+    expect([...seen].sort()).toEqual(FOR_SALE.map((forSale) => forSale.name).sort());
     for (const item of ITEMS) expect(seen).toContain(item.name);
   });
 });

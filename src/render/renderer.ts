@@ -1,7 +1,7 @@
 import {
   BARREL_LENGTH,
   EXPLOSION_SECONDS,
-  forSaleNamed,
+  shieldNamed,
   TANK_HALF_WIDTH,
   TANK_HEIGHT,
 } from "../sim/constants";
@@ -31,7 +31,8 @@ const SHIELD_MAX_ALPHA = 1; // a Shield at its full Shield Strength
 const SHIELD_MIN_ALPHA = 0.2; // a Shield about to be gone, still visible
 const CANOPY_RADIUS = 5; // the Parachute canopy is a half-disc 10 px across
 const CANOPY_CLEARANCE = 3; // px from the tip of a barrel at 90° to the canopy's flat edge
-const CANOPY_LINE_SPREAD = 2; // px either side of the turret's centre where the lines meet it
+const CANOPY_LINE_SPREAD = 2; // px either side of the Tank's centre where the lines meet its top
+const CANOPY_LINE_WIDTH = 1;
 
 export class Renderer {
   private readonly context: CanvasRenderingContext2D;
@@ -126,9 +127,7 @@ export class Renderer {
   private drawShield(tank: Tank, color: string): void {
     const { shield } = tank;
     if (!shield) return;
-    const item = forSaleNamed(shield.name);
-    const full = item.kind === "shield" ? item.strength : shield.strength;
-    const left = Math.min(1, Math.max(0, shield.strength / full));
+    const left = Math.min(1, Math.max(0, shield.strength / shieldNamed(shield.name).strength));
     const ctx = this.context;
     const c = centre(tank);
     ctx.save();
@@ -141,12 +140,12 @@ export class Renderer {
     ctx.restore();
   }
 
-  /** An open Parachute: a half-disc above the Tank, with a line down to each side of the turret. */
+  /** An open Parachute: a half-disc above the Tank, with a line down to each side of the Tank's top. */
   private drawCanopy(tank: Tank, color: string): void {
     const ctx = this.context;
     const cx = tank.x + 0.5;
-    const turretY = tank.y - TANK_HEIGHT;
-    const edgeY = turretY - BARREL_LENGTH - CANOPY_CLEARANCE;
+    const topY = tank.y - TANK_HEIGHT;
+    const edgeY = topY - BARREL_LENGTH - CANOPY_CLEARANCE;
     ctx.save();
     ctx.fillStyle = color;
     ctx.beginPath();
@@ -154,12 +153,12 @@ export class Renderer {
     ctx.closePath();
     ctx.fill();
     ctx.strokeStyle = color;
-    ctx.lineWidth = 1;
+    ctx.lineWidth = CANOPY_LINE_WIDTH;
     ctx.beginPath();
     ctx.moveTo(cx - CANOPY_RADIUS, edgeY);
-    ctx.lineTo(cx - CANOPY_LINE_SPREAD, turretY);
+    ctx.lineTo(cx - CANOPY_LINE_SPREAD, topY);
     ctx.moveTo(cx + CANOPY_RADIUS, edgeY);
-    ctx.lineTo(cx + CANOPY_LINE_SPREAD, turretY);
+    ctx.lineTo(cx + CANOPY_LINE_SPREAD, topY);
     ctx.stroke();
     ctx.restore();
   }

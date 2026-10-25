@@ -2,7 +2,7 @@ import { TANK_HALF_WIDTH } from "./constants";
 import { absorb } from "./shield";
 import { centre, clampAim, isAlive, occupiesCell } from "./tank";
 import type { Terrain } from "./terrain";
-import type { Explosion, ExplosionHit, Tank, Weapon } from "./types";
+import type { Explosion, HealthLoss, Tank, Weapon } from "./types";
 
 /** Damage dealt to a Tank whose centre is `distance` from the Explosion centre. */
 export function damageAt(weapon: Weapon, distance: number): number {
@@ -35,7 +35,7 @@ export function detonate(
     terrain.fillCircle(x, y, weapon.radius, (cx, cy) => tanks.some((t) => occupiesCell(t, cx, cy)));
     return { kind: "dirt", x, y, radius: weapon.radius, hits: [], elapsed: 0 };
   }
-  const hits: ExplosionHit[] = [];
+  const hits: HealthLoss[] = [];
   for (const t of tanks) {
     if (!isAlive(t)) continue;
     const c = centre(t);

@@ -93,6 +93,34 @@ export function healthLine(match: Match): HealthLine | null {
   };
 }
 
+/** HUD line 2's text after the Health bar: the Shield Strength and the thinking marker. */
+export function afterHealthBar(line: HealthLine, thinking: boolean): Piece[] {
+  const after: Piece[] = [];
+  if (line.shield !== null) after.push([`  Shield ${line.shield}`, line.color]);
+  if (thinking) after.push(["  (thinking…)", HUD_TEXT]);
+  return after;
+}
+
+/**
+ * Where HUD line 2 is laid out on a canvas `width` px wide, measuring text with `measure`: the
+ * right edge of the left-hand run (name, Health, Health bar, Shield, thinking marker) and the left
+ * edge of the right-aligned Wind and Round. They fit while leftEnd < statusStart.
+ */
+export function line2Layout(
+  line: HealthLine,
+  thinking: boolean,
+  status: string,
+  width: number,
+  measure: (text: string) => number,
+): { leftEnd: number; statusStart: number } {
+  const run = (pieces: readonly Piece[]) => pieces.reduce((w, [t]) => w + measure(t), 0);
+  const barX = LEFT + measure(`${line.text} `);
+  return {
+    leftEnd: barX + BAR_WIDTH + run(afterHealthBar(line, thinking)),
+    statusStart: width - LEFT - measure(status),
+  };
+}
+
 export function drawHud(ctx: CanvasRenderingContext2D, match: Match): void {
   const { round } = match;
   if (!round) return;
@@ -112,10 +140,7 @@ export function drawHud(ctx: CanvasRenderingContext2D, match: Match): void {
     ctx.fillStyle = line2.color;
     ctx.fillRect(x, barTop, Math.round((BAR_WIDTH * line2.health) / MAX_HEALTH), BAR_HEIGHT);
     // Line 1 has no room left at 640 px, so the Shield and thinking marker follow the Health bar.
-    const after: Piece[] = [];
-    if (line2.shield !== null) after.push([`  Shield ${line2.shield}`, line2.color]);
-    if (round.isComputerThinking) after.push(["  (thinking…)", HUD_TEXT]);
-    drawRun(ctx, after, x + BAR_WIDTH, LINE_2_Y);
+    drawRun(ctx, afterHealthBar(line2, round.isComputerThinking), x + BAR_WIDTH, LINE_2_Y);
   }
   ctx.fillStyle = HUD_TEXT;
   ctx.textAlign = "right";
