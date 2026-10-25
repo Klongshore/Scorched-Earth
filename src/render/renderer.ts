@@ -1,5 +1,11 @@
-import { BARREL_LENGTH, EXPLOSION_SECONDS, TANK_HALF_WIDTH, TANK_HEIGHT } from "../sim/constants";
-import { barrelTip, isAlive } from "../sim/tank";
+import {
+  BARREL_LENGTH,
+  EXPLOSION_SECONDS,
+  shieldNamed,
+  TANK_HALF_WIDTH,
+  TANK_HEIGHT,
+} from "../sim/constants";
+import { centre, barrelTip, isAlive, isSupported } from "../sim/tank";
 import type { Terrain } from "../sim/terrain";
 import type { Explosion, Tank } from "../sim/types";
 import type { Match } from "../sim/match";
@@ -19,6 +25,14 @@ const TURN_MARKER_GAP = 6;
 const TURN_MARKER_SIZE = 4;
 const TANK_HEALTH_FONT = "10px monospace";
 const TANK_HEALTH_GAP = 2; // px from the tip of a barrel at 90° to the Health baseline
+const SHIELD_RADIUS = 14; // px from the Tank centre to the Shield bubble
+const SHIELD_LINE_WIDTH = 1;
+const SHIELD_MAX_ALPHA = 1; // a Shield at its full Shield Strength
+const SHIELD_MIN_ALPHA = 0.2; // a Shield about to be gone, still visible
+const CANOPY_RADIUS = 5; // the Parachute canopy is a half-disc 10 px across
+const CANOPY_CLEARANCE = 3; // px from the tip of a barrel at 90° to the canopy's flat edge
+const CANOPY_LINE_SPREAD = 2; // px either side of the Tank's centre where the lines meet its top
+const CANOPY_LINE_WIDTH = 1;
 
 export class Renderer {
   private readonly context: CanvasRenderingContext2D;
@@ -67,7 +81,10 @@ export class Renderer {
       if (!isAlive(tank)) continue;
       const { color } = round.playerOf(tank.playerId);
       this.drawTank(tank, color);
-      this.drawTankHealth(tank, color);
+      this.drawShield(tank, color);
+      // The canopy sits where the Health is drawn, so it hides the Health while it is open.
+      if (tank.parachute && !isSupported(tank, terrain)) this.drawCanopy(tank, color);
+      else this.drawTankHealth(tank, color);
     }
     if (phase.kind === "aiming") this.drawTurnMarker(round.currentTank());
     if (phase.kind === "resolving") {
@@ -103,6 +120,46 @@ export class Renderer {
     ctx.fillStyle = color;
     const baseline = tank.y - TANK_HEIGHT - BARREL_LENGTH - TANK_HEALTH_GAP;
     ctx.fillText(String(tank.health), tank.x + 0.5, baseline);
+    ctx.restore();
+  }
+
+  /** A circle round a shielded Tank in its Player's colour, fading as its Shield Strength drops. */
+  private drawShield(tank: Tank, color: string): void {
+    const { shield } = tank;
+    if (!shield) return;
+    const left = Math.min(1, Math.max(0, shield.strength / shieldNamed(shield.name).strength));
+    const ctx = this.context;
+    const c = centre(tank);
+    ctx.save();
+    ctx.globalAlpha = SHIELD_MIN_ALPHA + (SHIELD_MAX_ALPHA - SHIELD_MIN_ALPHA) * left;
+    ctx.strokeStyle = color;
+    ctx.lineWidth = SHIELD_LINE_WIDTH;
+    ctx.beginPath();
+    ctx.arc(c.x + 0.5, c.y, SHIELD_RADIUS, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  /** An open Parachute: a half-disc above the Tank, with a line down to each side of the Tank's top. */
+  private drawCanopy(tank: Tank, color: string): void {
+    const ctx = this.context;
+    const cx = tank.x + 0.5;
+    const topY = tank.y - TANK_HEIGHT;
+    const edgeY = topY - BARREL_LENGTH - CANOPY_CLEARANCE;
+    ctx.save();
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.arc(cx, edgeY, CANOPY_RADIUS, Math.PI, 0);
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = color;
+    ctx.lineWidth = CANOPY_LINE_WIDTH;
+    ctx.beginPath();
+    ctx.moveTo(cx - CANOPY_RADIUS, edgeY);
+    ctx.lineTo(cx - CANOPY_LINE_SPREAD, topY);
+    ctx.moveTo(cx + CANOPY_RADIUS, edgeY);
+    ctx.lineTo(cx + CANOPY_LINE_SPREAD, topY);
+    ctx.stroke();
     ctx.restore();
   }
 

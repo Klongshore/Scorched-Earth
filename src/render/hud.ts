@@ -72,18 +72,53 @@ export interface HealthLine {
   text: string;
   color: string;
   health: number;
+  shield: number | null; // the current Tank's Shield Strength; null with no Shield raised
 }
 
 /**
- * HUD line 2: only the current Player's name and Health, and only while they are aiming.
+ * HUD line 2: only the current Player's name, Health and Shield Strength, and only while they are
+ * aiming.
  * Every Tank's Health is drawn above the Tank itself, so the HUD never lists every Player.
  */
 export function healthLine(match: Match): HealthLine | null {
   const { round } = match;
   if (!round || round.phase.kind !== "aiming") return null;
   const player = round.playerOf(round.currentPlayerId);
-  const { health } = round.currentTank();
-  return { text: `${player.name}: ${health}`, color: player.color, health };
+  const { health, shield } = round.currentTank();
+  return {
+    text: `${player.name}: ${health}`,
+    color: player.color,
+    health,
+    shield: shield?.strength ?? null,
+  };
+}
+
+/** HUD line 2's text after the Health bar: the Shield Strength and the thinking marker. */
+export function afterHealthBar(line: HealthLine, thinking: boolean): Piece[] {
+  const after: Piece[] = [];
+  if (line.shield !== null) after.push([`  Shield ${line.shield}`, line.color]);
+  if (thinking) after.push(["  (thinking…)", HUD_TEXT]);
+  return after;
+}
+
+/**
+ * Where HUD line 2 is laid out on a canvas `width` px wide, measuring text with `measure`: the
+ * right edge of the left-hand run (name, Health, Health bar, Shield, thinking marker) and the left
+ * edge of the right-aligned Wind and Round. They fit while leftEnd < statusStart.
+ */
+export function line2Layout(
+  line: HealthLine,
+  thinking: boolean,
+  status: string,
+  width: number,
+  measure: (text: string) => number,
+): { leftEnd: number; statusStart: number } {
+  const run = (pieces: readonly Piece[]) => pieces.reduce((w, [t]) => w + measure(t), 0);
+  const barX = LEFT + measure(`${line.text} `);
+  return {
+    leftEnd: barX + BAR_WIDTH + run(afterHealthBar(line, thinking)),
+    statusStart: width - LEFT - measure(status),
+  };
 }
 
 export function drawHud(ctx: CanvasRenderingContext2D, match: Match): void {
@@ -104,10 +139,8 @@ export function drawHud(ctx: CanvasRenderingContext2D, match: Match): void {
     ctx.fillRect(x, barTop, BAR_WIDTH, BAR_HEIGHT);
     ctx.fillStyle = line2.color;
     ctx.fillRect(x, barTop, Math.round((BAR_WIDTH * line2.health) / MAX_HEALTH), BAR_HEIGHT);
-    // Line 1 has no room left at 640 px, so the thinking marker follows the Health bar.
-    if (round.isComputerThinking) {
-      drawRun(ctx, [["  (thinking…)", HUD_TEXT]], x + BAR_WIDTH, LINE_2_Y);
-    }
+    // Line 1 has no room left at 640 px, so the Shield and thinking marker follow the Health bar.
+    drawRun(ctx, afterHealthBar(line2, round.isComputerThinking), x + BAR_WIDTH, LINE_2_Y);
   }
   ctx.fillStyle = HUD_TEXT;
   ctx.textAlign = "right";

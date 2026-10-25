@@ -44,20 +44,23 @@ Health, along with the Wind and the Round.
 
 Every Player starts the Match with **$2,000** and earns more in battle: **$50** for each point of
 Health removed from another Tank, **$2,000** for each other Tank destroyed, and **$5,000** for a
-Round Win. Harming your own Tank earns nothing, and a Draw pays no Round Win bonus. The Round
-results show what each Player earned that Round and their total. Money is only for spending: Round
-Wins alone decide the Match.
+Round Win. This counts Health removed and Tanks destroyed during Settling too, such as Fall Damage
+or a Tank falling to the bottom of the field: the Player whose Turn it is earns for them. Harming
+your own Tank earns nothing, damage a Shield absorbs earns nothing, and a Draw pays no Round Win
+bonus. The Round results show what each Player earned that Round and their total. Money is only
+for spending: Round Wins alone decide the Match.
 
 The **Shop** opens before every Round, including the first. Each Human gets their own Shop screen
-in Player order, showing their Money and every Weapon on sale with its Bundle (how many one
-purchase buys), its price and how many they own. Weapons you can't afford are greyed out. Use
-`↑` / `↓` to choose, `Enter` to buy one Bundle, and **Done** or `Esc` to finish. Computer Players
-shop first, instantly and off screen: they keep buying a random Bundle they can afford until they
-can afford none. A Match of only Computer Players shows no Shop screen and goes straight into
-battle.
+in Player order, showing their Money and every Weapon and Item on sale with its Bundle (how many
+one purchase buys), its price and how many they own. Anything you can't afford is greyed out, and
+the list scrolls to keep the row you've chosen in view. Use `↑` / `↓` to choose, `Enter` to buy
+one Bundle, and **Done** or `Esc` to finish. Computer Players shop first, instantly and off
+screen: they keep buying a random Bundle they can afford until they can afford none. A Match of
+only Computer Players shows no Shop screen and goes straight into the Round.
 
-Your **Inventory** and Money last the whole Match, even if your Tank is destroyed. Firing a Weapon
-uses one up, except the Baby Missile, which every Player always has without limit.
+Your **Inventory** (the Weapons and Items you own) and Money last the whole Match, even if your
+Tank is destroyed. Firing a Weapon uses one up, except the Baby Missile, which every Player always
+has without limit.
 
 ### Weapons
 
@@ -92,6 +95,33 @@ opponent: the dirt packs around a Tank without filling it, and any left hanging 
 A buried Tank can still fire, but its shot explodes in the dirt at the barrel tip, so it has to
 blast its way out and takes some of its own damage.
 
+### Items
+
+| Item         | Bundle | Price   | What it does                                               |
+| ------------ | ------ | ------- | ---------------------------------------------------------- |
+| Shield       | 3      | $6,000  | Absorbs up to 50 Explosion damage before Health            |
+| Heavy Shield | 2      | $10,000 | Absorbs up to 100 Explosion damage before Health           |
+| Parachute    | 5      | $3,000  | Opens by itself on a long fall and cancels its Fall Damage |
+
+**Shields.** At the start of every Round, before the first Turn, each Player who owns a Shield
+raises their strongest one (a Heavy Shield before a Shield), using it up from their Inventory. A
+raised Shield shows as a bubble in its Player's colour around their Tank, fading as its **Shield
+Strength** drops, and the HUD shows the current Player's Shield Strength after their Health. It
+absorbs Explosion damage, including from your own Weapons, before any reaches Health; damage beyond
+the remaining Shield Strength comes off Health, and the Shield is gone at 0. Dirt Weapons leave it
+untouched, and it doesn't absorb Fall Damage. On your Turn, press `S` to raise a fresh Shield in
+place of a weakened one; this doesn't end your Turn, and it does nothing if you own no Shield or
+your raised Shield is already at least as strong. A Computer Player raises a new Shield at the start
+of its Turn only once its old one is gone. Raised Shields vanish at the end of the Round, while the
+Shields still in your Inventory carry over.
+
+**Fall Damage and Parachutes.** A Tank that falls further than 10 px while Settling, for example
+into a crater dug beneath it, takes **Fall Damage** of ½ Health for each pixel beyond that, once
+everything has come to rest. Riding down on falling dirt counts as one fall, and a Tank that falls
+to the bottom of the field is still destroyed. If you own a **Parachute**, one opens by itself as soon
+as your Tank's fall passes the safe distance, shown as a canopy in your colour, and cancels that
+fall's Fall Damage. A fall uses at most one Parachute, and a short drop uses none.
+
 ## Run it locally
 
 Requires Node.js 24 or later.
@@ -119,9 +149,10 @@ Other scripts:
 | `↑` / `↓`           | Raise / lower Power                     |
 | `Shift` + `↑` / `↓` | Raise / lower Power by 10               |
 | `Tab` / `Shift+Tab` | Next / previous Weapon you own          |
+| `S`                 | Raise a fresh Shield you own            |
 | `Space`             | Fire                                    |
 | `Enter`             | Start / continue on the overlay screens |
-| `↑` / `↓`, `Esc`    | Choose a Weapon / finish in the Shop    |
+| `↑` / `↓`, `Esc`    | Choose what to buy / finish in the Shop |
 
 In hot-seat play every Human uses the same keys on their own Turn. Your Power can never exceed
 10 × your Tank's Health, shown as `Power: {power}/{cap}` in the HUD. Each Turn starts on the last

@@ -177,6 +177,7 @@ After this milestone Items can be bought but do nothing yet.
 
 - `ShopRow.name` becomes a `ShopName`. `shopView` builds one row per entry in `FOR_SALE`, so Items follow the Weapons.
 - The panel now has 14 rows, more than fit in 640 × 480. Don't shrink the rows: let the list scroll instead. Give `.shop` a `max-height` and `overflow-y: auto`, so the header, **Done** and the hint stay in view while the rows scroll between them. When focus moves to a row (with `↑`/`↓`, after a purchase, or when the screen opens), call `scrollIntoView({ block: "nearest" })` on it, so the focused row is always visible.
+  - _As built:_ the code doesn't use `scrollIntoView`. It focuses with `focus({ preventScroll: true })` and sets the list's `scrollTop` from the pure `scrollToShow`. This keeps the focus outline in view as well as the row, and the logic can be tested without a DOM. `↑`/`↓` also scroll over the disabled rows they skip (`rowsToShow`, `scrollToShowRange`), and page the list when only **Done** can take focus (`scrollPage`), so keyboard users can see every row.
 
 ### 2.4 Tests
 

@@ -1,12 +1,6 @@
-import {
-  MAX_HEALTH,
-  PAD_HALF_WIDTH,
-  PLACEMENT_EDGE_MARGIN,
-  PLACEMENT_MAX_JITTER,
-  START_ANGLE,
-  START_POWER,
-} from "./constants";
+import { PAD_HALF_WIDTH, PLACEMENT_EDGE_MARGIN, PLACEMENT_MAX_JITTER } from "./constants";
 import type { Rng } from "./rng";
+import { newTank } from "./tank";
 import type { Terrain } from "./terrain";
 import type { Tank } from "./types";
 
@@ -23,14 +17,7 @@ export function placeTanks(rng: Rng, terrain: Terrain, playerIds: readonly numbe
     const x = Math.min(width - 1 - PLACEMENT_EDGE_MARGIN, Math.max(PLACEMENT_EDGE_MARGIN, raw));
     const groundY = terrain.surfaceY(x);
     terrain.flatten(x - PAD_HALF_WIDTH, x + PAD_HALF_WIDTH, groundY);
-    byPlayer.set(playerId, {
-      playerId,
-      x,
-      y: groundY,
-      angle: START_ANGLE,
-      power: START_POWER,
-      health: MAX_HEALTH,
-    });
+    byPlayer.set(playerId, newTank(playerId, x, groundY));
   });
   return playerIds.map((id) => byPlayer.get(id) as Tank);
 }

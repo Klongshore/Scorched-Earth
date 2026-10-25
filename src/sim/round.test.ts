@@ -3,6 +3,7 @@ import {
   BARREL_LENGTH,
   COMPUTER_THINK_SECONDS,
   EXPLOSION_SECONDS,
+  FALL_SAFE_PIXELS,
   FIELD_HEIGHT,
   FIELD_WIDTH,
   MAX_ANGLE,
@@ -21,10 +22,12 @@ import {
   WIND_MAX,
   weaponNamed,
 } from "./constants";
+import { damageAt, detonate } from "./explosion";
 import { createPlayers } from "./players";
 import { Rng } from "./rng";
 import { emptyLoadout } from "./inventory";
 import { Round, type RoundAction } from "./round";
+import { fallDamage } from "./settling";
 import { barrelTip, centre, isSupported, occupiesCell } from "./tank";
 import type { Terrain } from "./terrain";
 import type { Explosion, PlayerSetup, Tank, WeaponName } from "./types";
@@ -62,6 +65,13 @@ function scenario(
   other.x = otherX;
   other.y = GROUND;
   return { round, firer, other };
+}
+
+/** Clear a slab `depth` px deep under a Tank, so it falls that far on the next Settling. */
+function undercutTank(round: Round, tank: Tank, depth: number): void {
+  for (let y = tank.y; y < tank.y + depth; y++) {
+    for (let x = tank.x - 20; x <= tank.x + 20; x++) round.terrain.set(x, y, false);
+  }
 }
 
 /** Fire straight up so the Projectile falls back onto the firer. */
@@ -194,15 +204,112 @@ describe("Round", () => {
     expect(other.health).toBe(MAX_HEALTH);
   });
 
-  it("drops a Tank whose dirt is carved away, with no fall damage", () => {
+  it("drops a Tank whose dirt is carved away, and lands its Fall Damage once at rest", () => {
     const { round, other } = scenario(150, 500);
     round.terrain.carveCircle(other.x, other.y + 15, 20);
     expect(isSupported(other, round.terrain)).toBe(false);
     round.phase = { kind: "settling" };
-    runUntil(round, (r) => r.phase.kind === "aiming");
-    expect(other.y).toBeGreaterThan(GROUND);
+    runUntil(round, (r) => {
+      if (r.phase.kind === "settling") expect(other.health).toBe(MAX_HEALTH);
+      return r.phase.kind === "aiming";
+    });
+    const drop = other.y - GROUND;
+    expect(drop).toBeGreaterThan(FALL_SAFE_PIXELS);
     expect(isSupported(other, round.terrain)).toBe(true);
+    expect(other.health).toBe(MAX_HEALTH - fallDamage(drop));
+    expect(other.fallen).toBe(0);
+  });
+
+  it("opens a Parachute for a 60 px fall, using exactly one, and lands no Fall Damage", () => {
+    const { round, other } = scenario(150, 500);
+    const inventory = round.inventoryOf(other.playerId);
+    inventory.add("Parachute", 5);
+    undercutTank(round, other, 60);
+    round.phase = { kind: "settling" };
+    runUntil(round, (r) => r.phase.kind === "aiming");
+    expect(other.y).toBe(GROUND + 60);
     expect(other.health).toBe(MAX_HEALTH);
+    expect(inventory.count("Parachute")).toBe(4);
+    expect(other.parachute).toBe(false);
+  });
+
+  it("uses one Parachute for each of two falls in two Turns", () => {
+    const { round, firer, other } = scenario(150, 500);
+    const inventory = round.inventoryOf(other.playerId);
+    inventory.add("Parachute", 5);
+    for (const turnOf of [firer, other]) {
+      expect(round.currentTank()).toBe(turnOf);
+      undercutTank(round, other, 30);
+      round.phase = { kind: "settling" };
+      runUntil(round, (r) => r.phase.kind === "aiming");
+    }
+    expect(other.y).toBe(GROUND + 60);
+    expect(other.health).toBe(MAX_HEALTH);
+    expect(inventory.count("Parachute")).toBe(3);
+  });
+
+  it("carries the Parachutes left into the next Round, where they still open", () => {
+    const players = createPlayers([HUMAN, HUMAN]);
+    const loadout = emptyLoadout(players);
+    loadout.inventories[1]?.add("Parachute", 5);
+    for (const [number, left] of [
+      [1, 4],
+      [2, 3],
+    ] as const) {
+      const round = new Round(number, players, new Rng(1), loadout);
+      round.wind = 0;
+      round.terrain.flatten(0, FIELD_WIDTH - 1, GROUND);
+      const tank = round.tankOf(1);
+      tank.x = 500;
+      tank.y = GROUND;
+      undercutTank(round, tank, 60);
+      round.phase = { kind: "settling" };
+      runUntil(round, (r) => r.phase.kind === "aiming");
+      expect(tank.health).toBe(MAX_HEALTH);
+      expect(round.inventoryOf(1).count("Parachute")).toBe(left);
+    }
+  });
+
+  it("ends the Turn only after dirt on a Tank its Fall Damage destroyed has fallen", () => {
+    const { round, other } = scenario(150, 500);
+    other.health = 1;
+    const roofX = other.x;
+    round.terrain.set(roofX, other.y - TANK_HEIGHT - 1, true);
+    for (let y = GROUND; y < GROUND + 30; y++) {
+      for (let x = other.x - 20; x <= other.x + 20; x++) round.terrain.set(x, y, false);
+    }
+    round.phase = { kind: "settling" };
+    let settlingTicksAfterDeath = 0;
+    runUntil(round, (r) => {
+      if (other.health === 0 && r.phase.kind === "settling") settlingTicksAfterDeath++;
+      return r.phase.kind === "over";
+    });
+    expect(other.y).toBe(GROUND + 30);
+    expect(other.health).toBe(0);
+    expect(settlingTicksAfterDeath).toBeGreaterThan(1);
+    // The dirt that rode down on its roof fell through it onto the Terrain below.
+    expect(round.terrain.isSolid(roofX, other.y - 1)).toBe(true);
+    expect(round.terrain.isSolid(roofX, other.y - TANK_HEIGHT - 1)).toBe(false);
+  });
+
+  it("leaves a Tank over a Nuke on flat Terrain with 100 - Explosion damage - Fall Damage", () => {
+    const { round, firer, other } = scenario(150, 500);
+    // A surface higher than GROUND, so the crater stops short of the bottom of the field.
+    const surface = 250;
+    round.terrain.flatten(0, FIELD_WIDTH - 1, surface);
+    firer.y = surface;
+    other.y = surface;
+    const nuke = weaponNamed("Nuke");
+    const explosionY = surface + 40;
+    const explosionDamage = damageAt(nuke, Math.hypot(0, centre(other).y - explosionY));
+    detonate(other.x, explosionY, nuke, round.terrain, round.tanks);
+    expect(other.health).toBe(MAX_HEALTH - explosionDamage);
+    round.phase = { kind: "settling" };
+    runUntil(round, (r) => r.phase.kind === "aiming");
+    const drop = other.y - surface;
+    expect(fallDamage(drop)).toBeGreaterThan(0);
+    expect(other.health).toBe(MAX_HEALTH - explosionDamage - fallDamage(drop));
+    expect(other.health).toBeGreaterThan(0);
   });
 
   it("is deterministic for the same seed and actions", () => {
@@ -276,6 +383,41 @@ describe("Round earnings", () => {
     expect(round.earnings[other.playerId]).toBe(0);
   });
 
+  it("pays nothing for damage a Shield absorbs, only for the Health removed past it", () => {
+    const fireAtShielded = (strength: number) => {
+      const { round, firer, other } = scenario(300, 300 + BARREL_LENGTH + 2);
+      other.y = GROUND - 1;
+      other.shield = { name: "Shield", strength };
+      firer.angle = 0;
+      firer.power = 0;
+      round.act({ kind: "fire" });
+      runUntil(round, settled);
+      return { round, firer, other };
+    };
+    // The same 25-damage hit as above, fully absorbed: no Health lost, no Money.
+    const full = fireAtShielded(50);
+    expect(full.other.health).toBe(MAX_HEALTH);
+    expect(full.other.shield?.strength).toBe(25);
+    expect(full.round.earnings[full.firer.playerId]).toBe(0);
+    // Partly absorbed: 10 to the Shield (dropping it), 15 to Health, paid for the 15.
+    const part = fireAtShielded(10);
+    expect(part.other.shield).toBeNull();
+    expect(part.other.health).toBe(MAX_HEALTH - 15);
+    expect(part.round.earnings[part.firer.playerId]).toBe(MONEY_PER_DAMAGE * 15);
+  });
+
+  it("pays Fall Damage to a shielded Tank in full, the Shield untouched", () => {
+    const { round, firer, other } = scenario(150, 500);
+    other.shield = { name: "Heavy Shield", strength: 100 };
+    round.terrain.carveCircle(other.x, other.y + 15, 20);
+    round.phase = { kind: "settling" };
+    runUntil(round, settled);
+    const lost = MAX_HEALTH - other.health;
+    expect(lost).toBeGreaterThan(0);
+    expect(other.shield?.strength).toBe(100);
+    expect(round.earnings[firer.playerId]).toBe(MONEY_PER_DAMAGE * lost);
+  });
+
   it("pays $500 + $2,000 for destroying a 10-Health Tank", () => {
     const { round, firer, other } = scenario(300, 312);
     other.health = 10;
@@ -293,13 +435,58 @@ describe("Round earnings", () => {
     expect(round.earnings).toEqual([0, 0]);
   });
 
-  it("pays no one when a Tank dies by Settling to the bottom", () => {
-    const { round, other } = scenario(150, 500);
+  it("pays the current Player for the Health and the Tank lost by Settling to the bottom", () => {
+    const { round, firer, other } = scenario(150, 500);
     round.terrain.carveCircle(other.x, FIELD_HEIGHT - 1, 30);
     for (let y = other.y; y < FIELD_HEIGHT; y++) round.terrain.carveCircle(other.x, y, 12);
     round.phase = { kind: "settling" };
     runUntil(round, (r) => r.phase.kind === "over");
     expect(other.health).toBe(0);
+    expect(round.earnings[firer.playerId]).toBe(
+      MONEY_PER_DAMAGE * MAX_HEALTH + MONEY_PER_DESTROYED_TANK,
+    );
+    expect(round.earnings[other.playerId]).toBe(0);
+  });
+
+  it("pays the current Player $50 per point of Fall Damage to another Tank", () => {
+    const { round, firer, other } = scenario(150, 500);
+    round.terrain.carveCircle(other.x, other.y + 15, 20);
+    round.phase = { kind: "settling" };
+    runUntil(round, settled);
+    const lost = MAX_HEALTH - other.health;
+    expect(lost).toBeGreaterThan(0);
+    expect(other.health).toBeGreaterThan(0);
+    expect(round.earnings[firer.playerId]).toBe(MONEY_PER_DAMAGE * lost);
+    expect(round.earnings[other.playerId]).toBe(0);
+  });
+
+  it("pays the destroyed-Tank bonus when Fall Damage destroys another Tank", () => {
+    const { round, firer, other } = scenario(150, 500);
+    other.health = 1;
+    round.terrain.carveCircle(other.x, other.y + 15, 20);
+    round.phase = { kind: "settling" };
+    runUntil(round, settled);
+    expect(other.health).toBe(0);
+    expect(round.earnings[firer.playerId]).toBe(MONEY_PER_DAMAGE + MONEY_PER_DESTROYED_TANK);
+  });
+
+  it("pays the current Player nothing for a fall a Parachute saves", () => {
+    const { round, firer, other } = scenario(150, 500);
+    round.inventoryOf(other.playerId).add("Parachute", 5);
+    undercutTank(round, other, 60);
+    round.phase = { kind: "settling" };
+    runUntil(round, settled);
+    expect(other.health).toBe(MAX_HEALTH);
+    expect(round.earnings[firer.playerId]).toBe(0);
+    expect(round.earnings).toEqual([0, 0]);
+  });
+
+  it("pays nothing for Fall Damage to the current Player's own Tank", () => {
+    const { round, firer } = scenario(150, 500);
+    round.terrain.carveCircle(firer.x, firer.y + 15, 20);
+    round.phase = { kind: "settling" };
+    runUntil(round, settled);
+    expect(firer.health).toBeLessThan(MAX_HEALTH);
     expect(round.earnings).toEqual([0, 0]);
   });
 });
@@ -312,11 +499,14 @@ describe("Round Weapons", () => {
     expect(weaponName(newRound())).toBe("Baby Missile");
   });
 
-  it("cycles both ways through owned Weapons only, wrapping round", () => {
+  it("cycles both ways through owned Weapons only, never an Item, wrapping round", () => {
     const round = newRound();
     const inventory = round.inventoryOf(round.currentPlayerId);
     inventory.add("Missile", 5);
     inventory.add("Nuke", 1);
+    inventory.add("Shield", 3);
+    inventory.add("Heavy Shield", 2);
+    inventory.add("Parachute", 5);
     const seen: string[] = [];
     for (let i = 0; i < 4; i++) {
       round.act({ kind: "cycleWeapon", delta: 1 });
@@ -560,10 +750,17 @@ describe("Round splitters", () => {
     const pieceX = Math.min(...fireAndCollect(dry.round, dry.firer, 60, 400).map((e) => e.x));
     const mirv = scenario(100, Math.round(pieceX));
     arm(mirv.round, "MIRV");
-    fireAndCollect(mirv.round, mirv.firer, 60, 400);
-    const removed = MAX_HEALTH - mirv.other.health;
+    const pieces = fireAndCollect(mirv.round, mirv.firer, 60, 400);
+    // The pieces' Explosions pay, and so does the Fall Damage from the crater: each exactly once.
+    const removed = pieces
+      .flatMap((e) => e.hits)
+      .filter((h) => h.playerId === mirv.other.playerId)
+      .reduce((sum, h) => sum + h.healthRemoved, 0);
     expect(removed).toBeGreaterThan(0);
-    expect(mirv.round.earnings[mirv.firer.playerId]).toBe(MONEY_PER_DAMAGE * removed);
+    const fell = MAX_HEALTH - removed - mirv.other.health;
+    expect(fell).toBeGreaterThan(0);
+    expect(mirv.other.health).toBeGreaterThan(0);
+    expect(mirv.round.earnings[mirv.firer.playerId]).toBe(MONEY_PER_DAMAGE * (removed + fell));
 
     // Bomblets scatter at random: across seeds, some must hit the other Tank standing beside
     // the Funky Bomb's crater, beyond the Funky Bomb's own reach.
@@ -578,14 +775,11 @@ describe("Round splitters", () => {
       arm(round, "Funky Bomb");
       const explosions = fireAndCollect(round, firer, 60, 400);
       expect(explosions[0]?.hits.some((h) => h.playerId === other.playerId)).toBe(false);
-      let expected = 0;
-      for (const e of explosions) {
-        for (const h of e.hits) {
-          if (h.playerId === firer.playerId) continue;
-          expected += MONEY_PER_DAMAGE * h.healthRemoved;
-          if (h.destroyed) expected += MONEY_PER_DESTROYED_TANK;
-        }
-      }
+      // Every point the other Tank lost, to Explosions or to Settling, pays once.
+      const expected =
+        MONEY_PER_DAMAGE * (MAX_HEALTH - other.health) +
+        (other.health === 0 ? MONEY_PER_DESTROYED_TANK : 0);
+      expect(explosions.length).toBeGreaterThan(0);
       expect(round.earnings[firer.playerId]).toBe(expected);
       bombletMoney += expected;
     }

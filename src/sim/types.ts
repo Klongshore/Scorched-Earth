@@ -19,6 +19,15 @@ export interface Tank {
   angle: number; // integer degrees
   power: number; // integer
   health: number; // integer 0..100
+  fallen: number; // px fallen during the current Settling; 0 at rest
+  parachute: boolean; // a Parachute is open for the current Settling
+  shield: RaisedShield | null; // the raised Shield; null once its Shield Strength is gone
+}
+
+/** A Shield raised around a Tank: which one, and the Shield Strength it has left. */
+export interface RaisedShield {
+  readonly name: ShieldName;
+  strength: number;
 }
 
 export type WeaponName =
@@ -50,6 +59,30 @@ export type Weapon =
   | (WeaponBase & { readonly kind: "roller"; readonly maxDamage: number })
   | (WeaponBase & { readonly kind: "dirt" }); // adds dirt, damages no one
 
+export type ShieldName = "Shield" | "Heavy Shield";
+export type ItemName = ShieldName | "Parachute";
+/** Anything the Shop sells. */
+export type ShopName = WeaponName | ItemName;
+
+interface ItemBase {
+  readonly bundle: number;
+  readonly price: number; // per Bundle
+}
+
+export type ShieldItem = ItemBase & {
+  readonly name: ShieldName;
+  readonly kind: "shield";
+  readonly strength: number; // Shield Strength: damage it absorbs before it is gone
+};
+
+/** Something sold in the Shop that is not a Weapon. */
+export type Item =
+  | ShieldItem
+  | (ItemBase & { readonly name: "Parachute"; readonly kind: "parachute" });
+
+/** Anything the Shop sells: every Weapon but the Baby Missile, and every Item, each in Bundles. */
+export type ForSale = (Weapon | Item) & { readonly bundle: number };
+
 export interface Projectile {
   x: number;
   y: number;
@@ -61,8 +94,8 @@ export interface Projectile {
   rolling?: { direction: -1 | 1; seconds: number } | null;
 }
 
-/** What an Explosion did to one Tank it damaged. */
-export interface ExplosionHit {
+/** Health one Tank lost, to an Explosion or to Settling (Fall Damage). */
+export interface HealthLoss {
   readonly playerId: number;
   readonly healthRemoved: number; // Health actually removed, never more than the Tank had
   readonly destroyed: boolean; // alive before, dead after
@@ -73,6 +106,6 @@ export interface Explosion {
   readonly x: number;
   readonly y: number;
   readonly radius: number;
-  readonly hits: readonly ExplosionHit[]; // one per Tank whose Health it removed
+  readonly hits: readonly HealthLoss[]; // one per Tank whose Health it removed
   elapsed: number; // seconds since it started
 }

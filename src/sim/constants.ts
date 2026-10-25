@@ -1,4 +1,4 @@
-import type { Weapon, WeaponName } from "./types";
+import type { ForSale, Item, ShieldItem, ShieldName, ShopName, Weapon, WeaponName } from "./types";
 
 // Field
 export const FIELD_WIDTH = 640;
@@ -34,6 +34,10 @@ export const BARREL_LENGTH = 12;
 export const PAD_HALF_WIDTH = 10; // flattened ground each side of a Tank
 export const TANK_FALL_PIXELS_PER_TICK = 2;
 
+// Fall Damage
+export const FALL_SAFE_PIXELS = 10; // a fall up to this far does no damage
+export const FALL_DAMAGE_PER_PIXEL = 0.5; // Health per px fallen beyond FALL_SAFE_PIXELS, rounded down
+
 // Weapons
 /** Every Weapon, in Shop order. */
 export const WEAPONS: readonly Weapon[] = [
@@ -59,6 +63,39 @@ export function weaponNamed(name: WeaponName): Weapon {
 }
 
 export const BABY_MISSILE = weaponNamed("Baby Missile");
+
+// Items
+/** Every Item, in Shop order (after the Weapons). */
+export const ITEMS: readonly Item[] = [
+  { name: "Shield", kind: "shield", bundle: 3, price: 6_000, strength: 50 },
+  { name: "Heavy Shield", kind: "shield", bundle: 2, price: 10_000, strength: 100 },
+  { name: "Parachute", kind: "parachute", bundle: 5, price: 3_000 },
+];
+
+/** Every Shield Item, in Shop order. */
+export const SHIELDS: readonly ShieldItem[] = ITEMS.filter(
+  (i): i is ShieldItem => i.kind === "shield",
+);
+
+/** The Shield with this name. */
+export function shieldNamed(name: ShieldName): ShieldItem {
+  const shield = SHIELDS.find((s) => s.name === name);
+  if (!shield) throw new Error(`No Shield named ${name}`);
+  return shield;
+}
+
+/** Everything the Shop sells, in Shop order: Weapons (never the Baby Missile), then Items. */
+export const FOR_SALE: readonly ForSale[] = [
+  ...WEAPONS.filter((w): w is Weapon & ForSale => w.bundle !== null),
+  ...ITEMS,
+];
+
+/** The Weapon or Item the Shop sells with this name; throws for the Baby Missile. */
+export function forSaleNamed(name: ShopName): ForSale {
+  const forSale = FOR_SALE.find((f) => f.name === name);
+  if (!forSale) throw new Error(`${name} is not sold in the Shop`);
+  return forSale;
+}
 
 // Splitters
 export const MIRV_PIECES = 5; // what a MIRV splits into at the top of its arc

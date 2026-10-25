@@ -5,12 +5,12 @@ import {
   MAX_ROUNDS,
   MIN_PLAYERS,
   MIN_ROUNDS,
-  WEAPONS,
+  FOR_SALE,
 } from "../sim/constants";
 import type { Match } from "../sim/match";
 import { canAfford } from "../sim/shop";
 import { playerLook } from "../sim/players";
-import type { Player, PlayerSetup, WeaponName } from "../sim/types";
+import type { Player, PlayerSetup, ShopName } from "../sim/types";
 
 /** What the Setup screen chooses; the Game adds the seed to make a MatchSetup. */
 export interface SetupChoice {
@@ -70,7 +70,8 @@ export function formatMoney(amount: number): string {
   return `$${String(Math.round(amount)).replace(/\B(?=(\d{3})+(?!\d))/g, ",")}`;
 }
 
-const CONTROLS_REMINDER = "←/→ Angle   ↑/↓ Power (Shift ×10)   Tab Weapon   Space Fire";
+export const CONTROLS_REMINDER =
+  "←/→ Angle   ↑/↓ Power (Shift ×10)\nTab Weapon   S Shield   Space Fire";
 
 /** Turn whatever is in the Rounds box into a valid Round count (MIN_ROUNDS..MAX_ROUNDS). */
 export function clampRounds(value: string | number): number {
@@ -281,9 +282,9 @@ export function showStandings(overlay: HTMLElement, match: Match): void {
   );
 }
 
-/** One Shop row: a Weapon on sale, one Bundle at a time. */
+/** One Shop row: a Weapon or Item on sale, one Bundle at a time. */
 export interface ShopRow {
-  readonly name: WeaponName;
+  readonly name: ShopName;
   readonly bundle: string; // "×5"
   readonly price: string; // "$1,875", per Bundle
   readonly owned: number;
@@ -299,7 +300,7 @@ export interface ShopView {
 
 /**
  * The Shop screen for the Match's current shopper: their name and Money, then one row per
- * Weapon in catalogue order except the Baby Missile, which is never sold.
+ * Weapon or Item for sale, in Shop order (the Baby Missile is never sold).
  */
 export function shopView(match: Match): ShopView {
   const playerId = match.currentShopper;
@@ -307,18 +308,14 @@ export function shopView(match: Match): ShopView {
   if (!player) throw new Error("No one is shopping");
   const money = match.money[player.id] ?? 0;
   const inventory = match.inventoryOf(player.id);
-  const rows = WEAPONS.flatMap((weapon): ShopRow[] =>
-    weapon.bundle === null
-      ? []
-      : [
-          {
-            name: weapon.name,
-            bundle: `×${weapon.bundle}`,
-            price: formatMoney(weapon.price),
-            owned: inventory.count(weapon.name),
-            disabled: !canAfford(weapon, money),
-          },
-        ],
+  const rows = FOR_SALE.map(
+    (forSale): ShopRow => ({
+      name: forSale.name,
+      bundle: `×${forSale.bundle}`,
+      price: formatMoney(forSale.price),
+      owned: inventory.count(forSale.name),
+      disabled: !canAfford(forSale, money),
+    }),
   );
   return { player, money: formatMoney(money), rows };
 }
@@ -346,6 +343,75 @@ export function settleShopFocus(rows: readonly ShopRow[], focus: number): number
   return rows.length;
 }
 
+/** How far a focused button's outline reaches past it (outline + offset in style.css). */
+const FOCUS_OUTLINE_PX = 4;
+
+/** A vertical span in px: a scrolling box's visible part, or a row inside it. */
+export interface Span {
+  readonly top: number;
+  readonly height: number;
+}
+
+/**
+ * The scroll offset that shows all of `row` (measured from the top of the scrolled content)
+ * in a box currently showing `view`, moving the least it can: unchanged if the row is already
+ * in view, else just far enough to bring its top or bottom edge to the box's edge. A row taller
+ * than the box is shown from its top.
+ */
+export function scrollToShow(view: Span, row: Span): number {
+  if (row.top < view.top || row.height > view.height) return row.top;
+  if (row.top + row.height > view.top + view.height) return row.top + row.height - view.height;
+  return view.top;
+}
+
+/** Rows `first`..`last` of the Shop list, and the one of them that must be in view. */
+export interface RowRange {
+  readonly first: number;
+  readonly last: number;
+  readonly target: number;
+}
+
+/**
+ * The rows a keyboard move of Shop focus from `from` to `to` (in direction `delta`, as
+ * moveShopFocus returns it) should bring into view, so disabled rows it skips are still seen:
+ * every row passed over, and the row landed on as the target. Landing on Done targets the last
+ * row, so the list shows its end; wrapping down from Done to a row shows the list from row 0.
+ * Null when focus did not move.
+ */
+export function rowsToShow(
+  rowCount: number,
+  from: number,
+  to: number,
+  delta: 1 | -1,
+): RowRange | null {
+  if (from === to || rowCount === 0) return null;
+  const last = rowCount - 1;
+  if (to === rowCount) {
+    const first = delta === 1 && from < to ? Math.min(from + 1, last) : last;
+    return { first, last, target: last };
+  }
+  if (delta === 1) return { first: to > from ? from + 1 : 0, last: to, target: to };
+  return { first: to, last: Math.min(from - 1, last), target: to };
+}
+
+/**
+ * The scroll offset that shows as much of `range` as fits in a box showing `view`, always
+ * including all of `target` (a row inside the range), moving the least it can.
+ */
+export function scrollToShowRange(view: Span, range: Span, target: Span): number {
+  const top = scrollToShow(view, range);
+  return scrollToShow({ top, height: view.height }, target);
+}
+
+/**
+ * The scroll offset one box-height up (-1) or down (1) from `view`, kept within content
+ * `contentHeight` tall: how ↑/↓ still page through the rows when none can take focus.
+ */
+export function scrollPage(view: Span, contentHeight: number, delta: 1 | -1): number {
+  const max = Math.max(0, contentHeight - view.height);
+  return Math.min(max, Math.max(0, view.top + delta * view.height));
+}
+
 /** What a key does on the Shop screen: finish, move focus up (-1) or down (1), or nothing. */
 export function shopKeyAction(key: string): "finish" | 1 | -1 | null {
   switch (key) {
@@ -363,7 +429,8 @@ export function shopKeyAction(key: string): "finish" | 1 | -1 | null {
 /**
  * Show the current shopper's Shop screen. ↑/↓ move between the enabled rows and Done; Enter
  * (routed through the returned handler) buys one Bundle of the focused row or finishes on
- * Done; Esc also finishes. ↑/↓ and Esc work wherever focus is while the Shop is showing.
+ * Done; Esc also finishes. ↑/↓ and Esc work wherever focus is while the Shop is showing, and
+ * scroll the list over any disabled rows they skip (or page it when nothing can take focus).
  * `onDone` is called at most once.
  */
 export function showShop(overlay: HTMLElement, match: Match, onDone: () => void): () => void {
@@ -374,7 +441,7 @@ export function showShop(overlay: HTMLElement, match: Match, onDone: () => void)
   let buttons: HTMLButtonElement[] = [];
 
   const header = el("h2");
-  const list = el("div", undefined, "shop");
+  const list = el("div", undefined, "shop"); // scrolls; header, Done and hint stay fixed
   const done = el("button", "Done");
   done.type = "button";
 
@@ -383,8 +450,16 @@ export function showShop(overlay: HTMLElement, match: Match, onDone: () => void)
     const action = shopKeyAction(event.key);
     if (action === null) return;
     event.preventDefault();
-    if (action === "finish") finish();
-    else focusOn(moveShopFocus(shopView(match).rows, focus, action));
+    if (action === "finish") {
+      finish();
+      return;
+    }
+    const from = focus;
+    const to = moveShopFocus(shopView(match).rows, from, action);
+    focusOn(to);
+    const range = rowsToShow(buttons.length, from, to, action);
+    if (range) showRows(range);
+    else if (to === buttons.length) pageList(action);
   };
 
   const finish = (): void => {
@@ -396,7 +471,36 @@ export function showShop(overlay: HTMLElement, match: Match, onDone: () => void)
 
   const focusOn = (index: number): void => {
     focus = index;
-    (buttons[index] ?? done).focus();
+    (buttons[index] ?? done).focus({ preventScroll: true });
+  };
+
+  /** A row's vertical span in the list, focus outline included. */
+  const spanOf = (button: HTMLButtonElement): Span => ({
+    top: button.offsetTop - FOCUS_OUTLINE_PX,
+    height: button.offsetHeight + 2 * FOCUS_OUTLINE_PX,
+  });
+  const listView = (): Span => ({ top: list.scrollTop, height: list.clientHeight });
+
+  /** Scroll the list the least it takes to show this row in full, focus outline included. */
+  const showRow = (button: HTMLButtonElement): void => {
+    list.scrollTop = scrollToShow(listView(), spanOf(button));
+  };
+
+  /** Scroll the list to show the rows a keyboard move passed over, and the one it landed on. */
+  const showRows = ({ first, last, target }: RowRange): void => {
+    const top = buttons[first];
+    const bottom = buttons[last];
+    const landed = buttons[target];
+    if (!top || !bottom || !landed) return;
+    const a = spanOf(top);
+    const b = spanOf(bottom);
+    const range = { top: a.top, height: b.top + b.height - a.top };
+    list.scrollTop = scrollToShowRange(listView(), range, spanOf(landed));
+  };
+
+  /** With focus stuck on Done (nothing affordable), page through the rows instead. */
+  const pageList = (delta: 1 | -1): void => {
+    list.scrollTop = scrollPage(listView(), list.scrollHeight, delta);
   };
 
   const buy = (index: number): void => {
@@ -422,6 +526,7 @@ export function showShop(overlay: HTMLElement, match: Match, onDone: () => void)
       button.addEventListener("click", () => buy(i));
       button.addEventListener("focus", () => {
         focus = i;
+        showRow(button);
       });
       return button;
     });

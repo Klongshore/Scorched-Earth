@@ -31,11 +31,12 @@ import { placeTanks } from "./placement";
 import { launch, stepProjectile } from "./projectile";
 import { startRolling, stepRolling } from "./roller";
 import type { Rng } from "./rng";
-import { settleTick } from "./settling";
+import { landTanks, settleTick } from "./settling";
+import { raiseShield } from "./shield";
 import { clampAim, hitTest, isAlive } from "./tank";
 import type { Terrain } from "./terrain";
 import { generateHills } from "./terrainGen";
-import type { Explosion, Player, Projectile, Tank, Weapon, WeaponName } from "./types";
+import type { Explosion, HealthLoss, Player, Projectile, Tank, Weapon, WeaponName } from "./types";
 
 export type Phase =
   | { kind: "aiming"; thinkTicks: number | null } // ticks left to think; non-null only for Computer Players
@@ -50,6 +51,7 @@ export type RoundAction =
   | { kind: "adjustAngle"; delta: number }
   | { kind: "adjustPower"; delta: number }
   | { kind: "cycleWeapon"; delta: 1 | -1 } // step through the Weapons the Player owns
+  | { kind: "raiseShield" } // replace the raised Shield with the strongest owned one
   | { kind: "fire" };
 
 export class Round {
@@ -74,6 +76,11 @@ export class Round {
    * a split MIRV's middle piece. Null once it has landed or been lost.
    */
   private barrelProjectile: Projectile | null = null;
+  /**
+   * Every Tank's Health, indexed like `tanks`, as Settling began: after every Explosion was over.
+   * Null outside Settling.
+   */
+  private healthBeforeSettling: number[] | null = null;
 
   constructor(
     number: number,
@@ -95,6 +102,8 @@ export class Round {
     this.wind = rng.int(-WIND_MAX, WIND_MAX);
     this.turnOrder = rng.shuffle(playerIds);
     this.currentIndex = 0;
+    // Every owner's strongest Shield goes up before the first Turn, in Player order.
+    for (const p of players) raiseShield(this.tankOf(p.id), this.inventoryOf(p.id));
     this.beginTurn();
   }
 
@@ -127,6 +136,10 @@ export class Round {
         break;
       case "cycleWeapon":
         this.cycleWeapon(action.delta);
+        break;
+      case "raiseShield":
+        // Stays aiming: the Turn goes on with the same Player.
+        raiseShield(tank, this.inventoryOf(this.currentPlayerId));
         break;
       case "fire":
         this.fire();
@@ -174,8 +187,18 @@ export class Round {
         }
         break;
       case "settling":
-        // The Turn only ends once all dirt and Tanks are at rest.
-        if (!settleTick(this.terrain, this.tanks)) this.endTurn();
+        // The Turn only ends once all dirt and Tanks are at rest. Fall Damage lands then; if it
+        // destroys a Tank, the dirt on that Tank falls and Settling goes on. Health is recorded
+        // on Settling's first tick, before anything moves, and paid for once all is at rest.
+        this.healthBeforeSettling ??= this.tanks.map((t) => t.health);
+        if (
+          !settleTick(this.terrain, this.tanks, (id) => this.useParachute(id)) &&
+          !landTanks(this.terrain, this.tanks)
+        ) {
+          this.paySettling(this.healthBeforeSettling);
+          this.healthBeforeSettling = null;
+          this.endTurn();
+        }
         break;
       case "over":
         break;
@@ -278,8 +301,35 @@ export class Round {
   /** Detonate a Weapon (the Projectile's own by default) at (x, y), crediting its firer's earnings. */
   private explode(p: Projectile, x: number, y: number, weapon: Weapon = p.weapon): Explosion {
     const explosion = detonate(x, y, weapon, this.terrain, this.tanks);
-    this.earn(p.firedBy, moneyEarned(explosion, p.firedBy));
+    this.earn(p.firedBy, moneyEarned(explosion.hits, p.firedBy));
     return explosion;
+  }
+
+  /**
+   * All Settling happens during someone's Turn, so the current Player earns, by the same Money
+   * rule as Explosions, for the Health Settling removed: Fall Damage and sinking to the bottom of
+   * the field alike. Harm to their own Tank pays nothing.
+   */
+  private paySettling(healthBefore: readonly number[]): void {
+    const losses: HealthLoss[] = [];
+    this.tanks.forEach((t, i) => {
+      const before = healthBefore[i] ?? t.health;
+      if (t.health >= before) return;
+      losses.push({
+        playerId: t.playerId,
+        healthRemoved: before - t.health,
+        destroyed: !isAlive(t),
+      });
+    });
+    this.earn(this.currentPlayerId, moneyEarned(losses, this.currentPlayerId));
+  }
+
+  /** Use up one of a Player's Parachutes; false if they own none. */
+  private useParachute(playerId: number): boolean {
+    const inventory = this.inventoryOf(playerId);
+    if (inventory.count("Parachute") <= 0) return false;
+    inventory.useOne("Parachute");
+    return true;
   }
 
   private endTurn(): void {
@@ -308,6 +358,8 @@ export class Round {
     if (player.kind === "computer") {
       const tank = this.currentTank();
       if (!player.personality) throw new Error(`Computer player ${player.id} has no Personality`);
+      // Only once its Shield is gone, never replacing a damaged one. Draws nothing from rng.
+      if (!tank.shield) raiseShield(tank, this.inventoryOf(player.id));
       const memory = this.requireMemory(player.id);
       const aim = chooseAim(player.personality, tank, this.tanks, memory, this.rng);
       // After the aim, so the aim's draws keep their order.

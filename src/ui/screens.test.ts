@@ -6,11 +6,18 @@ import {
   MAX_ROUNDS,
   MIN_PLAYERS,
   MIN_ROUNDS,
+  FIELD_WIDTH,
+  MAX_HEALTH,
+  MONEY_PER_DAMAGE,
+  TICK_SECONDS,
   WEAPONS,
+  forSaleNamed,
 } from "../sim/constants";
+import { fallDamage } from "../sim/settling";
 import { Match } from "../sim/match";
 import { createPlayers } from "../sim/players";
 import {
+  CONTROLS_REMINDER,
   DEFAULT_PLAYERS_SETUP,
   PLAYER_COUNTS,
   PLAYER_OPTIONS,
@@ -20,6 +27,10 @@ import {
   optionValue,
   resizePlayerChoices,
   roundResultsRows,
+  rowsToShow,
+  scrollPage,
+  scrollToShow,
+  scrollToShowRange,
   settleShopFocus,
   setupChoiceFrom,
   shopKeyAction,
@@ -87,6 +98,15 @@ describe("Player choices on the Setup screen", () => {
       if (player.kind === "human") expect(player.personality).toBeNull();
       else expect(player.personality).not.toBeNull();
     }
+  });
+});
+
+describe("Controls reminder on the Setup screen", () => {
+  it("mentions S Shield on the second of two lines", () => {
+    expect(CONTROLS_REMINDER.split("\n")).toEqual([
+      "←/→ Angle   ↑/↓ Power (Shift ×10)",
+      "Tab Weapon   S Shield   Space Fire",
+    ]);
   });
 });
 
@@ -214,7 +234,9 @@ describe("Shop view", () => {
 
   it("lists every Weapon but the Baby Missile, with its Bundle, price and owned count", () => {
     const view = shopView(shopping());
-    expect(view.rows.map((r) => r.name)).toEqual(WEAPONS.slice(1).map((w) => w.name));
+    expect(view.rows.slice(0, WEAPONS.length - 1).map((r) => r.name)).toEqual(
+      WEAPONS.slice(1).map((w) => w.name),
+    );
     expect(listing(view.rows, SAMPLED)).toEqual([
       ["Missile", "×5", "$1,875", 0],
       ["Baby Nuke", "×3", "$10,000", 0],
@@ -233,6 +255,28 @@ describe("Shop view", () => {
       ["Dirt Ball", "×5", "$5,000", 0],
       ["Ton of Dirt", "×2", "$6,750", 0],
     ]);
+  });
+
+  it("shows 14 rows: the Weapons, then Shield, Heavy Shield and Parachute", () => {
+    const match = shopping();
+    match.money[1] = 20_000;
+    match.buy(1, "Parachute");
+    const view = shopView(match);
+    expect(view.rows).toHaveLength(14);
+    expect(view.rows.slice(11).map((r) => [r.name, r.bundle, r.price, r.owned])).toEqual([
+      ["Shield", "×3", "$6,000", 0],
+      ["Heavy Shield", "×2", "$10,000", 0],
+      ["Parachute", "×5", "$3,000", 5],
+    ]);
+  });
+
+  it("disables the Item rows the shopper cannot afford", () => {
+    const match = shopping();
+    const items = ["Shield", "Heavy Shield", "Parachute"];
+    const disabled = () => pick(shopView(match).rows, items).map((r) => r.disabled);
+    expect(disabled()).toEqual([true, true, true]); // $2,000 buys no Item
+    match.money[1] = forSaleNamed("Shield").price;
+    expect(disabled()).toEqual([false, true, false]);
   });
 
   it("disables the rows the shopper cannot afford", () => {
@@ -336,6 +380,40 @@ describe("Round results", () => {
       ["Player 1", "0", "$1,250", "$3,250"],
     ]);
   });
+
+  it("include what the current Player earned from Settling in the Earned column", () => {
+    const match = new Match({
+      players: [{ kind: "human" }, { kind: "human" }],
+      rounds: 3,
+      seed: 1,
+    });
+    match.finishShopping(0);
+    match.finishShopping(1);
+    const round = match.requireRound();
+    const surface = 400;
+    round.terrain.flatten(0, FIELD_WIDTH - 1, surface);
+    const firer = round.currentTank();
+    const other = round.tanks.find((t) => t !== firer);
+    if (!other) throw new Error("expected two Tanks");
+    firer.x = 150;
+    other.x = 500;
+    firer.y = other.y = surface;
+    const depth = 60; // dig out from under the other Tank: it falls this far
+    for (let y = surface; y < surface + depth; y++) {
+      for (let x = other.x - 20; x <= other.x + 20; x++) round.terrain.set(x, y, false);
+    }
+    round.phase = { kind: "settling" };
+    for (let i = 0; i < 20_000 && round.phase.kind === "settling"; i++) round.tick(TICK_SECONDS);
+    const fall = fallDamage(depth);
+    expect(fall).toBeGreaterThan(0);
+    expect(other.health).toBe(MAX_HEALTH - fall);
+    round.phase = { kind: "over", result: { kind: "draw" } };
+    match.recordRoundResult();
+    const earned = formatMoney(MONEY_PER_DAMAGE * fall);
+    const rows = roundResultsRows(match).map((r) => [r.player.id, r.earned]);
+    expect(rows).toContainEqual([firer.playerId, earned]);
+    expect(rows).toContainEqual([other.playerId, "$0"]);
+  });
 });
 
 describe("formatMoney", () => {
@@ -345,6 +423,91 @@ describe("formatMoney", () => {
     expect(formatMoney(2000)).toBe("$2,000");
     expect(formatMoney(12345)).toBe("$12,345");
     expect(formatMoney(1234567)).toBe("$1,234,567");
+  });
+});
+
+describe("Shop scrolling", () => {
+  const view = { top: 100, height: 200 }; // showing 100..300 of the rows
+
+  it("leaves the list where it is when the row is already in full view", () => {
+    expect(scrollToShow(view, { top: 100, height: 25 })).toBe(100);
+    expect(scrollToShow(view, { top: 275, height: 25 })).toBe(100);
+  });
+
+  it("scrolls up just far enough to show a row above", () => {
+    expect(scrollToShow(view, { top: 80, height: 25 })).toBe(80);
+    expect(scrollToShow(view, { top: 0, height: 25 })).toBe(0);
+  });
+
+  it("scrolls down just far enough to show a row below", () => {
+    expect(scrollToShow(view, { top: 290, height: 25 })).toBe(115);
+    expect(scrollToShow(view, { top: 500, height: 25 })).toBe(325);
+  });
+
+  it("shows a row taller than the list from its top", () => {
+    expect(scrollToShow(view, { top: 150, height: 300 })).toBe(150);
+  });
+});
+
+describe("Shop scrolling over skipped rows", () => {
+  const ROW = 25; // px per row in these examples
+  const span = (first: number, last = first) => ({
+    top: first * ROW,
+    height: (last - first + 1) * ROW,
+  });
+
+  it("brings every greyed row at the bottom into view when ↓ jumps to Done at $2,000", () => {
+    const match = new Match({
+      players: [{ kind: "human" }, { kind: "human" }],
+      rounds: 1,
+      seed: 7,
+    });
+    const rows = shopView(match).rows; // only the Missile is affordable
+    expect(rows.filter((r) => !r.disabled).map((r) => r.name)).toEqual(["Missile"]);
+    const done = moveShopFocus(rows, 0, 1);
+    expect(done).toBe(rows.length);
+    const range = rowsToShow(rows.length, 0, done, 1);
+    expect(range).toEqual({ first: 1, last: rows.length - 1, target: rows.length - 1 });
+    // A list showing 8 rows ends up at its end, the last row in full view.
+    const view = { top: 0, height: 8 * ROW };
+    if (!range) throw new Error("expected rows to show");
+    const top = scrollToShowRange(view, span(range.first, range.last), span(range.target));
+    expect(top).toBe(rows.length * ROW - view.height);
+  });
+
+  it("shows the rows passed over in either direction, the row landed on always in view", () => {
+    expect(rowsToShow(14, 2, 9, 1)).toEqual({ first: 3, last: 9, target: 9 });
+    expect(rowsToShow(14, 9, 2, -1)).toEqual({ first: 2, last: 8, target: 2 });
+    expect(rowsToShow(14, 14, 3, -1)).toEqual({ first: 3, last: 13, target: 3 });
+    const view = { top: 0, height: 4 * ROW };
+    // Down past more rows than fit: the landed-on row ends at the bottom edge.
+    expect(scrollToShowRange(view, span(3, 9), span(9))).toBe(6 * ROW);
+    // Up past more rows than fit: the landed-on row starts at the top edge.
+    expect(scrollToShowRange({ top: 10 * ROW, height: 4 * ROW }, span(2, 8), span(2))).toBe(
+      2 * ROW,
+    );
+  });
+
+  it("scrolls to the top when ↓ wraps from Done to the first row", () => {
+    expect(rowsToShow(14, 14, 5, 1)).toEqual({ first: 0, last: 5, target: 5 });
+    expect(rowsToShow(14, 14, 0, 1)).toEqual({ first: 0, last: 0, target: 0 });
+    expect(scrollToShowRange({ top: 200, height: 100 }, span(0), span(0))).toBe(0);
+  });
+
+  it("shows the list's end when ↑ wraps from the first row to Done", () => {
+    expect(rowsToShow(14, 0, 14, -1)).toEqual({ first: 13, last: 13, target: 13 });
+  });
+
+  it("shows nothing new when focus stays put", () => {
+    expect(rowsToShow(14, 14, 14, 1)).toBeNull();
+  });
+
+  it("pages through the list a box-height at a time, within its ends", () => {
+    const view = { top: 0, height: 100 };
+    expect(scrollPage(view, 350, 1)).toBe(100);
+    expect(scrollPage({ top: 200, height: 100 }, 350, 1)).toBe(250);
+    expect(scrollPage({ top: 50, height: 100 }, 350, -1)).toBe(0);
+    expect(scrollPage(view, 80, 1)).toBe(0);
   });
 });
 
