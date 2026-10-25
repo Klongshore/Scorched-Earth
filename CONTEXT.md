@@ -15,7 +15,7 @@ One battle on a single freshly generated terrain, ending when at most one Tank s
 _Avoid_: Level, map, battle
 
 **Turn**:
-One Player's opportunity to aim and fire once within a Round, ending only when everything has come to rest: the Projectile is gone, its Explosion is over, and all Settling is complete.
+One Player's opportunity to aim and fire once within a Round, ending only when everything has come to rest: the Projectile is gone, its Explosion is over, all Settling is complete, and every Death Animation has finished.
 _Avoid_: Move, go, shot
 
 **Round Win**:
@@ -89,6 +89,10 @@ _Avoid_: Bullet, shell, shot
 What happens where a Projectile lands, as set by its Weapon: most remove Terrain and damage Tanks within a radius, with damage falling off from the centre; Dirt Weapons instead add a circle of dirt and damage no one.
 _Avoid_: Blast, impact, detonation
 
+**Death Animation**:
+The visual a destroyed Tank plays before it disappears: a fireball, spark shower, disintegration, or pop and smoke, picked at random. Every Tank destroyed in a Turn plays its Death Animation together once all else has come to rest. It is pure spectacle: it damages no Tank and leaves the Terrain untouched.
+_Avoid_: Death explosion, Explosion (that is a Weapon's damaging blast)
+
 **Wind**:
 A sideways push on projectiles, fixed for the duration of a Round.
 
@@ -141,3 +145,13 @@ _Avoid_: Accessory, gear, equipment, power-up
 **Bundle**:
 The fixed number of one Weapon or Item bought in a single purchase at the Shop, for a fixed price.
 _Avoid_: Pack, lot
+
+### Banter
+
+**Epitaph**:
+A random line shown for a few seconds above a Tank that has just been destroyed, in its Player's colour, with a few lines kept for a Tank that destroyed itself.
+_Avoid_: Death text, death message, last words
+
+**Taunt**:
+An occasional random line of bravado or threat shown above a Tank as its Player is about to fire. It never delays the shot.
+_Avoid_: Trash talk, quip, banter (as a single line)
