@@ -1,4 +1,5 @@
 import { attachKeyboard } from "./input/keyboard";
+import { attachTouchControls } from "./input/touch";
 import type { Renderer } from "./render/renderer";
 import { MAX_TICKS_PER_FRAME, TICK_SECONDS } from "./sim/constants";
 import { Match } from "./sim/match";
@@ -90,6 +91,8 @@ type Screen = "setup" | "shop" | "round" | "roundResults" | "standings";
 export type GameOptions = {
   /** Seed every Match with this instead of the wall clock, to reproduce a Match. */
   readonly seed?: number;
+  /** Where to put the on-screen controls for touch screens; they only work during a Round. */
+  readonly touchControls?: HTMLElement;
 };
 
 /** The app controller: owns the screen state, the keyboard and the fixed-timestep loop. */
@@ -103,6 +106,7 @@ export class Game {
   private confirmShop: (() => void) | null = null;
   private accumulator = 0;
   private detachKeyboard: (() => void) | null = null;
+  private detachTouch: (() => void) | null = null;
   private readonly loop: FrameLoop;
 
   constructor(
@@ -121,6 +125,10 @@ export class Game {
       (action) => this.onAction(action),
       () => this.onConfirm(),
     );
+    const { touchControls } = this.options;
+    if (touchControls) {
+      this.detachTouch = attachTouchControls(touchControls, (action) => this.onAction(action));
+    }
     this.showSetup();
     this.loop.start();
   }
@@ -129,10 +137,18 @@ export class Game {
     this.loop.stop();
     this.detachKeyboard?.();
     this.detachKeyboard = null;
+    this.detachTouch?.();
+    this.detachTouch = null;
+  }
+
+  /** Move to `screen`; the on-screen controls are greyed out except during a Round. */
+  private enter(screen: Screen): void {
+    this.screen = screen;
+    this.options.touchControls?.classList.toggle("idle", screen !== "round");
   }
 
   private showSetup(): void {
-    this.screen = "setup";
+    this.enter("setup");
     this.match = null;
     this.submitSetup = showSetup(this.overlay, (choice) => this.startMatch(choice));
   }
@@ -162,7 +178,7 @@ export class Game {
       this.beginRound();
       return;
     }
-    this.screen = "shop";
+    this.enter("shop");
     this.confirmShop = showShop(this.overlay, match, () => {
       if (this.match !== match || this.screen !== "shop") return;
       match.finishShopping(shopper);
@@ -171,7 +187,7 @@ export class Game {
   }
 
   private beginRound(): void {
-    this.screen = "round";
+    this.enter("round");
     this.resultsDelay = ROUND_RESULTS_DELAY_SECONDS;
     this.accumulator = 0;
     clearOverlay(this.overlay);
@@ -193,8 +209,8 @@ export class Game {
       case "roundResults":
         if (!match) break;
         if (match.isOver()) {
-          this.screen = "standings";
-          showStandings(this.overlay, match);
+          this.enter("standings");
+          showStandings(this.overlay, match, () => this.onConfirm());
         } else {
           match.startNextRound();
           this.shopOrPlay();
@@ -217,8 +233,8 @@ export class Game {
     // Keep ticking and drawing for a moment so the final Explosion stays visible.
     this.resultsDelay -= dt;
     if (this.resultsDelay <= 0) {
-      this.screen = "roundResults";
-      showRoundResults(this.overlay, match);
+      this.enter("roundResults");
+      showRoundResults(this.overlay, match, () => this.onConfirm());
     }
   }
 
