@@ -1,9 +1,12 @@
 import { powerToHit } from "./aiming";
 import {
   BABY_MISSILE,
+  CHOOSER_POWER_ERROR,
+  GRAVITY,
   MAX_ANGLE,
   MIN_ANGLE,
   MIN_POWER,
+  POWER_TO_SPEED,
   SHOOTER_MAX_ANGLE,
   SHOOTER_MIN_ANGLE,
   SHOOTER_POWER_ERROR,
@@ -12,10 +15,11 @@ import {
   TOSSER_LOST_FACTOR,
   TOSSER_MAX_FACTOR,
   TOSSER_MIN_FACTOR,
+  WIND_ACCELERATION_PER_UNIT,
 } from "./constants";
 import type { Inventory } from "./inventory";
 import type { Rng } from "./rng";
-import { isAlive, powerCap } from "./tank";
+import { barrelTip, centre, isAlive, powerCap } from "./tank";
 import type { PersonalityName, Tank, Weapon, WeaponName } from "./types";
 
 export interface Aim {
@@ -88,12 +92,17 @@ function feasibleAims(self: Tank, target: Tank, personality: TargetingPersonalit
 interface PersonalityRules {
   /** Whether it keeps its Target across Turns, rather than choosing again every Turn. */
   readonly keepsTarget: boolean;
-  /** Whether `self` can hit `target` the way this Personality fires, ignoring Wind and Terrain. */
-  reachable(self: Tank, target: Tank): boolean;
+  /** Whether `self` can hit `target` the way this Personality fires, ignoring Terrain. */
+  reachable(self: Tank, target: Tank, wind: number): boolean;
   /** Pick the Target from `candidates`: living, reachable opponents in Player order; never empty. */
   selectTarget(self: Tank, candidates: readonly Tank[], rng: Rng): Tank;
   /** Its aim at `target`, which `selectTarget` chose and so is in reach. */
-  aim(self: Tank, target: Tank, memory: ComputerMemory, rng: Rng): Aim;
+  aim(self: Tank, target: Tank, memory: ComputerMemory, rng: Rng, wind: number): Aim;
+}
+
+/** The lowest-Health candidate, Shield ignored; ties go to the earliest, with no draw. */
+function weakestTarget(_self: Tank, candidates: readonly Tank[]): Tank {
+  return candidates.reduce((weakest, t) => (t.health < weakest.health ? t : weakest));
 }
 
 /** A random candidate, as the Shooter and Tosser have always chosen: one `int` draw. */
@@ -133,14 +142,27 @@ const RULES: Record<TargetingPersonality, PersonalityRules> = {
       return aim;
     },
   },
+  chooser: {
+    keepsTarget: false,
+    reachable: (self, target, wind) => windFeasibleAims(self, target, wind).length > 0,
+    selectTarget: weakestTarget,
+    aim: (self, target, _memory, rng, wind) =>
+      windAim(self, target, wind, rng, CHOOSER_POWER_ERROR),
+  },
 };
 
 /**
  * Whether `self` can reach `target` the way `personality` fires: some Angle it would use
- * toward the Target hits it, ignoring Wind and Terrain, with a Power within `self`'s cap.
+ * toward the Target hits it, ignoring Terrain, with a Power within `self`'s cap. Only the
+ * Personalities that allow for Wind look at `wind`.
  */
-export function isReachable(self: Tank, target: Tank, personality: TargetingPersonality): boolean {
-  return RULES[personality].reachable(self, target);
+export function isReachable(
+  self: Tank,
+  target: Tank,
+  personality: TargetingPersonality,
+  wind: number = 0,
+): boolean {
+  return RULES[personality].reachable(self, target, wind);
 }
 
 /**
@@ -156,16 +178,23 @@ export function chooseTarget(
   tanks: readonly Tank[],
   rng: Rng,
   personality: TargetingPersonality,
+  wind: number = 0,
 ): Tank | null {
   const rules = RULES[personality];
   const kept = tanks.find((t) => t.playerId === memory.targetId);
-  if (rules.keepsTarget && kept && kept !== self && isAlive(kept) && rules.reachable(self, kept)) {
+  if (
+    rules.keepsTarget &&
+    kept &&
+    kept !== self &&
+    isAlive(kept) &&
+    rules.reachable(self, kept, wind)
+  ) {
     return kept;
   }
 
   const opponents = tanks.filter((t) => t !== self && isAlive(t));
   if (opponents.length === 0) throw new Error(`Player ${self.playerId} has no living opponent`);
-  const reachable = opponents.filter((t) => rules.reachable(self, t));
+  const reachable = opponents.filter((t) => rules.reachable(self, t, wind));
   const target = reachable.length === 0 ? null : rules.selectTarget(self, reachable, rng);
   memory.targetId = target?.playerId ?? null;
   memory.lastAim = null;
@@ -180,13 +209,14 @@ export function chooseAim(
   tanks: readonly Tank[],
   memory: ComputerMemory,
   rng: Rng,
+  wind: number = 0,
 ): Aim {
   if (personality === "moron") return moronAim(self, rng);
   // With no reachable opponent, firing at random eventually hits someone or itself, so the
   // Round still ends.
-  const target = chooseTarget(memory, self, tanks, rng, personality);
+  const target = chooseTarget(memory, self, tanks, rng, personality, wind);
   if (!target) return moronAim(self, rng);
-  return RULES[personality].aim(self, target, memory, rng);
+  return RULES[personality].aim(self, target, memory, rng, wind);
 }
 
 /** A Weapon that damages Tanks: every kind but Dirt. */
@@ -202,7 +232,7 @@ function isDamaging(weapon: Weapon): weapon is DamagingWeapon {
  *
  * - Moron: a random owned Weapon, drawing from rng only when it owns more than the Baby
  *   Missile, so Morons that never shopped draw exactly as they always have.
- * - Shooter and Tosser: the owned Weapon with the highest max damage, ties broken by catalogue
+ * - Every other Personality: the owned Weapon with the highest max damage, ties broken by catalogue
  *   order, never a Dirt Weapon nor one whose radius reaches back to its own Tank (at least
  *   the horizontal distance to the Target). With no Target, or nothing suitable, the Baby
  *   Missile. They never draw from rng.
@@ -267,6 +297,52 @@ export function shooterAim(
   powerError: number = SHOOTER_POWER_ERROR,
 ): Aim {
   const aims = feasibleAims(self, target, "shooter");
+  if (aims.length === 0) throw new Error(`Player ${target.playerId} is out of reach`);
+  return withPowerError(self, aims[rng.int(0, aims.length - 1)] as Aim, powerError, rng);
+}
+
+/**
+ * The Power that lands a Projectile fired at `angle` from `self` on `target`'s centre once
+ * Wind has pushed it, ignoring Terrain, or null when no Power can. Wind is a steady sideways
+ * acceleration, so the flight is a parabola with a sideways drift: solve for the flight time
+ * from the vertical equation, then for the speed from the horizontal one.
+ */
+function powerToHitInWind(self: Tank, target: Tank, angle: number, wind: number): number | null {
+  const tip = barrelTip({ ...self, angle });
+  const goal = centre(target);
+  const dx = goal.x - tip.x;
+  const dy = goal.y - tip.y; // y points down
+  const radians = (angle * Math.PI) / 180;
+  const cos = Math.cos(radians);
+  const tan = Math.tan(radians);
+  const drift = wind * WIND_ACCELERATION_PER_UNIT;
+  const flightSquared = (2 * (dy + dx * tan)) / (GRAVITY + drift * tan);
+  if (!(flightSquared > 0)) return null;
+  const flight = Math.sqrt(flightSquared);
+  const speed = (dx / flight - 0.5 * drift * flight) / cos;
+  return speed > 0 ? Math.round(speed / POWER_TO_SPEED) : null;
+}
+
+/** The Shooter's Angles toward `target` that hit it through `wind` within the Power cap. */
+function windFeasibleAims(self: Tank, target: Tank, wind: number): Aim[] {
+  const aims: Aim[] = [];
+  for (const base of SHOOTER_BAND) {
+    const angle = towards(self, target, base);
+    const power = powerToHitInWind(self, target, angle, wind);
+    if (power !== null && power <= powerCap(self)) aims.push({ angle, power });
+  }
+  return aims;
+}
+
+/**
+ * An aim at `target` that allows for `wind`: a random Angle among the Shooter's band toward
+ * it that can hit it through the Wind within the Power cap, and the Power to do so ignoring
+ * Terrain, plus up to ±powerError. Pass the Personality's error constant, so Spoiler and
+ * Cyborg can reuse this with theirs. Throws if no such Angle exists: chooseTarget only picks
+ * Targets in reach.
+ */
+export function windAim(self: Tank, target: Tank, wind: number, rng: Rng, powerError: number): Aim {
+  const aims = windFeasibleAims(self, target, wind);
   if (aims.length === 0) throw new Error(`Player ${target.playerId} is out of reach`);
   return withPowerError(self, aims[rng.int(0, aims.length - 1)] as Aim, powerError, rng);
 }
