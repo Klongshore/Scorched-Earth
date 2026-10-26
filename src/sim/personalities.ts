@@ -71,7 +71,7 @@ function powerWithinCap(self: Tank, target: Tank, angle: number): number | null 
  * Power cap, ignoring Wind and Terrain, in that Personality's order of preference.
  */
 function feasibleAims(self: Tank, target: Tank, personality: TargetingPersonality): Aim[] {
-  const bases = personality === "shooter" ? SHOOTER_BAND : TOSSER_ANGLES;
+  const bases = personality === "tosser" ? TOSSER_ANGLES : SHOOTER_BAND;
   const aims: Aim[] = [];
   for (const base of bases) {
     const angle = towards(self, target, base);
@@ -101,11 +101,26 @@ function randomTarget(_self: Tank, candidates: readonly Tank[], rng: Rng): Tank 
   return candidates[rng.int(0, candidates.length - 1)] as Tank;
 }
 
+/** The nearest candidate by horizontal distance; candidates are in Player order, so ties go to the lowest id. */
+function nearestTarget(self: Tank, candidates: readonly Tank[]): Tank {
+  let best = candidates[0] as Tank;
+  for (const t of candidates) {
+    if (Math.abs(t.x - self.x) < Math.abs(best.x - self.x)) best = t;
+  }
+  return best;
+}
+
 const RULES: Record<TargetingPersonality, PersonalityRules> = {
   shooter: {
     keepsTarget: true,
     reachable: (self, target) => feasibleAims(self, target, "shooter").length > 0,
     selectTarget: randomTarget,
+    aim: (self, target, _memory, rng) => shooterAim(self, target, rng),
+  },
+  poolshark: {
+    keepsTarget: false,
+    reachable: (self, target) => feasibleAims(self, target, "poolshark").length > 0,
+    selectTarget: nearestTarget,
     aim: (self, target, _memory, rng) => shooterAim(self, target, rng),
   },
   tosser: {

@@ -833,3 +833,59 @@ describe("Computer Players choose Weapons", () => {
     });
   }
 });
+
+describe("Poolshark Personality", () => {
+  it("targets the nearest reachable opponent by horizontal distance, every Turn", () => {
+    const tanks = fiveTanks();
+    const self = tanks[2] as Tank; // x 300: Player 1 at 180 is 120 away, Player 3 at 420 is 120 away
+    tanks[3] = tankAt(3, 400);
+    const memory = newComputerMemory();
+    const rng = new Rng(3);
+    expect(chooseTarget(memory, self, tanks, rng, "poolshark")?.playerId).toBe(3);
+    (tanks[3] as Tank).health = 0;
+    expect(chooseTarget(memory, self, tanks, rng, "poolshark")?.playerId).toBe(1);
+    (tanks[3] as Tank).health = MAX_HEALTH;
+    expect(chooseTarget(memory, self, tanks, rng, "poolshark")?.playerId).toBe(3);
+  });
+
+  it("gives ties to the lowest Player id without drawing from rng", () => {
+    const tanks = fiveTanks();
+    const self = tanks[2] as Tank;
+    tanks[1] = tankAt(1, 200);
+    tanks[3] = tankAt(3, 400);
+    const rng = new Rng(9);
+    const fresh = new Rng(9);
+    expect(chooseTarget(newComputerMemory(), self, tanks, rng, "poolshark")?.playerId).toBe(1);
+    expect(rng.int(0, 1_000_000)).toBe(fresh.int(0, 1_000_000));
+  });
+
+  it("aims like a Shooter at the same Target", () => {
+    const tanks = fiveTanks();
+    const self = tanks[2] as Tank;
+    const memory = newComputerMemory();
+    const a = chooseAim("poolshark", self, tanks, memory, new Rng(21));
+    const target = tanks[memory.targetId as number] as Tank;
+    expect(a).toEqual(shooterAim(self, target, new Rng(21)));
+  });
+
+  it("picks Weapons like a Shooter", () => {
+    const self = tankAt(0, 60);
+    const target = tankAt(1, 560);
+    const inventory = new Inventory();
+    const rng = new Rng(1);
+    expect(chooseWeapon("poolshark", self, target, inventory, rng)).toBe(
+      chooseWeapon("shooter", self, target, inventory, new Rng(1)),
+    );
+    expect(chooseWeapon("poolshark", self, null, inventory, rng)).toBe("Baby Missile");
+  });
+
+  it("fires like a Moron when no opponent is reachable", () => {
+    const tanks = fiveTanks();
+    const self = tankAt(0, 60, 5);
+    tanks[0] = self;
+    const memory = newComputerMemory();
+    const aim = chooseAim("poolshark", self, tanks, memory, new Rng(17));
+    expect(aim).toEqual(chooseAim("moron", self, tanks, newComputerMemory(), new Rng(17)));
+    expect(memory.targetId).toBeNull();
+  });
+});
