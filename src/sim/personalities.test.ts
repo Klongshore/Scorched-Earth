@@ -981,3 +981,78 @@ describe("Chooser Personality", () => {
     expect(aim).toEqual(chooseAim("moron", self, tanks, newComputerMemory(), new Rng(4)));
   });
 });
+
+describe("Cyborg Personality", () => {
+  const humans = new Set([3, 4]);
+
+  it("prefers the weakest human Player's Tank over a weaker computer's, re-chosen every Turn", () => {
+    const tanks = fiveTanks();
+    const self = tanks[2] as Tank;
+    (tanks[0] as Tank).health = 5;
+    (tanks[3] as Tank).health = 70;
+    (tanks[4] as Tank).health = 40;
+    const memory = newComputerMemory();
+    const rng = new Rng(3);
+    expect(chooseTarget(memory, self, tanks, rng, "cyborg", 0, humans)?.playerId).toBe(4);
+    (tanks[3] as Tank).health = 20;
+    expect(chooseTarget(memory, self, tanks, rng, "cyborg", 0, humans)?.playerId).toBe(3);
+  });
+
+  it("falls back to the weakest opponent when no human is reachable or alive", () => {
+    const tanks = fiveTanks();
+    const self = tanks[2] as Tank;
+    (tanks[0] as Tank).health = 30;
+    (tanks[1] as Tank).health = 60;
+    (tanks[3] as Tank).health = 0;
+    (tanks[4] as Tank).x = self.x + 3; // too close to reach
+    expect(
+      chooseTarget(newComputerMemory(), self, tanks, new Rng(3), "cyborg", 0, humans)?.playerId,
+    ).toBe(0);
+    expect(chooseTarget(newComputerMemory(), self, tanks, new Rng(3), "cyborg")?.playerId).toBe(0);
+  });
+
+  it("breaks ties toward the lowest Player id without drawing from the Rng", () => {
+    const tanks = fiveTanks();
+    const self = tanks[2] as Tank;
+    const rng = new Rng(9);
+    expect(chooseTarget(newComputerMemory(), self, tanks, rng, "cyborg", 0, humans)?.playerId).toBe(
+      3,
+    );
+    expect(rng.next()).toBe(new Rng(9).next());
+  });
+
+  it("hits any Target it can reach in Wind when nothing blocks the shot", () => {
+    const rng = new Rng(8);
+    let checked = 0;
+    for (let i = 0; i < 400; i++) {
+      const self = tankAt(0, rng.int(30, FIELD_WIDTH - 30));
+      const target = tankAt(1, rng.int(30, FIELD_WIDTH - 30));
+      const wind = rng.int(-WIND_MAX, WIND_MAX);
+      if (Math.abs(self.x - target.x) < 40) continue;
+      if (!isReachable(self, target, "cyborg", wind)) continue;
+      const aim = chooseAim("cyborg", self, [self, target], newComputerMemory(), rng, wind);
+      const hit = landingInWind(self, target, aim, wind);
+      const c = centre(target);
+      if (!hit) throw new Error("Projectile did not hit anything");
+      expect(Math.hypot(hit.x - c.x, hit.y - c.y)).toBeLessThanOrEqual(BABY_MISSILE.radius);
+      checked++;
+    }
+    expect(checked).toBeGreaterThan(100);
+  });
+
+  it("fires a random aim like a Moron when no opponent is reachable", () => {
+    const self = tankAt(0, 100);
+    const tanks = [self, tankAt(1, 105)];
+    const aim = chooseAim("cyborg", self, tanks, newComputerMemory(), new Rng(4), 0);
+    expect(aim).toEqual(chooseAim("moron", self, tanks, newComputerMemory(), new Rng(4)));
+  });
+
+  it("picks Weapons like a Shooter", () => {
+    const self = tankAt(0, 100);
+    const target = tankAt(1, 500);
+    const inventory = { owned: () => [weaponNamed("Missile"), weaponNamed("Nuke")] };
+    expect(chooseWeapon("cyborg", self, target, inventory, new Rng(1))).toBe(
+      chooseWeapon("shooter", self, target, inventory, new Rng(1)),
+    );
+  });
+});
