@@ -20,8 +20,16 @@ import {
  */
 const MAX_BACKLOG_SECONDS = 0.25;
 
-/** How long the field stays in view after a Round ends before Round results appear. */
+/** Least time the field stays in view after a Round ends before Round results appear. */
 const ROUND_RESULTS_DELAY_SECONDS = 1;
+
+/**
+ * Seconds from a Round ending until Round results appear, given the seconds left on its longest
+ * Epitaph still showing: the larger of the two, so the last line of the Round can be read.
+ */
+export function roundResultsDelay(epitaphSecondsLeft: number): number {
+  return Math.max(ROUND_RESULTS_DELAY_SECONDS, epitaphSecondsLeft);
+}
 
 /**
  * Feed one frame's wall-clock time into a fixed-timestep accumulator. Calls `tick` with
@@ -229,8 +237,11 @@ export class Game {
     if (!round || match.stage.kind !== "playing") return;
     round.tick(dt);
     if (this.screen !== "round" || round.phase.kind !== "over") return;
-    if (match.results.length < round.number) match.recordRoundResult();
-    // Keep ticking and drawing for a moment so the final Explosion stays visible.
+    if (match.results.length < round.number) {
+      match.recordRoundResult();
+      this.resultsDelay = roundResultsDelay(round.epitaphSecondsLeft);
+    }
+    // Keep ticking and drawing for a moment so the final Death Animation and Epitaphs stay visible.
     this.resultsDelay -= dt;
     if (this.resultsDelay <= 0) {
       this.enter("roundResults");

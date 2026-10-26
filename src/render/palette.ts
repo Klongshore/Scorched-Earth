@@ -6,5 +6,7 @@ export const PROJECTILE_COLOR = "#ffffff";
 export const EXPLOSION_COLORS = ["#ffff40", "#ffa020", "#ff4010"] as const;
 export const DIRT_EXPLOSION_COLORS = ["#c08840", "#a06828", "#784018"] as const; // a Dirt Weapon's
 export const HUD_TEXT = "#ffffff";
+export const HUSK_SHADE = "rgba(0, 0, 0, 0.65)"; // drawn over a husk to darken it
+export const SMOKE_COLOR = "#a0a0a0"; // a pop-and-smoke Death Animation's plume
 export const HUD_STRIP = "rgba(0, 0, 0, 0.5)";
 export const HUD_BAR_BACKGROUND = "#404040";

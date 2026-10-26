@@ -2,6 +2,10 @@ import { describe, expect, it } from "vitest";
 import {
   BARREL_LENGTH,
   COMPUTER_THINK_SECONDS,
+  DEATH_ANIMATION_KINDS,
+  DEATH_ANIMATION_SECONDS,
+  COMPUTER_THINK_TICKS,
+  EPITAPH_SECONDS,
   EXPLOSION_SECONDS,
   FALL_SAFE_PIXELS,
   FIELD_HEIGHT,
@@ -15,6 +19,7 @@ import {
   POWER_PER_HEALTH,
   ROLLER_MAX_SECONDS,
   ROLLER_SPEED,
+  TAUNT_SECONDS,
   TANK_HALF_WIDTH,
   TANK_HEIGHT,
   TICK_SECONDS,
@@ -26,11 +31,19 @@ import { damageAt, detonate } from "./explosion";
 import { createPlayers } from "./players";
 import { Rng } from "./rng";
 import { emptyLoadout } from "./inventory";
+import { EPITAPHS, SELF_INFLICTED_EPITAPHS, TAUNTS } from "./lines";
 import { Round, type RoundAction } from "./round";
 import { fallDamage } from "./settling";
-import { barrelTip, centre, isSupported, occupiesCell } from "./tank";
+import { barrelTip, centre, hitTest, isSupported, occupiesCell } from "./tank";
 import type { Terrain } from "./terrain";
-import type { Explosion, PlayerSetup, Tank, WeaponName } from "./types";
+import type {
+  DeathAnimation,
+  DeathAnimationKind,
+  Explosion,
+  PlayerSetup,
+  Tank,
+  WeaponName,
+} from "./types";
 
 const HUMAN: PlayerSetup = { kind: "human" };
 const MORON: PlayerSetup = { kind: "computer", personality: "moron" };
@@ -1292,5 +1305,551 @@ describe("Round with Dirt Weapons", () => {
     runUntil(round, turnOver);
     expect(hangingCells(round)).toBe(0);
     expect(round.terrain.surfaceY(225)).toBeLessThan(GROUND);
+  });
+});
+
+describe("Round Death Animations", () => {
+  const settled = (r: Round): boolean => r.phase.kind === "aiming" || r.phase.kind === "over";
+
+  /** Ticks a Death Animation lasts, aged the same way as an Explosion. */
+  function dyingTicks(): number {
+    let ticks = 0;
+    for (let elapsed = 0; elapsed < DEATH_ANIMATION_SECONDS; elapsed += TICK_SECONDS) ticks++;
+    return ticks;
+  }
+
+  /** Flat Terrain at GROUND, Wind 0, and three Humans' Tanks moved to these columns, in Turn order. */
+  function threeTanks(xs: readonly [number, number, number]): {
+    round: Round;
+    tanks: [Tank, Tank, Tank];
+  } {
+    const round = new Round(1, createPlayers([HUMAN, HUMAN, HUMAN]), new Rng(1));
+    round.wind = 0;
+    round.terrain.flatten(0, FIELD_WIDTH - 1, GROUND);
+    const tanks = round.turnOrder.map((id) => round.tankOf(id)) as [Tank, Tank, Tank];
+    tanks.forEach((t, i) => {
+      t.x = xs[i] as number;
+      t.y = GROUND;
+    });
+    return { round, tanks };
+  }
+
+  /** The Round's Death Animations; fails unless it is in the dying phase. */
+  function animationsOf(round: Round): DeathAnimation[] {
+    const { phase } = round;
+    if (phase.kind !== "dying") return expect.fail(`${phase.kind}, not dying`);
+    return phase.animations;
+  }
+
+  /** Give the current Human one MIRV, choose it, and fire it at 60° with 400 Power. */
+  function fireMirv(round: Round, firer: Tank): void {
+    round.inventoryOf(firer.playerId).add("MIRV", 1);
+    round.act({ kind: "cycleWeapon", delta: 1 });
+    firer.angle = 60;
+    firer.power = 400;
+    round.act({ kind: "fire" });
+  }
+
+  it("enters the dying phase after Settling, with one Death Animation where the Tank stood", () => {
+    const { round, firer, other } = scenario(300, 312);
+    other.health = 1;
+    fireStraightUp(round, firer);
+    const phases: string[] = [];
+    runUntil(round, (r) => {
+      if (phases.at(-1) !== r.phase.kind) phases.push(r.phase.kind);
+      return r.phase.kind === "dying";
+    });
+    expect(phases).toEqual(["resolving", "settling", "dying"]);
+    expect(round.currentPlayerId).toBe(firer.playerId);
+    expect(animationsOf(round)).toEqual([
+      { playerId: other.playerId, kind: expect.any(String), x: other.x, y: other.y, elapsed: 0 },
+    ]);
+  });
+
+  it("starts the next Turn only once the Death Animation's duration has passed", () => {
+    const { round, tanks } = threeTanks([150, 300, 162]);
+    const [firer, , victim] = tanks;
+    victim.health = 1;
+    fireStraightUp(round, firer);
+    // The Baby Missile lands on the firer, 12 px from the victim; the third Tank is out of reach.
+    runUntil(round, (r) => r.phase.kind === "dying");
+    let ticks = 0;
+    runUntil(round, (r) => {
+      if (r.phase.kind === "dying") {
+        ticks++;
+        expect(r.currentPlayerId).toBe(firer.playerId);
+      }
+      return r.phase.kind !== "dying";
+    });
+    expect(ticks).toBe(dyingTicks());
+    expect(round.phase.kind).toBe("aiming");
+    expect(round.currentPlayerId).not.toBe(firer.playerId);
+  });
+
+  it("ages every Death Animation by each tick's time", () => {
+    const { round, other } = scenario(150, 500);
+    other.health = 0;
+    round.phase = { kind: "settling" };
+    runUntil(round, (r) => r.phase.kind === "dying");
+    round.tick(TICK_SECONDS);
+    round.tick(TICK_SECONDS);
+    expect(animationsOf(round)[0]?.elapsed).toBeCloseTo(2 * TICK_SECONDS, 10);
+  });
+
+  it("never enters the dying phase when no Tank was destroyed", () => {
+    const { round, firer } = scenario(150, 500);
+    fireStraightUp(round, firer);
+    const phases = new Set<string>();
+    runUntil(round, (r) => {
+      phases.add(r.phase.kind);
+      return r.phase.kind === "aiming";
+    });
+    expect(firer.health).toBeLessThan(MAX_HEALTH);
+    expect(phases.has("dying")).toBe(false);
+    expect(round.currentPlayerId).not.toBe(firer.playerId);
+  });
+
+  it("ends the Round in a win only after the final Death Animation", () => {
+    const { round, firer, other } = scenario(300, 312);
+    other.health = 1;
+    fireStraightUp(round, firer);
+    runUntil(round, (r) => r.phase.kind === "dying");
+    let ticks = 0;
+    runUntil(round, (r) => {
+      if (r.phase.kind === "dying") ticks++;
+      return r.phase.kind === "over";
+    });
+    expect(ticks).toBe(dyingTicks());
+    expect(round.phase).toEqual({
+      kind: "over",
+      result: { kind: "win", playerId: firer.playerId },
+    });
+  });
+
+  it("animates both Tanks of a Draw together, then ends in the Draw", () => {
+    const { round, firer, other } = scenario(300, 312);
+    firer.health = 1;
+    other.health = 1;
+    fireStraightUp(round, firer);
+    runUntil(round, (r) => r.phase.kind === "dying");
+    expect(
+      animationsOf(round)
+        .map((a) => a.playerId)
+        .sort(),
+    ).toEqual([0, 1]);
+    runUntil(round, (r) => r.phase.kind === "over");
+    expect(round.phase).toEqual({ kind: "over", result: { kind: "draw" } });
+  });
+
+  it("animates a Tank destroyed by an Explosion and one destroyed by Fall Damage together", () => {
+    const { round, tanks } = threeTanks([150, 162, 500]);
+    const [firer, shot, faller] = tanks;
+    shot.health = 1;
+    faller.health = 1;
+    undercutTank(round, faller, 30);
+    fireStraightUp(round, firer);
+    runUntil(round, (r) => r.phase.kind === "dying");
+    expect(
+      animationsOf(round)
+        .map((a) => a.playerId)
+        .sort(),
+    ).toEqual([shot.playerId, faller.playerId].sort());
+    expect(firer.health).toBeGreaterThan(0);
+  });
+
+  it("animates a Tank that sank to the bottom of the field", () => {
+    const { round, other } = scenario(150, 500);
+    for (let y = other.y; y < FIELD_HEIGHT; y++) round.terrain.carveCircle(other.x, y, 12);
+    round.phase = { kind: "settling" };
+    runUntil(round, (r) => r.phase.kind === "dying");
+    expect(other.health).toBe(0);
+    expect(animationsOf(round).map((a) => a.playerId)).toEqual([other.playerId]);
+  });
+
+  it("animates every Tank a MIRV's pieces destroy together", () => {
+    // Find where the MIRV's outermost pieces land, then stand a 1-Health Tank under each.
+    const dry = threeTanks([100, 620, 630]);
+    fireMirv(dry.round, dry.tanks[0]);
+    const xs: number[] = [];
+    runUntil(dry.round, (r) => {
+      if (r.phase.kind === "resolving") {
+        for (const e of r.phase.explosions) if (!xs.includes(e.x)) xs.push(e.x);
+      }
+      return settled(r);
+    });
+    const left = Math.round(Math.min(...xs));
+    const right = Math.round(Math.max(...xs));
+
+    const { round, tanks } = threeTanks([100, left, right]);
+    const [firer, a, b] = tanks;
+    a.health = 1;
+    b.health = 1;
+    fireMirv(round, firer);
+    runUntil(round, (r) => r.phase.kind !== "resolving" && r.phase.kind !== "settling");
+    expect(
+      animationsOf(round)
+        .map((x) => x.playerId)
+        .sort(),
+    ).toEqual([a.playerId, b.playerId].sort());
+  });
+
+  it("reports a destroyed Tank as a husk until its Death Animation starts, then as gone", () => {
+    const { round, firer, other } = scenario(300, 312);
+    other.health = 1;
+    expect(round.isHusk(other.playerId)).toBe(false);
+    expect(round.isGone(other.playerId)).toBe(false);
+    fireStraightUp(round, firer);
+    runUntil(round, () => other.health === 0);
+    runUntil(round, (r) => {
+      if (r.phase.kind !== "dying") {
+        expect(r.isHusk(other.playerId)).toBe(true);
+        expect(r.isGone(other.playerId)).toBe(false);
+      }
+      return r.phase.kind === "dying";
+    });
+    expect(round.isHusk(other.playerId)).toBe(false);
+    expect(round.isGone(other.playerId)).toBe(true);
+    runUntil(round, (r) => r.phase.kind === "over");
+    expect(round.isHusk(other.playerId)).toBe(false);
+    expect(round.isGone(other.playerId)).toBe(true);
+    // A living Tank is neither.
+    expect(round.isHusk(firer.playerId)).toBe(false);
+    expect(round.isGone(firer.playerId)).toBe(false);
+  });
+
+  it("never lets a husk be hit", () => {
+    const { round, firer, other } = scenario(300, 312);
+    other.health = 1;
+    fireStraightUp(round, firer);
+    runUntil(round, (r) => r.isHusk(other.playerId));
+    const c = centre(other);
+    expect(hitTest(other, c.x, c.y)).toBe(false);
+  });
+
+  it("changes no Health, Shield, Terrain or earnings while dying", () => {
+    const { round, tanks } = threeTanks([150, 300, 162]);
+    const [firer, survivor, victim] = tanks;
+    victim.health = 1;
+    survivor.shield = { name: "Heavy Shield", strength: 10 };
+    fireStraightUp(round, firer);
+    runUntil(round, (r) => r.phase.kind === "dying");
+    const before = {
+      tanks: structuredClone(round.tanks),
+      cells: [...round.terrain.cells],
+      version: round.terrain.version,
+      earnings: [...round.earnings],
+    };
+    runUntil(round, (r) => r.phase.kind !== "dying");
+    expect(round.tanks).toEqual(before.tanks);
+    expect([...round.terrain.cells]).toEqual(before.cells);
+    expect(round.terrain.version).toBe(before.version);
+    expect(round.earnings).toEqual(before.earnings);
+  });
+
+  it("ignores actions while dying", () => {
+    const { round, tanks } = threeTanks([150, 300, 162]);
+    const [firer, , victim] = tanks;
+    victim.health = 1;
+    fireStraightUp(round, firer);
+    runUntil(round, (r) => r.phase.kind === "dying");
+    const angle = firer.angle;
+    round.act({ kind: "adjustAngle", delta: 10 });
+    round.act({ kind: "fire" });
+    expect(firer.angle).toBe(angle);
+    expect(round.phase.kind).toBe("dying");
+  });
+});
+
+describe("Round Death Animation kinds", () => {
+  /** Both Tanks of a two-Human Round already destroyed, from these seeds; their kinds by Player. */
+  function kindsWhenBothDie(seed: number, flavourSeed: number): DeathAnimationKind[] {
+    const players = createPlayers([HUMAN, HUMAN]);
+    const round = new Round(1, players, new Rng(seed), emptyLoadout(players), new Rng(flavourSeed));
+    for (const t of round.tanks) t.health = 0;
+    round.phase = { kind: "settling" };
+    let kinds: DeathAnimationKind[] = [];
+    runUntil(round, ({ phase }) => {
+      if (phase.kind !== "dying") return false;
+      kinds = [...phase.animations].sort((a, b) => a.playerId - b.playerId).map((a) => a.kind);
+      return true;
+    });
+    expect(kinds).toHaveLength(2);
+    return kinds;
+  }
+
+  it("picks every Death Animation's kind from the four kinds", () => {
+    for (let flavourSeed = 1; flavourSeed <= 20; flavourSeed++) {
+      for (const kind of kindsWhenBothDie(1, flavourSeed)) {
+        expect(DEATH_ANIMATION_KINDS).toContain(kind);
+      }
+    }
+  });
+
+  it("picks the same kinds for the same deaths from the same seeds", () => {
+    for (let flavourSeed = 1; flavourSeed <= 20; flavourSeed++) {
+      expect(kindsWhenBothDie(3, flavourSeed)).toEqual(kindsWhenBothDie(3, flavourSeed));
+    }
+  });
+
+  it("picks every kind over many flavour seeds", () => {
+    const seen = new Set<DeathAnimationKind>();
+    for (let flavourSeed = 1; flavourSeed <= 50; flavourSeed++) {
+      for (const kind of kindsWhenBothDie(1, flavourSeed)) seen.add(kind);
+    }
+    expect([...seen].sort()).toEqual([...DEATH_ANIMATION_KINDS].sort());
+  });
+
+  it("picks kinds from the flavour Rng only: the simulation seed never changes them", () => {
+    for (let flavourSeed = 1; flavourSeed <= 20; flavourSeed++) {
+      expect(kindsWhenBothDie(1, flavourSeed)).toEqual(kindsWhenBothDie(99, flavourSeed));
+    }
+  });
+});
+
+describe("Round Epitaphs", () => {
+  /** Ticks until something counted down by each tick's time from `seconds` runs out. */
+  function ticksFor(seconds: number): number {
+    let ticks = 0;
+    for (let left = seconds; left > 0; left -= TICK_SECONDS) ticks++;
+    return ticks;
+  }
+
+  /** Flat Terrain, Wind 0, the firer at 300 and the other Tank 12 px away, with this flavour seed. */
+  function closeRound(flavourSeed: number): { round: Round; firer: Tank; other: Tank } {
+    const players = createPlayers([HUMAN, HUMAN]);
+    const round = new Round(1, players, new Rng(1), emptyLoadout(players), new Rng(flavourSeed));
+    round.wind = 0;
+    round.terrain.flatten(0, FIELD_WIDTH - 1, GROUND);
+    const firer = round.currentTank();
+    const other = round.tanks.find((t) => t !== firer) as Tank;
+    firer.x = 300;
+    firer.y = GROUND;
+    other.x = 312;
+    other.y = GROUND;
+    return { round, firer, other };
+  }
+
+  /** The firer's Baby Missile lands on itself and destroys the chosen Tanks. */
+  function shootAndDestroy(flavourSeed: number, firerDies: boolean, otherDies: boolean) {
+    const scene = closeRound(flavourSeed);
+    if (firerDies) scene.firer.health = 1;
+    if (otherDies) scene.other.health = 1;
+    fireStraightUp(scene.round, scene.firer);
+    return scene;
+  }
+
+  it("adds one Epitaph per destroyed Tank as its Death Animation starts", () => {
+    const { round } = shootAndDestroy(1, true, true);
+    runUntil(round, (r) => {
+      if (r.phase.kind !== "dying") expect(r.lines).toEqual([]);
+      return r.phase.kind === "dying";
+    });
+    expect(round.lines.map((l) => l.playerId).sort()).toEqual([0, 1]);
+    for (const line of round.lines) {
+      expect(line.kind).toBe("epitaph");
+      expect(line.secondsLeft).toBe(EPITAPH_SECONDS);
+      expect([...EPITAPHS, ...SELF_INFLICTED_EPITAPHS]).toContain(line.text);
+    }
+  });
+
+  it("counts Epitaphs down every tick, after the Round is over too, then removes them", () => {
+    const { round, other } = shootAndDestroy(1, false, true);
+    runUntil(round, (r) => r.phase.kind === "dying");
+    const [epitaph] = round.lines;
+    expect(epitaph?.playerId).toBe(other.playerId);
+    let ticks = 0;
+    runUntil(round, (r) => {
+      if (r.lines.length === 0) return true;
+      ticks++;
+      return false;
+    });
+    expect(ticks).toBe(ticksFor(EPITAPH_SECONDS));
+    expect(ticksFor(EPITAPH_SECONDS)).toBeGreaterThan(ticksFor(DEATH_ANIMATION_SECONDS));
+    expect(round.phase.kind).toBe("over");
+  });
+
+  it("never holds up the next Turn", () => {
+    const { round, firer } = shootAndDestroy(1, false, true);
+    runUntil(round, (r) => r.phase.kind === "over");
+    expect(round.phase).toEqual({
+      kind: "over",
+      result: { kind: "win", playerId: firer.playerId },
+    });
+    expect(round.lines).toHaveLength(1);
+    expect(round.lines[0]?.secondsLeft).toBeCloseTo(
+      EPITAPH_SECONDS - ticksFor(DEATH_ANIMATION_SECONDS) * TICK_SECONDS,
+      10,
+    );
+  });
+
+  it("tells how long the longest Epitaph still shows, never counting a Taunt", () => {
+    const { round } = shootAndDestroy(1, false, true);
+    expect(round.epitaphSecondsLeft).toBe(0);
+    runUntil(round, (r) => r.phase.kind === "dying");
+    expect(round.epitaphSecondsLeft).toBe(EPITAPH_SECONDS);
+    round.tick(TICK_SECONDS);
+    expect(round.epitaphSecondsLeft).toBeCloseTo(EPITAPH_SECONDS - TICK_SECONDS, 10);
+    runUntil(round, (r) => r.lines.length === 0);
+    expect(round.epitaphSecondsLeft).toBe(0);
+
+    const taunted = Array.from({ length: 40 }, (_, i) => closeRound(i + 1).round).find((r) => {
+      r.act({ kind: "fire" });
+      return r.lines.length > 0;
+    });
+    expect(taunted?.lines.map((l) => l.kind)).toEqual(["taunt"]);
+    expect(taunted?.epitaphSecondsLeft).toBe(0);
+  });
+
+  it("can give a self-inflicted Epitaph only to a Tank that destroyed itself", () => {
+    const selfTexts = new Set<string>();
+    const otherTexts = new Set<string>();
+    for (let seed = 1; seed <= 100; seed++) {
+      const own = shootAndDestroy(seed, true, false);
+      runUntil(own.round, (r) => r.phase.kind === "dying");
+      for (const l of own.round.lines) selfTexts.add(l.text);
+      const other = shootAndDestroy(seed, false, true);
+      runUntil(other.round, (r) => r.phase.kind === "dying");
+      for (const l of other.round.lines) otherTexts.add(l.text);
+    }
+    expect(SELF_INFLICTED_EPITAPHS.some((t) => selfTexts.has(t))).toBe(true);
+    expect(SELF_INFLICTED_EPITAPHS.some((t) => otherTexts.has(t))).toBe(false);
+  });
+
+  it("gives the same Epitaphs from the same seeds", () => {
+    const texts = (flavourSeed: number): string[] => {
+      const { round } = shootAndDestroy(flavourSeed, true, true);
+      runUntil(round, (r) => r.phase.kind === "dying");
+      return round.lines.map((l) => `${l.playerId}:${l.text}`);
+    };
+    expect(texts(7)).toEqual(texts(7));
+    const varied = new Set(Array.from({ length: 20 }, (_, i) => texts(i + 1).join("|")));
+    expect(varied.size).toBeGreaterThan(1);
+  });
+
+  it("leaves the outcome as the simulation Rng alone decides it, whatever the flavour seed", () => {
+    const outcome = (flavourSeed: number) => {
+      const { round } = shootAndDestroy(flavourSeed, false, true);
+      runUntil(round, (r) => r.phase.kind === "over");
+      return { phase: round.phase, tanks: round.tanks, earnings: round.earnings };
+    };
+    expect(outcome(1)).toEqual(outcome(2));
+  });
+});
+
+describe("Round Taunts", () => {
+  const SEEDS = Array.from({ length: 40 }, (_, i) => i + 1);
+
+  function roundOf(setups: PlayerSetup[], seed: number, flavourSeed: number): Round {
+    const players = createPlayers(setups);
+    return new Round(1, players, new Rng(seed), emptyLoadout(players), new Rng(flavourSeed));
+  }
+
+  /** Ticks until the first shot is in the air. */
+  function ticksToFire(round: Round): number {
+    let ticks = 0;
+    runUntil(round, (r) => {
+      if (r.phase.kind === "resolving") return true;
+      ticks++;
+      return false;
+    });
+    return ticks;
+  }
+
+  it("shows a rolled Taunt while a Computer Player thinks, without changing when it fires", () => {
+    let taunted = 0;
+    for (const flavourSeed of SEEDS) {
+      const round = roundOf([MORON, MORON], 3, flavourSeed);
+      const firer = round.currentPlayerId;
+      const lines = round.lines.map((l) => ({ ...l }));
+      expect(lines.length).toBeLessThanOrEqual(1);
+      for (const line of lines) {
+        expect(line.kind).toBe("taunt");
+        expect(line.playerId).toBe(firer);
+        expect(line.secondsLeft).toBe(TAUNT_SECONDS);
+        expect(TAUNTS).toContain(line.text);
+        taunted++;
+      }
+      // The aim and Weapon are the simulation Rng's alone, whatever the flavour seed.
+      const other = roundOf([MORON, MORON], 3, flavourSeed + 1000);
+      expect(round.tanks).toEqual(other.tanks);
+      expect(round.currentWeapon()).toEqual(other.currentWeapon());
+      expect(ticksToFire(round)).toBe(COMPUTER_THINK_TICKS);
+    }
+    expect(taunted).toBeGreaterThan(0);
+    expect(taunted).toBeLessThan(SEEDS.length);
+  });
+
+  it("adds a Human's rolled Taunt at launch, never while aiming", () => {
+    let taunted = 0;
+    for (const flavourSeed of SEEDS) {
+      const round = roundOf([HUMAN, HUMAN], 1, flavourSeed);
+      round.act({ kind: "adjustAngle", delta: 5 });
+      round.tick(TICK_SECONDS);
+      round.act({ kind: "adjustPower", delta: -5 });
+      expect(round.lines).toEqual([]);
+      const firer = round.currentPlayerId;
+      round.act({ kind: "fire" });
+      expect(round.phase.kind).toBe("resolving");
+      for (const line of round.lines) {
+        expect(line).toMatchObject({ kind: "taunt", playerId: firer, secondsLeft: TAUNT_SECONDS });
+        expect(TAUNTS).toContain(line.text);
+        taunted++;
+      }
+    }
+    expect(taunted).toBeGreaterThan(0);
+    expect(taunted).toBeLessThan(SEEDS.length);
+  });
+
+  it("keeps a Taunt up while the Projectile flies, then lets it expire", () => {
+    const flavourSeed = SEEDS.find((seed) => {
+      const round = roundOf([HUMAN, HUMAN], 1, seed);
+      round.act({ kind: "fire" });
+      return round.lines.length > 0;
+    });
+    const round = roundOf([HUMAN, HUMAN], 1, flavourSeed ?? 0);
+    round.wind = 0;
+    round.currentTank().angle = 60;
+    round.act({ kind: "fire" });
+    let ticks = 0;
+    runUntil(round, (r) => {
+      if (r.lines.length === 0) return true;
+      if (ticks * TICK_SECONDS < 1) expect(r.phase.kind).toBe("resolving");
+      ticks++;
+      return false;
+    });
+    let expected = 0;
+    for (let left = TAUNT_SECONDS; left > 0; left -= TICK_SECONDS) expected++;
+    expect(ticks).toBe(expected);
+  });
+
+  it("rolls a Taunt on roughly a quarter of Turns", () => {
+    let turns = 0;
+    let taunts = 0;
+    for (const flavourSeed of SEEDS.concat(SEEDS.map((s) => s + 100))) {
+      const round = roundOf([HUMAN, HUMAN], 1, flavourSeed);
+      for (let turn = 0; turn < 5 && round.phase.kind === "aiming"; turn++) {
+        round.currentTank().angle = 90;
+        round.currentTank().power = 1;
+        round.act({ kind: "fire" });
+        turns++;
+        if (round.lines.some((l) => l.kind === "taunt" && l.secondsLeft === TAUNT_SECONDS))
+          taunts++;
+        runUntil(round, (r) => r.phase.kind === "aiming" || r.phase.kind === "over");
+      }
+    }
+    expect(taunts / turns).toBeGreaterThan(0.15);
+    expect(taunts / turns).toBeLessThan(0.35);
+  });
+
+  it("decides Taunts from the flavour Rng only: the simulation seed never changes them", () => {
+    const taunt = (seed: number, flavourSeed: number): string | null => {
+      const round = roundOf([HUMAN, HUMAN], seed, flavourSeed);
+      round.act({ kind: "fire" });
+      return round.lines[0]?.text ?? null;
+    };
+    for (const flavourSeed of SEEDS) {
+      expect(taunt(1, flavourSeed)).toBe(taunt(99, flavourSeed));
+      expect(taunt(1, flavourSeed)).toBe(taunt(1, flavourSeed));
+    }
   });
 });

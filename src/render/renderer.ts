@@ -9,13 +9,17 @@ import { centre, barrelTip, isAlive, isSupported } from "../sim/tank";
 import type { Terrain } from "../sim/terrain";
 import type { Explosion, Tank } from "../sim/types";
 import type { Match } from "../sim/match";
+import type { Round } from "../sim/round";
+import { drawDeathAnimation } from "./deathAnimations";
 import { drawHud } from "./hud";
+import { LINE_FONT, linePlacement } from "./linePlacement";
 import {
   DIRT_DEEP,
   DIRT_EXPLOSION_COLORS,
   DIRT_SURFACE,
   EXPLOSION_COLORS,
   HUD_TEXT,
+  HUSK_SHADE,
   PROJECTILE_COLOR,
   SKY_BOTTOM,
   SKY_TOP,
@@ -78,8 +82,12 @@ export class Renderer {
     }
     this.context.drawImage(this.terrainCanvas, 0, 0);
     for (const tank of tanks) {
-      if (!isAlive(tank)) continue;
       const { color } = round.playerOf(tank.playerId);
+      if (round.isHusk(tank.playerId)) {
+        this.drawHusk(tank, color);
+        continue;
+      }
+      if (!isAlive(tank)) continue;
       this.drawTank(tank, color);
       this.drawShield(tank, color);
       // The canopy sits where the Health is drawn, so it hides the Health while it is open.
@@ -94,7 +102,34 @@ export class Renderer {
       }
       for (const explosion of phase.explosions) this.drawExplosion(explosion);
     }
+    if (phase.kind === "dying") {
+      for (const animation of phase.animations) {
+        drawDeathAnimation(this.context, animation, round.playerOf(animation.playerId).color);
+      }
+    }
+    this.drawLines(round);
     drawHud(this.context, match);
+  }
+
+  /** Every Epitaph and Taunt, as plain text in its Player's colour above its Player's Tank. */
+  private drawLines(round: Round): void {
+    const ctx = this.context;
+    ctx.save();
+    ctx.font = LINE_FONT;
+    ctx.textAlign = "left";
+    for (const line of round.lines) {
+      const tank = round.tankOf(line.playerId);
+      const { x, y } = linePlacement(line.text, tank, (t) => ctx.measureText(t).width);
+      ctx.fillStyle = round.playerOf(line.playerId).color;
+      ctx.fillText(line.text, x, y);
+    }
+    ctx.restore();
+  }
+
+  /** A destroyed Tank waiting for its Death Animation: the Tank, darkened, with no Health. */
+  private drawHusk(tank: Tank, color: string): void {
+    this.drawTank(tank, color);
+    this.drawTank(tank, HUSK_SHADE);
   }
 
   /** A small triangle 6 px above the current Player's Tank while aiming. */

@@ -1,4 +1,5 @@
 import {
+  FLAVOUR_SEED_SALT,
   MAX_PLAYERS,
   MAX_ROUNDS,
   MIN_PLAYERS,
@@ -45,6 +46,11 @@ export class Match {
 
   /** One Rng per Match, shared by every Round, so the whole Match is reproducible from its seed. */
   private readonly rng: Rng;
+  /**
+   * The Match's flavour stream, shared by every Round: seeded from, but distinct from, the seed,
+   * so cosmetic choices never shift a simulation draw (ADR 0003).
+   */
+  private readonly flavourRng: Rng;
 
   constructor(setup: MatchSetup) {
     const { rounds } = setup;
@@ -56,6 +62,7 @@ export class Match {
       throw new Error(`Rounds must be an integer in ${MIN_ROUNDS}..${MAX_ROUNDS}, got ${rounds}`);
     }
     this.rng = new Rng(setup.seed);
+    this.flavourRng = new Rng(setup.seed ^ FLAVOUR_SEED_SALT);
     this.players = createPlayers(setup.players);
     this.totalRounds = rounds;
     this.roundWins = this.players.map(() => 0);
@@ -123,7 +130,13 @@ export class Match {
   }
 
   private startRound(): void {
-    this.round = new Round(this.results.length + 1, this.players, this.rng, this.loadout);
+    this.round = new Round(
+      this.results.length + 1,
+      this.players,
+      this.rng,
+      this.loadout,
+      this.flavourRng,
+    );
     this.stage = { kind: "playing" };
   }
 

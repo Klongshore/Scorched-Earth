@@ -1,11 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { FOR_SALE, MAX_PLAYERS, MIN_PLAYERS, TICK_SECONDS, forSaleNamed } from "./constants";
+import { emptyLoadout } from "./inventory";
 import { Match, type MatchSetup } from "./match";
 import { createPlayers } from "./players";
 import { Rng } from "./rng";
 import { Round, type RoundResult } from "./round";
 import { newTank } from "./tank";
-import type { PlayerSetup, ShopName } from "./types";
+import type { Line, PlayerSetup, ShopName } from "./types";
 
 const human: PlayerSetup = { kind: "human" };
 const moron: PlayerSetup = { kind: "computer", personality: "moron" };
@@ -32,6 +33,35 @@ function finishRound(match: Match, result: RoundResult): void {
     match.startNextRound();
     skipShop(match);
   }
+}
+
+/**
+ * Every Death Animation and line a Round shows, in order, as it is ticked to its end with every
+ * Human firing straight up as soon as their Turn begins.
+ */
+function flavourOf(round: Round, maxTicks = 200_000): string[] {
+  const log: string[] = [];
+  const seen = new Set<Readonly<Line>>();
+  let dying = false;
+  for (let ticks = 0; round.phase.kind !== "over"; ticks++) {
+    if (ticks >= maxTicks) expect.fail(`Round did not finish within ${maxTicks} ticks`);
+    if (round.phase.kind === "aiming") {
+      round.currentTank().angle = 90;
+      round.act({ kind: "fire" });
+    }
+    round.tick(TICK_SECONDS);
+    for (const line of round.lines) {
+      if (seen.has(line)) continue;
+      seen.add(line);
+      log.push(`${line.kind} ${line.playerId}: ${line.text}`);
+    }
+    const { phase } = round;
+    if (phase.kind === "dying" && !dying) {
+      for (const a of phase.animations) log.push(`animation ${a.playerId}: ${a.kind}`);
+    }
+    dying = phase.kind === "dying";
+  }
+  return log;
 }
 
 const win = (playerId: number): RoundResult => ({ kind: "win", playerId });
@@ -208,6 +238,38 @@ describe("Match", () => {
     expect(b.requireRound().turnOrder).toEqual(a.requireRound().turnOrder);
     expect(b.requireRound().tanks).toEqual(a.requireRound().tanks);
     expect(b.requireRound().terrain.cells).toEqual(a.requireRound().terrain.cells);
+  });
+
+  it("shows the same Death Animations, Epitaphs and Taunts in every Round for the same seed", () => {
+    const flavourOfMatch = (seed: number): string[] => {
+      const match = newMatch({ players: [moron, moron], seed });
+      const log: string[] = [];
+      while (!match.isOver()) {
+        log.push(...flavourOf(match.requireRound()));
+        match.recordRoundResult();
+        if (!match.isOver()) {
+          match.startNextRound();
+          skipShop(match);
+        }
+      }
+      return log;
+    };
+    const log = flavourOfMatch(42);
+    expect(flavourOfMatch(42)).toEqual(log);
+    expect(log.some((entry) => entry.startsWith("epitaph"))).toBe(true);
+    expect(log.some((entry) => entry.startsWith("taunt"))).toBe(true);
+    expect(log.some((entry) => entry.startsWith("animation"))).toBe(true);
+  });
+
+  it("draws flavour from its own stream, not one seeded like the simulation's", () => {
+    const players = createPlayers([human, human]);
+    const match = newMatch({ seed: 42 });
+    const mirrored = new Round(1, players, new Rng(42), emptyLoadout(players), new Rng(42));
+    // The same Round as far as the simulation goes...
+    expect(mirrored.tanks).toEqual(match.requireRound().tanks);
+    expect(mirrored.terrain.cells).toEqual(match.requireRound().terrain.cells);
+    // ...but not the same flavour.
+    expect(flavourOf(mirrored)).not.toEqual(flavourOf(match.requireRound()));
   });
 });
 
@@ -460,20 +522,24 @@ describe("Match integration", () => {
     // Re-pinned when Fall Damage was added, since it changes how Rounds play out.
     // Rounds are played directly, sharing one Rng as a Match does, because a Match now lets its
     // Computer Players shop, which draws from the Rng too.
+    // Death Animations only add time at the end of a Turn, so ticks spent dying are not counted.
     const players = createPlayers([moron, moron, moron, moron]);
     const rng = new Rng(77);
     let ticks = 0;
+    let dyingTicks = 0;
     const results: RoundResult[] = [];
     let round: Round | null = null;
     for (let number = 1; number <= 3; number++) {
       round = new Round(number, players, rng);
       while (round.phase.kind !== "over") {
+        if (round.phase.kind === "dying") dyingTicks++;
+        else ticks++;
         round.tick(TICK_SECONDS);
-        ticks++;
       }
       results.push(round.phase.result);
     }
     expect(ticks).toBe(72269);
+    expect(dyingTicks).toBeGreaterThan(0);
     expect(results).toEqual([win(2), win(0), win(3)]);
     expect(round?.tanks).toEqual([
       { ...newTank(0, 231, 421), angle: 161, power: 0, health: 0 },

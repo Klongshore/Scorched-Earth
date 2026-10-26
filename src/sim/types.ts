@@ -109,3 +109,32 @@ export interface Explosion {
   readonly hits: readonly HealthLoss[]; // one per Tank whose Health it removed
   elapsed: number; // seconds since it started
 }
+
+/** Which of the Death Animations a destroyed Tank plays. */
+export type DeathAnimationKind = "fireball" | "sparkShower" | "disintegration" | "popAndSmoke";
+
+/**
+ * A destroyed Tank's Death Animation, played where the Tank stood once the Turn has otherwise come
+ * to rest. Pure spectacle: it damages no Tank and leaves the Terrain untouched.
+ */
+export interface DeathAnimation {
+  readonly playerId: number; // whose Tank was destroyed
+  readonly kind: DeathAnimationKind; // picked from the flavour Rng only
+  readonly x: number; // the Tank's column, as Tank.x
+  readonly y: number; // the row under the Tank, as Tank.y
+  elapsed: number; // seconds since it started
+}
+
+/** What an on-screen line is: an Epitaph over a destroyed Tank, or a Taunt over a firing one. */
+export type LineKind = "epitaph" | "taunt";
+
+/**
+ * A line of text shown for a few seconds above a Player's Tank, wherever that Tank stands. Pure
+ * flavour: it never holds up the Round.
+ */
+export interface Line {
+  readonly kind: LineKind;
+  readonly playerId: number; // whose Tank it is shown above, in whose colour
+  readonly text: string;
+  secondsLeft: number; // gone once this reaches 0
+}

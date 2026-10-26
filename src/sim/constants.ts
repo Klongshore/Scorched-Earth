@@ -1,4 +1,13 @@
-import type { ForSale, Item, ShieldItem, ShieldName, ShopName, Weapon, WeaponName } from "./types";
+import type {
+  DeathAnimationKind,
+  ForSale,
+  Item,
+  ShieldItem,
+  ShieldName,
+  ShopName,
+  Weapon,
+  WeaponName,
+} from "./types";
 
 // Field
 export const FIELD_WIDTH = 640;
@@ -115,6 +124,21 @@ export const ROLLER_MAX_SECONDS = 8; // explodes where it is after rolling this 
 // Explosion and Settling
 export const EXPLOSION_SECONDS = 0.5;
 export const SETTLE_PASSES_PER_TICK = 2;
+
+// Death Animations
+export const DEATH_ANIMATION_SECONDS = 1.2; // every destroyed Tank's, played together at the end of a Turn
+export const DEATH_ANIMATION_KINDS: readonly DeathAnimationKind[] = [
+  "fireball",
+  "sparkShower",
+  "disintegration",
+  "popAndSmoke",
+];
+
+// Epitaphs and Taunts
+export const EPITAPH_SECONDS = 3; // from the start of the destroyed Tank's Death Animation
+export const TAUNT_SECONDS = 2.5;
+export const TAUNT_CHANCE = 0.25; // of each Turn having a Taunt, rolled as the Turn begins
+export const FLAVOUR_SEED_SALT = 0x9e3779b9; // mixed into the Match seed to seed the flavour stream (ADR 0003)
 
 // Terrain generation
 export const TERRAIN_BASE_FRACTION = 0.65; // mean surface height as a fraction of FIELD_HEIGHT from the top
