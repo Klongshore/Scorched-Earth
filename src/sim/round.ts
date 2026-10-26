@@ -30,7 +30,7 @@ import {
 import { placeTanks } from "./placement";
 import { launch, stepProjectile } from "./projectile";
 import { startRolling, stepRolling } from "./roller";
-import type { Rng } from "./rng";
+import { Rng } from "./rng";
 import { landTanks, settleTick } from "./settling";
 import { raiseShield } from "./shield";
 import { clampAim, hitTest, isAlive } from "./tank";
@@ -68,6 +68,11 @@ export class Round {
 
   private readonly players: readonly Player[];
   private readonly rng: Rng;
+  /**
+   * Randomness for cosmetic choices only (ADR 0003); nothing that can affect the outcome draws
+   * from it.
+   */
+  readonly flavourRng: Rng;
   private readonly loadout: Loadout;
   /** One per Computer Player, keyed by playerId; fresh every Round. */
   private readonly memories = new Map<number, ComputerMemory>();
@@ -87,10 +92,12 @@ export class Round {
     players: readonly Player[],
     rng: Rng,
     loadout: Loadout = emptyLoadout(players),
+    flavourRng: Rng = new Rng(0),
   ) {
     this.number = number;
     this.players = players;
     this.rng = rng;
+    this.flavourRng = flavourRng;
     this.loadout = loadout;
     this.earnings = players.map(() => 0);
     for (const p of players) {
