@@ -50,7 +50,7 @@ A Personality that calculates the Angle and Power to hit its Target, ignoring Wi
 A Personality that starts with a rough guess at its Target and, each Turn, corrects its Power based on where its last Projectile landed.
 
 **Target**:
-The enemy Tank a Computer Player is currently aiming at, kept until that Tank is destroyed or can no longer be reached.
+The enemy Tank a Computer Player is currently aiming at. A Moron has none. A Shooter or Tosser keeps its Target until that Tank is destroyed or can no longer be reached; every other Personality chooses its Target again each Turn.
 _Avoid_: Enemy, victim
 
 **Tank**:
