@@ -1,6 +1,5 @@
 import {
   BARREL_LENGTH,
-  DEATH_ANIMATION_SECONDS,
   EXPLOSION_SECONDS,
   shieldNamed,
   TANK_HALF_WIDTH,
@@ -8,8 +7,9 @@ import {
 } from "../sim/constants";
 import { centre, barrelTip, isAlive, isSupported } from "../sim/tank";
 import type { Terrain } from "../sim/terrain";
-import type { DeathAnimation, Explosion, Tank } from "../sim/types";
+import type { Explosion, Tank } from "../sim/types";
 import type { Match } from "../sim/match";
+import { drawDeathAnimation } from "./deathAnimations";
 import { drawHud } from "./hud";
 import {
   DIRT_DEEP,
@@ -35,8 +35,6 @@ const CANOPY_RADIUS = 5; // the Parachute canopy is a half-disc 10 px across
 const CANOPY_CLEARANCE = 3; // px from the tip of a barrel at 90° to the canopy's flat edge
 const CANOPY_LINE_SPREAD = 2; // px either side of the Tank's centre where the lines meet its top
 const CANOPY_LINE_WIDTH = 1;
-const FIREBALL_MAX_RADIUS = 18; // px
-const FIREBALL_GROW_FRACTION = 0.3; // of the Death Animation spent swelling to full size
 
 export class Renderer {
   private readonly context: CanvasRenderingContext2D;
@@ -103,7 +101,9 @@ export class Renderer {
       for (const explosion of phase.explosions) this.drawExplosion(explosion);
     }
     if (phase.kind === "dying") {
-      for (const animation of phase.animations) this.drawFireball(animation);
+      for (const animation of phase.animations) {
+        drawDeathAnimation(this.context, animation, round.playerOf(animation.playerId).color);
+      }
     }
     drawHud(this.context, match);
   }
@@ -112,32 +112,6 @@ export class Renderer {
   private drawHusk(tank: Tank, color: string): void {
     this.drawTank(tank, color);
     this.drawTank(tank, HUSK_SHADE);
-  }
-
-  /**
-   * The fireball Death Animation, from its elapsed time alone: a flickering ball that swells over
-   * its first part, then fades as it shrinks back.
-   */
-  private drawFireball(animation: DeathAnimation): void {
-    const ctx = this.context;
-    const t = Math.min(1, animation.elapsed / DEATH_ANIMATION_SECONDS);
-    const grow = Math.min(1, t / FIREBALL_GROW_FRACTION);
-    const fade = t <= FIREBALL_GROW_FRACTION ? 1 : (1 - t) / (1 - FIREBALL_GROW_FRACTION);
-    const radius = FIREBALL_MAX_RADIUS * grow * (0.5 + 0.5 * fade);
-    const cx = animation.x + 0.5;
-    const cy = animation.y - TANK_HEIGHT / 2;
-    const flicker = Math.floor(animation.elapsed * 30);
-    ctx.save();
-    ctx.globalAlpha = fade;
-    EXPLOSION_COLORS.forEach((_, ring) => {
-      // Outer rings first; each ring's colour cycles so the ball flickers.
-      const color = EXPLOSION_COLORS[(ring + flicker) % EXPLOSION_COLORS.length] ?? "#ffffff";
-      ctx.fillStyle = color;
-      ctx.beginPath();
-      ctx.arc(cx, cy, radius * (1 - ring / EXPLOSION_COLORS.length), 0, Math.PI * 2);
-      ctx.fill();
-    });
-    ctx.restore();
   }
 
   /** A small triangle 6 px above the current Player's Tank while aiming. */

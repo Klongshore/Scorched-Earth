@@ -1,6 +1,7 @@
 import {
   BABY_MISSILE,
   COMPUTER_THINK_TICKS,
+  DEATH_ANIMATION_KINDS,
   DEATH_ANIMATION_SECONDS,
   EXPLOSION_SECONDS,
   FIELD_HEIGHT,
@@ -383,10 +384,15 @@ export class Round {
     this.phase = { kind: "dying", animations: husks.map((t) => this.startDeathAnimation(t)) };
   }
 
-  /** A husk's Death Animation starts where it stands, and its Tank is gone from then on. */
+  /**
+   * A husk's Death Animation starts where it stands, of a kind the flavour Rng picks, and its Tank
+   * is gone from then on.
+   */
   private startDeathAnimation(tank: Tank): DeathAnimation {
     this.gone.add(tank.playerId);
-    return { playerId: tank.playerId, x: tank.x, y: tank.y, elapsed: 0 };
+    const kinds = DEATH_ANIMATION_KINDS;
+    const kind = kinds[this.flavourRng.int(0, kinds.length - 1)] ?? "fireball";
+    return { playerId: tank.playerId, kind, x: tank.x, y: tank.y, elapsed: 0 };
   }
 
   private endTurn(): void {

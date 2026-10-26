@@ -110,12 +110,16 @@ export interface Explosion {
   elapsed: number; // seconds since it started
 }
 
+/** Which of the Death Animations a destroyed Tank plays. */
+export type DeathAnimationKind = "fireball" | "sparkShower" | "disintegration" | "popAndSmoke";
+
 /**
  * A destroyed Tank's Death Animation, played where the Tank stood once the Turn has otherwise come
  * to rest. Pure spectacle: it damages no Tank and leaves the Terrain untouched.
  */
 export interface DeathAnimation {
   readonly playerId: number; // whose Tank was destroyed
+  readonly kind: DeathAnimationKind; // picked from the flavour Rng only
   readonly x: number; // the Tank's column, as Tank.x
   readonly y: number; // the row under the Tank, as Tank.y
   elapsed: number; // seconds since it started
