@@ -498,6 +498,41 @@ describe("Match integration", () => {
     expect(match.results.length).toBe(3);
   });
 
+  it("replays a seeded Match of only Morons, Shooters and Tossers identically (rng draws in the same order)", () => {
+    const shooter: PlayerSetup = { kind: "computer", personality: "shooter" };
+    const tosser: PlayerSetup = { kind: "computer", personality: "tosser" };
+    const match = new Match({
+      players: [tosser, shooter, moron, tosser, shooter, moron],
+      rounds: 3,
+      seed: 777,
+    });
+    playOut(match, 3 * 200_000);
+    // Recorded before Personalities got their own Target and aim rules; any change in the
+    // order or number of rng draws changes who wins and when.
+    expect({ wins: match.roundWins, results: match.results }).toMatchSnapshot();
+  });
+
+  it("replays a seeded Match with Unknown Players identically, and draws their Personalities after everything else", () => {
+    const unknown: PlayerSetup = { kind: "computer", personality: "unknown" };
+    const setup = { players: [unknown, moron, unknown, moron, unknown], rounds: 3, seed: 31 };
+    const a = new Match(setup);
+    const b = new Match(setup);
+    playOut(a, 3 * 200_000);
+    playOut(b, 3 * 200_000);
+    expect(a.results.length).toBe(3);
+    expect({ wins: b.roundWins, results: b.results }).toEqual({
+      wins: a.roundWins,
+      results: a.results,
+    });
+
+    // The Unknown draw comes last in Round setup, so the field is the same as without Unknowns.
+    const plain = new Match({ ...setup, players: [moron, moron, moron, moron, moron] });
+    const withUnknown = new Match(setup);
+    expect(withUnknown.requireRound().terrain.cells).toEqual(plain.requireRound().terrain.cells);
+    expect(withUnknown.requireRound().wind).toBe(plain.requireRound().wind);
+    expect(withUnknown.requireRound().turnOrder).toEqual(plain.requireRound().turnOrder);
+  });
+
   describe("3-Round Matches of 10 Computer Players, shopping and firing what they bought, finish within the tick budget", () => {
     const shooter: PlayerSetup = { kind: "computer", personality: "shooter" };
     const tosser: PlayerSetup = { kind: "computer", personality: "tosser" };

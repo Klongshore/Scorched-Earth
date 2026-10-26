@@ -23,7 +23,12 @@ export const PLAYER_OPTIONS: readonly { readonly label: string; readonly setup: 
   { label: "Human", setup: { kind: "human" } },
   { label: "Moron", setup: { kind: "computer", personality: "moron" } },
   { label: "Shooter", setup: { kind: "computer", personality: "shooter" } },
+  { label: "Poolshark", setup: { kind: "computer", personality: "poolshark" } },
   { label: "Tosser", setup: { kind: "computer", personality: "tosser" } },
+  { label: "Chooser", setup: { kind: "computer", personality: "chooser" } },
+  { label: "Spoiler", setup: { kind: "computer", personality: "spoiler" } },
+  { label: "Cyborg", setup: { kind: "computer", personality: "cyborg" } },
+  { label: "Unknown", setup: { kind: "computer", personality: "unknown" } },
 ];
 
 export const DEFAULT_PLAYERS_SETUP: readonly PlayerSetup[] = [

@@ -37,7 +37,7 @@ A Player whose Turns are decided by an AI Personality rather than a human.
 _Avoid_: Bot, CPU, AI player
 
 **Personality**:
-The named strategy a Computer Player uses to aim and fire: Moron, Shooter or Tosser.
+The named strategy a Computer Player uses to aim and fire: Moron, Shooter, Poolshark, Tosser, Chooser, Spoiler, Cyborg or Unknown. The behaviour of Poolshark, Chooser, Spoiler, Cyborg and Unknown is inferred from the Atari 800 remake's descriptions, not verified against the 1991 manual.
 _Avoid_: Difficulty, AI level
 
 **Moron**:
@@ -46,11 +46,29 @@ A Personality that fires at a random Angle and a random Power.
 **Shooter**:
 A Personality that calculates the Angle and Power to hit its Target, ignoring Wind and anything in the way, then adds a little random error.
 
+**Poolshark**:
+A Personality that aims like a Shooter, ignoring Wind, but always at the nearest Tank, by horizontal distance.
+
 **Tosser**:
 A Personality that starts with a rough guess at its Target and, each Turn, corrects its Power based on where its last Projectile landed.
 
+**Chooser**:
+A Personality that always aims at the weakest Tank and allows for Wind, with a small random error.
+
+**Spoiler**:
+A Personality that aims like a Chooser but with half the random error.
+
+**Cyborg**:
+A Personality that aims at the weakest Tank, preferring a human Player's Tank over a computer's, and allows for Wind with no random error, so it hits unless Terrain is in the way.
+
+**Unknown**:
+A Personality that becomes Poolshark, Chooser, Spoiler or Cyborg, picked at random at the start of each Round. It is shown as Unknown everywhere in the interface, never as what it became.
+
+**Weakest**:
+The Tank with the lowest Health, ignoring any Shield. Of equally near or equally weak Tanks, the earlier Player's is chosen.
+
 **Target**:
-The enemy Tank a Computer Player is currently aiming at, kept until that Tank is destroyed or can no longer be reached.
+The enemy Tank a Computer Player is currently aiming at. A Moron has none. A Shooter or Tosser keeps its Target until that Tank is destroyed or can no longer be reached; every other Personality chooses its Target again each Turn.
 _Avoid_: Enemy, victim
 
 **Tank**:
