@@ -96,7 +96,12 @@ interface PersonalityRules {
   /** Whether `self` can hit `target` the way this Personality fires, ignoring Terrain. */
   reachable(self: Tank, target: Tank, wind: number): boolean;
   /** Pick the Target from `candidates`: living, reachable opponents in Player order; never empty. */
-  selectTarget(self: Tank, candidates: readonly Tank[], rng: Rng): Tank;
+  selectTarget(
+    self: Tank,
+    candidates: readonly Tank[],
+    rng: Rng,
+    humanIds: ReadonlySet<number>,
+  ): Tank;
   /** Its aim at `target`, which `selectTarget` chose and so is in reach. */
   aim(self: Tank, target: Tank, memory: ComputerMemory, rng: Rng, wind: number): Aim;
 }
@@ -104,6 +109,17 @@ interface PersonalityRules {
 /** The lowest-Health candidate, Shield ignored; ties go to the earliest, with no draw. */
 function weakestTarget(_self: Tank, candidates: readonly Tank[]): Tank {
   return candidates.reduce((weakest, t) => (t.health < weakest.health ? t : weakest));
+}
+
+/** The weakest human Player's candidate if any, else the weakest candidate. */
+function weakestHumanTarget(
+  self: Tank,
+  candidates: readonly Tank[],
+  _rng: Rng,
+  humanIds: ReadonlySet<number>,
+): Tank {
+  const humans = candidates.filter((t) => humanIds.has(t.playerId));
+  return weakestTarget(self, humans.length > 0 ? humans : candidates);
 }
 
 /** A random candidate, as the Shooter and Tosser have always chosen: one `int` draw. */
@@ -119,6 +135,9 @@ function nearestTarget(self: Tank, candidates: readonly Tank[]): Tank {
   }
   return best;
 }
+
+/** The Players who are human, when a caller does not say: none. */
+const NO_HUMANS: ReadonlySet<number> = new Set();
 
 const RULES: Record<TargetingPersonality, PersonalityRules> = {
   shooter: {
@@ -157,6 +176,12 @@ const RULES: Record<TargetingPersonality, PersonalityRules> = {
     aim: (self, target, _memory, rng, wind) =>
       windAim(self, target, wind, rng, SPOILER_POWER_ERROR),
   },
+  cyborg: {
+    keepsTarget: false,
+    reachable: (self, target, wind) => windFeasibleAims(self, target, wind).length > 0,
+    selectTarget: weakestHumanTarget,
+    aim: (self, target, _memory, rng, wind) => windAim(self, target, wind, rng, 0),
+  },
 };
 
 /**
@@ -187,6 +212,7 @@ export function chooseTarget(
   rng: Rng,
   personality: TargetingPersonality,
   wind: number = 0,
+  humanIds: ReadonlySet<number> = NO_HUMANS,
 ): Tank | null {
   const rules = RULES[personality];
   const kept = tanks.find((t) => t.playerId === memory.targetId);
@@ -203,7 +229,7 @@ export function chooseTarget(
   const opponents = tanks.filter((t) => t !== self && isAlive(t));
   if (opponents.length === 0) throw new Error(`Player ${self.playerId} has no living opponent`);
   const reachable = opponents.filter((t) => rules.reachable(self, t, wind));
-  const target = reachable.length === 0 ? null : rules.selectTarget(self, reachable, rng);
+  const target = reachable.length === 0 ? null : rules.selectTarget(self, reachable, rng, humanIds);
   memory.targetId = target?.playerId ?? null;
   memory.lastAim = null;
   memory.lastLanding = null;
@@ -218,11 +244,12 @@ export function chooseAim(
   memory: ComputerMemory,
   rng: Rng,
   wind: number = 0,
+  humanIds: ReadonlySet<number> = NO_HUMANS,
 ): Aim {
   if (personality === "moron") return moronAim(self, rng);
   // With no reachable opponent, firing at random eventually hits someone or itself, so the
   // Round still ends.
-  const target = chooseTarget(memory, self, tanks, rng, personality, wind);
+  const target = chooseTarget(memory, self, tanks, rng, personality, wind, humanIds);
   if (!target) return moronAim(self, rng);
   return RULES[personality].aim(self, target, memory, rng, wind);
 }

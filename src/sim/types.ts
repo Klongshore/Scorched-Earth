@@ -1,5 +1,12 @@
 export type PlayerKind = "human" | "computer";
-export type PersonalityName = "moron" | "shooter" | "poolshark" | "tosser" | "chooser" | "spoiler";
+export type PersonalityName =
+  | "moron"
+  | "shooter"
+  | "poolshark"
+  | "tosser"
+  | "chooser"
+  | "spoiler"
+  | "cyborg";
 
 /** What the Setup screen asks for, one per Player. */
 export type PlayerSetup = { kind: "human" } | { kind: "computer"; personality: PersonalityName };
