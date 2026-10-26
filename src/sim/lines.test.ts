@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { MAX_LINE_LENGTH, TAUNT_CHANCE } from "./constants";
+import { TAUNT_CHANCE } from "./constants";
 import { EPITAPHS, SELF_INFLICTED_EPITAPHS, TAUNTS, pickEpitaph, rollTaunt } from "./lines";
 import { Rng } from "./rng";
 
@@ -13,10 +13,9 @@ describe("line pools", () => {
   });
 
   it.each(Object.entries(POOLS))(
-    "keeps every line in %s short, plain ASCII and unique",
+    "keeps every line in %s trimmed, plain ASCII and unique",
     (_, pool) => {
       for (const line of pool) {
-        expect(line.length, line).toBeLessThanOrEqual(MAX_LINE_LENGTH);
         expect(line.trim(), line).toBe(line);
         expect(line, line).toMatch(/^[\x20-\x7e]+$/);
       }

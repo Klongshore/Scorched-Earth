@@ -1682,6 +1682,24 @@ describe("Round Epitaphs", () => {
     );
   });
 
+  it("tells how long the longest Epitaph still shows, never counting a Taunt", () => {
+    const { round } = shootAndDestroy(1, false, true);
+    expect(round.epitaphSecondsLeft).toBe(0);
+    runUntil(round, (r) => r.phase.kind === "dying");
+    expect(round.epitaphSecondsLeft).toBe(EPITAPH_SECONDS);
+    round.tick(TICK_SECONDS);
+    expect(round.epitaphSecondsLeft).toBeCloseTo(EPITAPH_SECONDS - TICK_SECONDS, 10);
+    runUntil(round, (r) => r.lines.length === 0);
+    expect(round.epitaphSecondsLeft).toBe(0);
+
+    const taunted = Array.from({ length: 40 }, (_, i) => closeRound(i + 1).round).find((r) => {
+      r.act({ kind: "fire" });
+      return r.lines.length > 0;
+    });
+    expect(taunted?.lines.map((l) => l.kind)).toEqual(["taunt"]);
+    expect(taunted?.epitaphSecondsLeft).toBe(0);
+  });
+
   it("can give a self-inflicted Epitaph only to a Tank that destroyed itself", () => {
     const selfTexts = new Set<string>();
     const otherTexts = new Set<string>();

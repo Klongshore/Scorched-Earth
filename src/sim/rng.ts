@@ -24,6 +24,12 @@ export class Rng {
     return min + this.next() * (max - min);
   }
 
+  /** One item of a non-empty list, each as likely as any other: a single `int` draw. */
+  pick<T>(items: readonly T[]): T {
+    if (items.length === 0) throw new Error("Cannot pick from an empty list");
+    return items[this.int(0, items.length - 1)] as T;
+  }
+
   /** Fisher–Yates shuffle, returns a new array. */
   shuffle<T>(items: readonly T[]): T[] {
     const out = [...items];
