@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { FOR_SALE, MAX_PLAYERS, MIN_PLAYERS, TICK_SECONDS, forSaleNamed } from "./constants";
 import { emptyLoadout } from "./inventory";
 import { Match, type MatchSetup } from "./match";
@@ -7,6 +7,12 @@ import { Rng } from "./rng";
 import { Round, type RoundResult } from "./round";
 import { newTank } from "./tank";
 import type { Line, PlayerSetup, ShopName } from "./types";
+
+// These tests describe play from a $2,000 start; keep them independent of the tuned constant.
+vi.mock("./constants", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("./constants")>()),
+  STARTING_MONEY: 2_000,
+}));
 
 const human: PlayerSetup = { kind: "human" };
 const moron: PlayerSetup = { kind: "computer", personality: "moron" };
