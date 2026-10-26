@@ -23,7 +23,7 @@ import {
 } from "./constants";
 import { detonate } from "./explosion";
 import { emptyLoadout, inventoryIn, type Inventory, type Loadout } from "./inventory";
-import { pickEpitaph } from "./lines";
+import { pickEpitaph, rollTaunt } from "./lines";
 import { moneyEarned } from "./money";
 import {
   chooseAim,
@@ -114,6 +114,8 @@ export class Round {
   private readonly gone = new Set<number>();
   /** Every line on screen, oldest first. */
   private readonly shownLines: Line[] = [];
+  /** The Taunt rolled for this Turn and not yet shown; null when the Turn has none. */
+  private pendingTaunt: string | null = null;
 
   constructor(
     number: number,
@@ -262,6 +264,14 @@ export class Round {
     const projectile = launch(this.currentTank(), weapon);
     this.barrelProjectile = projectile;
     this.phase = { kind: "resolving", projectiles: [projectile], explosions: [] };
+    this.sayPendingTaunt(); // a Human's Taunt; a Computer Player's was shown as it began thinking
+  }
+
+  /** Show this Turn's rolled Taunt, if it has one not yet shown, above the current Tank. */
+  private sayPendingTaunt(): void {
+    if (this.pendingTaunt === null) return;
+    this.say("taunt", this.currentPlayerId, this.pendingTaunt);
+    this.pendingTaunt = null;
   }
 
   /**
@@ -446,6 +456,8 @@ export class Round {
 
   private beginTurn(): void {
     const player = this.playerOf(this.currentPlayerId);
+    // Flavour only (ADR 0003): a Computer Player shows it as it starts thinking, a Human at launch.
+    this.pendingTaunt = rollTaunt(this.flavourRng);
     // Each Turn starts on the last Weapon chosen, or the Baby Missile once none of it is left.
     if (this.inventoryOf(player.id).count(this.chosenWeaponOf(player.id)) <= 0) {
       this.loadout.chosenWeapons[player.id] = BABY_MISSILE.name;
@@ -470,6 +482,7 @@ export class Round {
       tank.power = aim.power;
       clampAim(tank);
       this.phase = { kind: "aiming", thinkTicks: COMPUTER_THINK_TICKS };
+      this.sayPendingTaunt();
     } else {
       this.phase = { kind: "aiming", thinkTicks: null };
     }
