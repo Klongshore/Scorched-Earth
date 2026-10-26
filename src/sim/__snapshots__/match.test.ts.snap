@@ -1,0 +1,28 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`Match integration > replays a seeded Match of only Morons, Shooters and Tossers identically (rng draws in the same order) 1`] = `
+{
+  "results": [
+    {
+      "kind": "win",
+      "playerId": 1,
+    },
+    {
+      "kind": "win",
+      "playerId": 4,
+    },
+    {
+      "kind": "win",
+      "playerId": 4,
+    },
+  ],
+  "wins": [
+    0,
+    1,
+    0,
+    0,
+    2,
+    0,
+  ],
+}
+`;

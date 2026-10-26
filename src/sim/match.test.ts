@@ -498,6 +498,20 @@ describe("Match integration", () => {
     expect(match.results.length).toBe(3);
   });
 
+  it("replays a seeded Match of only Morons, Shooters and Tossers identically (rng draws in the same order)", () => {
+    const shooter: PlayerSetup = { kind: "computer", personality: "shooter" };
+    const tosser: PlayerSetup = { kind: "computer", personality: "tosser" };
+    const match = new Match({
+      players: [tosser, shooter, moron, tosser, shooter, moron],
+      rounds: 3,
+      seed: 777,
+    });
+    playOut(match, 3 * 200_000);
+    // Recorded before Personalities got their own Target and aim rules; any change in the
+    // order or number of rng draws changes who wins and when.
+    expect({ wins: match.roundWins, results: match.results }).toMatchSnapshot();
+  });
+
   describe("3-Round Matches of 10 Computer Players, shopping and firing what they bought, finish within the tick budget", () => {
     const shooter: PlayerSetup = { kind: "computer", personality: "shooter" };
     const tosser: PlayerSetup = { kind: "computer", personality: "tosser" };

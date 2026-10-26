@@ -82,18 +82,58 @@ function feasibleAims(self: Tank, target: Tank, personality: TargetingPersonalit
 }
 
 /**
+ * What makes one Personality different from another. To add a Personality, add its name to
+ * PersonalityName, then one entry to RULES below: nothing else in this module changes.
+ */
+interface PersonalityRules {
+  /** Whether it keeps its Target across Turns, rather than choosing again every Turn. */
+  readonly keepsTarget: boolean;
+  /** Whether `self` can hit `target` the way this Personality fires, ignoring Wind and Terrain. */
+  reachable(self: Tank, target: Tank): boolean;
+  /** Pick the Target from `candidates`: living, reachable opponents in Player order; never empty. */
+  selectTarget(self: Tank, candidates: readonly Tank[], rng: Rng): Tank;
+  /** Its aim at `target`, which `selectTarget` chose and so is in reach. */
+  aim(self: Tank, target: Tank, memory: ComputerMemory, rng: Rng): Aim;
+}
+
+/** A random candidate, as the Shooter and Tosser have always chosen: one `int` draw. */
+function randomTarget(_self: Tank, candidates: readonly Tank[], rng: Rng): Tank {
+  return candidates[rng.int(0, candidates.length - 1)] as Tank;
+}
+
+const RULES: Record<TargetingPersonality, PersonalityRules> = {
+  shooter: {
+    keepsTarget: true,
+    reachable: (self, target) => feasibleAims(self, target, "shooter").length > 0,
+    selectTarget: randomTarget,
+    aim: (self, target, _memory, rng) => shooterAim(self, target, rng),
+  },
+  tosser: {
+    keepsTarget: true,
+    reachable: (self, target) => feasibleAims(self, target, "tosser").length > 0,
+    selectTarget: randomTarget,
+    aim: (self, target, memory, rng) => {
+      const aim = tosserAim(self, target, memory, rng);
+      memory.lastAim = aim;
+      return aim;
+    },
+  },
+};
+
+/**
  * Whether `self` can reach `target` the way `personality` fires: some Angle it would use
  * toward the Target hits it, ignoring Wind and Terrain, with a Power within `self`'s cap.
  */
 export function isReachable(self: Tank, target: Tank, personality: TargetingPersonality): boolean {
-  return feasibleAims(self, target, personality).length > 0;
+  return RULES[personality].reachable(self, target);
 }
 
 /**
- * Keep the remembered Target while its Tank is alive and reachable; otherwise pick a random
- * reachable living opponent with rng, remember it, and forget the aim and landing at the old
- * one. With no reachable living opponent, forget the Target and return null. Never called
- * once `self` is the only living Tank: the Round has already ended.
+ * Keep the remembered Target while its Tank is alive and reachable, if the Personality keeps
+ * its Target; otherwise choose among the reachable living opponents by the Personality's own
+ * rule, remember it, and forget the aim and landing at the old one. With no reachable living
+ * opponent, forget the Target and return null. Never called once `self` is the only living
+ * Tank: the Round has already ended.
  */
 export function chooseTarget(
   memory: ComputerMemory,
@@ -102,14 +142,16 @@ export function chooseTarget(
   rng: Rng,
   personality: TargetingPersonality,
 ): Tank | null {
+  const rules = RULES[personality];
   const kept = tanks.find((t) => t.playerId === memory.targetId);
-  if (kept && kept !== self && isAlive(kept) && isReachable(self, kept, personality)) return kept;
+  if (rules.keepsTarget && kept && kept !== self && isAlive(kept) && rules.reachable(self, kept)) {
+    return kept;
+  }
 
   const opponents = tanks.filter((t) => t !== self && isAlive(t));
   if (opponents.length === 0) throw new Error(`Player ${self.playerId} has no living opponent`);
-  const reachable = opponents.filter((t) => isReachable(self, t, personality));
-  const target =
-    reachable.length === 0 ? null : (reachable[rng.int(0, reachable.length - 1)] as Tank);
+  const reachable = opponents.filter((t) => rules.reachable(self, t));
+  const target = reachable.length === 0 ? null : rules.selectTarget(self, reachable, rng);
   memory.targetId = target?.playerId ?? null;
   memory.lastAim = null;
   memory.lastLanding = null;
@@ -129,15 +171,7 @@ export function chooseAim(
   // Round still ends.
   const target = chooseTarget(memory, self, tanks, rng, personality);
   if (!target) return moronAim(self, rng);
-  switch (personality) {
-    case "shooter":
-      return shooterAim(self, target, rng);
-    case "tosser": {
-      const aim = tosserAim(self, target, memory, rng);
-      memory.lastAim = aim;
-      return aim;
-    }
-  }
+  return RULES[personality].aim(self, target, memory, rng);
 }
 
 /** A Weapon that damages Tanks: every kind but Dirt. */
