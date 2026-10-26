@@ -136,7 +136,7 @@ export const MIN_ROUNDS = 1;
 export const MAX_ROUNDS = 99;
 
 // Money
-export const STARTING_MONEY = 2_000;
+export const STARTING_MONEY = 10_000;
 export const MONEY_PER_DAMAGE = 50; // per point of Health removed from another Tank
 export const MONEY_PER_DESTROYED_TANK = 2_000; // per other Tank an Explosion destroys
 export const MONEY_PER_ROUND_WIN = 5_000;
