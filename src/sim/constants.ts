@@ -138,7 +138,7 @@ export const DEATH_ANIMATION_KINDS: readonly DeathAnimationKind[] = [
 export const EPITAPH_SECONDS = 3; // from the start of the destroyed Tank's Death Animation
 export const TAUNT_SECONDS = 2.5;
 export const TAUNT_CHANCE = 0.25; // of each Turn having a Taunt, rolled as the Turn begins
-export const MAX_LINE_LENGTH = 40; // characters; every Epitaph and Taunt fits the field when drawn
+export const FLAVOUR_SEED_SALT = 0x9e3779b9; // mixed into the Match seed to seed the flavour stream (ADR 0003)
 
 // Terrain generation
 export const TERRAIN_BASE_FRACTION = 0.65; // mean surface height as a fraction of FIELD_HEIGHT from the top

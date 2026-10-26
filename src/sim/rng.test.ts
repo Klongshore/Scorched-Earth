@@ -46,6 +46,23 @@ describe("Rng", () => {
     }
   });
 
+  it("pick returns an item of the list, from one int draw", () => {
+    const items = ["a", "b", "c", "d"];
+    const picker = new Rng(11);
+    const drawer = new Rng(11);
+    const seen = new Set<string>();
+    for (let i = 0; i < 1_000; i++) {
+      const v = picker.pick(items);
+      expect(v).toBe(items[drawer.int(0, items.length - 1)]);
+      seen.add(v);
+    }
+    expect([...seen].sort()).toEqual(items);
+  });
+
+  it("pick throws on an empty list", () => {
+    expect(() => new Rng(1).pick([])).toThrow();
+  });
+
   it("shuffle returns a permutation without mutating its input", () => {
     const input = [1, 2, 3, 4, 5, 6, 7, 8];
     const copy = [...input];

@@ -2,8 +2,8 @@ import { TAUNT_CHANCE } from "./constants";
 import type { Rng } from "./rng";
 
 /**
- * Epitaphs any destroyed Tank may show. Plain ASCII, family-friendly, and at most MAX_LINE_LENGTH
- * characters, so each one fits the field when drawn.
+ * Epitaphs any destroyed Tank may show. Plain ASCII, family-friendly, and short enough to fit
+ * the field when drawn.
  */
 export const EPITAPHS: readonly string[] = [
   "I regret nothing!",
@@ -90,7 +90,7 @@ export const TAUNTS: readonly string[] = [
  */
 export function pickEpitaph(flavourRng: Rng, selfInflicted: boolean): string {
   const pool = selfInflicted ? [...EPITAPHS, ...SELF_INFLICTED_EPITAPHS] : EPITAPHS;
-  return pool[flavourRng.int(0, pool.length - 1)] as string;
+  return flavourRng.pick(pool);
 }
 
 /**
@@ -99,5 +99,5 @@ export function pickEpitaph(flavourRng: Rng, selfInflicted: boolean): string {
  */
 export function rollTaunt(flavourRng: Rng): string | null {
   if (flavourRng.next() >= TAUNT_CHANCE) return null;
-  return TAUNTS[flavourRng.int(0, TAUNTS.length - 1)] as string;
+  return flavourRng.pick(TAUNTS);
 }

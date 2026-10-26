@@ -1,12 +1,22 @@
-import { DEATH_ANIMATION_SECONDS, GRAVITY, TANK_HALF_WIDTH, TANK_HEIGHT } from "../sim/constants";
+import {
+  DEATH_ANIMATION_SECONDS,
+  FIELD_HEIGHT,
+  FIELD_WIDTH,
+  GRAVITY,
+  TANK_HALF_WIDTH,
+  TANK_HEIGHT,
+} from "../sim/constants";
+import { Rng } from "../sim/rng";
 import type { DeathAnimation } from "../sim/types";
 import { EXPLOSION_COLORS, HUSK_SHADE, PROJECTILE_COLOR, SMOKE_COLOR } from "./palette";
 
 // Every Death Animation is drawn from its elapsed time alone. Any per-particle variation comes from
-// `scatter`, which hashes the animation's own data, so it never touches the simulation's Rng.
+// `scatter`, a fresh Rng seeded from the animation's own data, so it never touches the Round's Rngs.
 
 const FIREBALL_MAX_RADIUS = 18; // px
 const FIREBALL_GROW_FRACTION = 0.3; // of the Death Animation spent swelling to full size
+const FIREBALL_FADED_SCALE = 0.5; // of its full size the ball has shrunk to as it fades out
+const FIREBALL_FLICKERS_PER_SECOND = 30; // how often the rings' colours step round
 
 const SPARK_COUNT = 28;
 const SPARK_MIN_SPEED = 60; // px/s
@@ -18,16 +28,22 @@ const SPARK_FLASH_RADIUS = 7; // px
 
 const DRIFT_MAX_SPEED = 40; // px/s a disintegrating pixel drifts at, at most
 const DRIFT_RISE = 12; // px/s every disintegrating pixel also rises
+const DRIFT_MAX_DELAY_FRACTION = 0.3; // of the Death Animation a pixel may linger before drifting
 
 const POP_FRACTION = 0.15; // of the Death Animation spent on the bang
 const POP_MAX_RADIUS = 9; // px
+const POP_FADE = 0.5; // of the bang's opacity lost by its end
 const POP_RAYS = 8;
+const POP_RAY_REACH = 1.6; // rays run out to this many times the bang's radius
 const SMOKE_PUFFS = 7;
 const SMOKE_RISE = 45; // px/s
 const SMOKE_SWAY = 6; // px either side a puff sways as it rises
 const SMOKE_MIN_RADIUS = 3; // px
 const SMOKE_MAX_RADIUS = 10; // px
 const SMOKE_ALPHA = 0.7;
+const SMOKE_MIN_ALPHA_SCALE = 0.6; // the faintest puff is this fraction of SMOKE_ALPHA
+const SMOKE_FIRST_FRACTION = POP_FRACTION / 2; // of the Death Animation before the first puff leaves
+const SMOKE_RELEASE_SPAN = 0.6; // of the rest of the Death Animation over which the puffs leave
 
 /** Draw a Death Animation of any kind; `color` is the destroyed Tank's Player's colour. */
 export function drawDeathAnimation(
@@ -55,17 +71,11 @@ export function drawDeathAnimation(
 }
 
 /**
- * A number in [0, 1) that is always the same for this animation, particle and salt: a hash of the
- * animation's own data (mulberry32's mixing step).
+ * A fresh Rng seeded from the animation's own data alone, so drawing from it in the same order
+ * gives the same numbers on every frame.
  */
-function scatter(animation: DeathAnimation, particle: number, salt: number): number {
-  let h = Math.imul(animation.playerId + 1, 0x9e3779b1);
-  h ^= Math.imul(animation.x + 1, 0x85ebca6b);
-  h ^= Math.imul(animation.y + 1, 0xc2b2ae35);
-  h = (h + Math.imul(particle + 1, 0x27d4eb2f) + salt * 0x165667b1) >>> 0;
-  h = Math.imul(h ^ (h >>> 15), h | 1);
-  h ^= h + Math.imul(h ^ (h >>> 7), h | 61);
-  return ((h ^ (h >>> 14)) >>> 0) / 4294967296;
+function scatter(animation: DeathAnimation): Rng {
+  return new Rng((animation.playerId * FIELD_WIDTH + animation.x) * FIELD_HEIGHT + animation.y);
 }
 
 /** The centre of the Tank the animation replaces. */
@@ -83,9 +93,10 @@ function disc(ctx: CanvasRenderingContext2D, x: number, y: number, radius: numbe
 function drawFireball(ctx: CanvasRenderingContext2D, animation: DeathAnimation, t: number): void {
   const grow = Math.min(1, t / FIREBALL_GROW_FRACTION);
   const fade = t <= FIREBALL_GROW_FRACTION ? 1 : (1 - t) / (1 - FIREBALL_GROW_FRACTION);
-  const radius = FIREBALL_MAX_RADIUS * grow * (0.5 + 0.5 * fade);
+  const radius =
+    FIREBALL_MAX_RADIUS * grow * (FIREBALL_FADED_SCALE + (1 - FIREBALL_FADED_SCALE) * fade);
   const c = middle(animation);
-  const flicker = Math.floor(animation.elapsed * 30);
+  const flicker = Math.floor(animation.elapsed * FIREBALL_FLICKERS_PER_SECOND);
   ctx.globalAlpha = fade;
   EXPLOSION_COLORS.forEach((_, ring) => {
     // Outer rings first; each ring's colour cycles so the ball flickers.
@@ -102,6 +113,7 @@ function drawSparkShower(
 ): void {
   const c = middle(animation);
   const seconds = animation.elapsed;
+  const rng = scatter(animation);
   if (t < SPARK_FLASH_FRACTION) {
     ctx.globalAlpha = 1 - t / SPARK_FLASH_FRACTION;
     ctx.fillStyle = PROJECTILE_COLOR;
@@ -109,12 +121,11 @@ function drawSparkShower(
   }
   ctx.globalAlpha = 1 - t;
   for (let i = 0; i < SPARK_COUNT; i++) {
-    const angle = -Math.PI / 2 + (scatter(animation, i, 1) * 2 - 1) * SPARK_SPREAD;
-    const speed = SPARK_MIN_SPEED + scatter(animation, i, 2) * (SPARK_MAX_SPEED - SPARK_MIN_SPEED);
+    const angle = -Math.PI / 2 + rng.range(-SPARK_SPREAD, SPARK_SPREAD);
+    const speed = rng.range(SPARK_MIN_SPEED, SPARK_MAX_SPEED);
     const x = c.x + Math.cos(angle) * speed * seconds;
     const y = c.y + Math.sin(angle) * speed * seconds + 0.5 * GRAVITY * seconds * seconds;
-    const colorIndex = Math.floor(scatter(animation, i, 3) * EXPLOSION_COLORS.length);
-    ctx.fillStyle = EXPLOSION_COLORS[colorIndex] ?? "#ffffff";
+    ctx.fillStyle = rng.pick(EXPLOSION_COLORS);
     ctx.fillRect(Math.round(x), Math.round(y), SPARK_SIZE, SPARK_SIZE);
   }
 }
@@ -141,12 +152,13 @@ function drawDisintegration(
   color: string,
 ): void {
   const seconds = animation.elapsed;
+  const rng = scatter(animation);
   ctx.globalAlpha = 1 - t;
-  TANK_PIXELS.forEach(({ dx, dy }, i) => {
-    const angle = scatter(animation, i, 4) * Math.PI * 2;
-    const speed = scatter(animation, i, 5) * DRIFT_MAX_SPEED;
+  for (const { dx, dy } of TANK_PIXELS) {
+    const angle = rng.range(0, Math.PI * 2);
+    const speed = rng.range(0, DRIFT_MAX_SPEED);
     // Each pixel lingers a moment before it drifts, so the Tank crumbles rather than bursts.
-    const start = scatter(animation, i, 6) * 0.3 * DEATH_ANIMATION_SECONDS;
+    const start = rng.range(0, DRIFT_MAX_DELAY_FRACTION * DEATH_ANIMATION_SECONDS);
     const moving = Math.max(0, seconds - start);
     const x = Math.round(animation.x + dx + Math.cos(angle) * speed * moving);
     const y = Math.round(animation.y + dy + Math.sin(angle) * speed * moving - DRIFT_RISE * moving);
@@ -154,7 +166,7 @@ function drawDisintegration(
     ctx.fillRect(x, y, 1, 1);
     ctx.fillStyle = HUSK_SHADE;
     ctx.fillRect(x, y, 1, 1);
-  });
+  }
 }
 
 /** A small bang with rays, then a plume of grey puffs that rise, swell and fade. */
@@ -164,10 +176,11 @@ function drawPopAndSmoke(
   t: number,
 ): void {
   const c = middle(animation);
+  const rng = scatter(animation);
   if (t < POP_FRACTION) {
     const p = t / POP_FRACTION;
     const radius = POP_MAX_RADIUS * p;
-    ctx.globalAlpha = 1 - p * 0.5;
+    ctx.globalAlpha = 1 - p * POP_FADE;
     ctx.fillStyle = EXPLOSION_COLORS[0];
     disc(ctx, c.x, c.y, radius);
     ctx.strokeStyle = PROJECTILE_COLOR;
@@ -176,22 +189,27 @@ function drawPopAndSmoke(
     for (let i = 0; i < POP_RAYS; i++) {
       const angle = (i / POP_RAYS) * Math.PI * 2;
       ctx.moveTo(c.x + Math.cos(angle) * radius, c.y + Math.sin(angle) * radius);
-      ctx.lineTo(c.x + Math.cos(angle) * radius * 1.6, c.y + Math.sin(angle) * radius * 1.6);
+      const reach = radius * POP_RAY_REACH;
+      ctx.lineTo(c.x + Math.cos(angle) * reach, c.y + Math.sin(angle) * reach);
     }
     ctx.stroke();
   }
   ctx.fillStyle = SMOKE_COLOR;
   const smokeSeconds = DEATH_ANIMATION_SECONDS * (1 - POP_FRACTION);
   for (let i = 0; i < SMOKE_PUFFS; i++) {
+    // Drawn before any puff is skipped, so every puff keeps its numbers on every frame.
+    const phase = rng.range(0, Math.PI * 2);
+    const alphaScale = rng.range(SMOKE_MIN_ALPHA_SCALE, 1);
     // Puffs leave one after another once the bang is over, each living to the end.
-    const start = POP_FRACTION * 0.5 + (i / SMOKE_PUFFS) * (1 - POP_FRACTION) * 0.6;
+    const start =
+      SMOKE_FIRST_FRACTION + (i / SMOKE_PUFFS) * (1 - POP_FRACTION) * SMOKE_RELEASE_SPAN;
     if (t < start) continue;
     const age = ((t - start) * DEATH_ANIMATION_SECONDS) / smokeSeconds; // 0 → about 1
-    const sway = Math.sin(age * Math.PI * 2 + scatter(animation, i, 7) * Math.PI * 2) * SMOKE_SWAY;
+    const sway = Math.sin(age * Math.PI * 2 + phase) * SMOKE_SWAY;
     const x = c.x + sway * age;
     const y = c.y - SMOKE_RISE * (t - start) * DEATH_ANIMATION_SECONDS;
     const radius = SMOKE_MIN_RADIUS + (SMOKE_MAX_RADIUS - SMOKE_MIN_RADIUS) * Math.min(1, age);
-    ctx.globalAlpha = SMOKE_ALPHA * Math.max(0, 1 - t) * (0.6 + 0.4 * scatter(animation, i, 8));
+    ctx.globalAlpha = SMOKE_ALPHA * Math.max(0, 1 - t) * alphaScale;
     disc(ctx, x, y, radius);
   }
 }

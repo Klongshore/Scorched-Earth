@@ -96,7 +96,7 @@ export class Round {
    * Randomness for cosmetic choices only (ADR 0003); nothing that can affect the outcome draws
    * from it.
    */
-  readonly flavourRng: Rng;
+  private readonly flavourRng: Rng;
   private readonly loadout: Loadout;
   /** One per Computer Player, keyed by playerId; fresh every Round. */
   private readonly memories = new Map<number, ComputerMemory>();
@@ -213,6 +213,16 @@ export class Round {
    */
   get lines(): readonly Readonly<Line>[] {
     return this.shownLines;
+  }
+
+  /**
+   * Seconds left on the longest-lasting Epitaph on screen; 0 with none. Taunts never count. Read
+   * only, so the Round's last Epitaph can be waited for.
+   */
+  get epitaphSecondsLeft(): number {
+    return this.shownLines
+      .filter((l) => l.kind === "epitaph")
+      .reduce((longest, l) => Math.max(longest, l.secondsLeft), 0);
   }
 
   /** Advance the simulation by one tick. */
@@ -425,8 +435,7 @@ export class Round {
    */
   private startDeathAnimation(tank: Tank): DeathAnimation {
     this.gone.add(tank.playerId);
-    const kinds = DEATH_ANIMATION_KINDS;
-    const kind = kinds[this.flavourRng.int(0, kinds.length - 1)] ?? "fireball";
+    const kind = this.flavourRng.pick(DEATH_ANIMATION_KINDS);
     const selfInflicted = tank.playerId === this.currentPlayerId;
     this.say("epitaph", tank.playerId, pickEpitaph(this.flavourRng, selfInflicted));
     return { playerId: tank.playerId, kind, x: tank.x, y: tank.y, elapsed: 0 };

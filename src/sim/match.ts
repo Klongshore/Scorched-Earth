@@ -1,4 +1,5 @@
 import {
+  FLAVOUR_SEED_SALT,
   MAX_PLAYERS,
   MAX_ROUNDS,
   MIN_PLAYERS,
@@ -13,9 +14,6 @@ import { Rng } from "./rng";
 import { Round, type RoundResult } from "./round";
 import { canAfford, computerShopping } from "./shop";
 import type { Player, PlayerSetup, ShopName } from "./types";
-
-/** Mixed into the Match seed to seed the flavour stream, so it never mirrors the simulation's. */
-const FLAVOUR_SEED_SALT = 0x9e3779b9;
 
 export interface MatchSetup {
   readonly players: readonly PlayerSetup[]; // one per Player, MIN_PLAYERS..MAX_PLAYERS
