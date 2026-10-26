@@ -177,6 +177,9 @@ export const SHOOTER_POWER_ERROR = 0.05; // ±5%
 // Chooser
 export const CHOOSER_POWER_ERROR = 0.02; // ±2%, while allowing for Wind
 
+// Spoiler
+export const SPOILER_POWER_ERROR = CHOOSER_POWER_ERROR / 2; // half a Chooser's
+
 // Tosser
 export const TOSSER_ANGLE = 45; // degrees above the horizontal, toward the Target
 export const TOSSER_FIRST_POWER_ERROR = 0.25; // ±25%, on its first Turn at a Target

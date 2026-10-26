@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   BABY_MISSILE,
   CHOOSER_POWER_ERROR,
+  SPOILER_POWER_ERROR,
   COMPUTER_THINK_SECONDS,
   COMPUTER_THINK_TICKS,
   FIELD_HEIGHT,
@@ -777,7 +778,7 @@ describe("Computer Players choose Weapons", () => {
     });
   });
 
-  for (const personality of ["shooter", "tosser", "chooser"] as const) {
+  for (const personality of ["shooter", "tosser", "chooser", "spoiler"] as const) {
     describe(personality, () => {
       it("fires the Nuke at a far Target and a Missile at a Target closer than 75 px", () => {
         const inventory = inventoryOf({ Missile: 5, Nuke: 1 });
@@ -978,6 +979,44 @@ describe("Chooser Personality", () => {
     const target = tankAt(1, 100 + 5); // too close to reach in its band
     const tanks = [self, target];
     const aim = chooseAim("chooser", self, tanks, newComputerMemory(), new Rng(4), 0);
+    expect(aim).toEqual(chooseAim("moron", self, tanks, newComputerMemory(), new Rng(4)));
+  });
+});
+
+describe("Spoiler Personality", () => {
+  it("has half Chooser's Power error", () => {
+    expect(SPOILER_POWER_ERROR).toBe(CHOOSER_POWER_ERROR / 2);
+  });
+
+  it("targets the weakest opponent like a Chooser, ties to the lowest Player id", () => {
+    const tanks = fiveTanks();
+    const self = tanks[2] as Tank;
+    for (const t of tanks) t.health = 50;
+    (tanks[3] as Tank).health = 20;
+    const rng = new Rng(3);
+    expect(chooseTarget(newComputerMemory(), self, tanks, rng, "spoiler")?.playerId).toBe(3);
+    (tanks[3] as Tank).health = 50;
+    expect(chooseTarget(newComputerMemory(), self, tanks, rng, "spoiler")?.playerId).toBe(0);
+  });
+
+  it("aims within half of Chooser's error and allows for Wind", () => {
+    const self = tankAt(0, 100);
+    const target = tankAt(1, 450);
+    const tanks = [self, target];
+    for (let i = 0; i < 200; i++) {
+      const ideal = windAim(self, target, 10, new Rng(i), 0);
+      const aim = chooseAim("spoiler", self, tanks, newComputerMemory(), new Rng(i), 10);
+      expect(aim.angle).toBe(ideal.angle);
+      expect(Math.abs(aim.power - ideal.power)).toBeLessThanOrEqual(
+        Math.ceil(ideal.power * SPOILER_POWER_ERROR) + 1,
+      );
+    }
+  });
+
+  it("fires a random aim like a Moron when no opponent is reachable", () => {
+    const self = tankAt(0, 100);
+    const tanks = [self, tankAt(1, 105)];
+    const aim = chooseAim("spoiler", self, tanks, newComputerMemory(), new Rng(4), 0);
     expect(aim).toEqual(chooseAim("moron", self, tanks, newComputerMemory(), new Rng(4)));
   });
 });
