@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   BARREL_LENGTH,
   COMPUTER_THINK_SECONDS,
+  DEATH_ANIMATION_KINDS,
   DEATH_ANIMATION_SECONDS,
   EXPLOSION_SECONDS,
   FALL_SAFE_PIXELS,
@@ -31,7 +32,14 @@ import { Round, type RoundAction } from "./round";
 import { fallDamage } from "./settling";
 import { barrelTip, centre, hitTest, isSupported, occupiesCell } from "./tank";
 import type { Terrain } from "./terrain";
-import type { DeathAnimation, Explosion, PlayerSetup, Tank, WeaponName } from "./types";
+import type {
+  DeathAnimation,
+  DeathAnimationKind,
+  Explosion,
+  PlayerSetup,
+  Tank,
+  WeaponName,
+} from "./types";
 
 const HUMAN: PlayerSetup = { kind: "human" };
 const MORON: PlayerSetup = { kind: "computer", personality: "moron" };
@@ -1350,7 +1358,7 @@ describe("Round Death Animations", () => {
     expect(phases).toEqual(["resolving", "settling", "dying"]);
     expect(round.currentPlayerId).toBe(firer.playerId);
     expect(animationsOf(round)).toEqual([
-      { playerId: other.playerId, x: other.x, y: other.y, elapsed: 0 },
+      { playerId: other.playerId, kind: expect.any(String), x: other.x, y: other.y, elapsed: 0 },
     ]);
   });
 
@@ -1545,5 +1553,51 @@ describe("Round Death Animations", () => {
     round.act({ kind: "fire" });
     expect(firer.angle).toBe(angle);
     expect(round.phase.kind).toBe("dying");
+  });
+});
+
+describe("Round Death Animation kinds", () => {
+  /** Both Tanks of a two-Human Round already destroyed, from these seeds; their kinds by Player. */
+  function kindsWhenBothDie(seed: number, flavourSeed: number): DeathAnimationKind[] {
+    const players = createPlayers([HUMAN, HUMAN]);
+    const round = new Round(1, players, new Rng(seed), emptyLoadout(players), new Rng(flavourSeed));
+    for (const t of round.tanks) t.health = 0;
+    round.phase = { kind: "settling" };
+    let kinds: DeathAnimationKind[] = [];
+    runUntil(round, ({ phase }) => {
+      if (phase.kind !== "dying") return false;
+      kinds = [...phase.animations].sort((a, b) => a.playerId - b.playerId).map((a) => a.kind);
+      return true;
+    });
+    expect(kinds).toHaveLength(2);
+    return kinds;
+  }
+
+  it("picks every Death Animation's kind from the four kinds", () => {
+    for (let flavourSeed = 1; flavourSeed <= 20; flavourSeed++) {
+      for (const kind of kindsWhenBothDie(1, flavourSeed)) {
+        expect(DEATH_ANIMATION_KINDS).toContain(kind);
+      }
+    }
+  });
+
+  it("picks the same kinds for the same deaths from the same seeds", () => {
+    for (let flavourSeed = 1; flavourSeed <= 20; flavourSeed++) {
+      expect(kindsWhenBothDie(3, flavourSeed)).toEqual(kindsWhenBothDie(3, flavourSeed));
+    }
+  });
+
+  it("picks every kind over many flavour seeds", () => {
+    const seen = new Set<DeathAnimationKind>();
+    for (let flavourSeed = 1; flavourSeed <= 50; flavourSeed++) {
+      for (const kind of kindsWhenBothDie(1, flavourSeed)) seen.add(kind);
+    }
+    expect([...seen].sort()).toEqual([...DEATH_ANIMATION_KINDS].sort());
+  });
+
+  it("picks kinds from the flavour Rng only: the simulation seed never changes them", () => {
+    for (let flavourSeed = 1; flavourSeed <= 20; flavourSeed++) {
+      expect(kindsWhenBothDie(1, flavourSeed)).toEqual(kindsWhenBothDie(99, flavourSeed));
+    }
   });
 });

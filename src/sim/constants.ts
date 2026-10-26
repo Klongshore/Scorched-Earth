@@ -1,4 +1,13 @@
-import type { ForSale, Item, ShieldItem, ShieldName, ShopName, Weapon, WeaponName } from "./types";
+import type {
+  DeathAnimationKind,
+  ForSale,
+  Item,
+  ShieldItem,
+  ShieldName,
+  ShopName,
+  Weapon,
+  WeaponName,
+} from "./types";
 
 // Field
 export const FIELD_WIDTH = 640;
@@ -118,6 +127,12 @@ export const SETTLE_PASSES_PER_TICK = 2;
 
 // Death Animations
 export const DEATH_ANIMATION_SECONDS = 1.2; // every destroyed Tank's, played together at the end of a Turn
+export const DEATH_ANIMATION_KINDS: readonly DeathAnimationKind[] = [
+  "fireball",
+  "sparkShower",
+  "disintegration",
+  "popAndSmoke",
+];
 
 // Terrain generation
 export const TERRAIN_BASE_FRACTION = 0.65; // mean surface height as a fraction of FIELD_HEIGHT from the top
