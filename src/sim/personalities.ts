@@ -28,8 +28,24 @@ export interface Aim {
   power: number;
 }
 
-/** A Personality that aims at a Target: every one but Moron. */
-export type TargetingPersonality = Exclude<PersonalityName, "moron">;
+/** A Personality that aims at a Target: every one but Moron and Unknown. */
+export type TargetingPersonality = Exclude<PersonalityName, "moron" | "unknown">;
+
+/** A Personality that acts directly: Unknown has resolved to one of these. */
+export type ActingPersonality = Exclude<PersonalityName, "unknown">;
+
+/** What an Unknown can become, in the order the pick indexes them. */
+export const UNKNOWN_OUTCOMES: readonly TargetingPersonality[] = [
+  "poolshark",
+  "chooser",
+  "spoiler",
+  "cyborg",
+];
+
+/** Pick what an Unknown becomes for a Round: one `int` draw from rng. */
+export function resolveUnknown(rng: Rng): TargetingPersonality {
+  return UNKNOWN_OUTCOMES[rng.int(0, UNKNOWN_OUTCOMES.length - 1)] as TargetingPersonality;
+}
 
 /** Where a Computer Player's last Projectile ended up. */
 export type Landing = { kind: "hit"; x: number } | { kind: "lost"; side: "left" | "right" };
@@ -42,10 +58,12 @@ export interface ComputerMemory {
   targetId: number | null; // playerId of the Target
   lastAim: Aim | null; // the Tosser's last Angle and Power at this Target
   lastLanding: Landing | null;
+  /** What an Unknown became this Round; null for every other Personality. */
+  resolved: TargetingPersonality | null;
 }
 
 export function newComputerMemory(): ComputerMemory {
-  return { targetId: null, lastAim: null, lastLanding: null };
+  return { targetId: null, lastAim: null, lastLanding: null, resolved: null };
 }
 
 /** The Shooter's band, SHOOTER_MIN_ANGLE..SHOOTER_MAX_ANGLE, in degrees above the horizontal. */
@@ -238,7 +256,7 @@ export function chooseTarget(
 
 /** Choose a Computer Player's aim for its Turn according to its Personality. */
 export function chooseAim(
-  personality: PersonalityName,
+  personality: ActingPersonality,
   self: Tank,
   tanks: readonly Tank[],
   memory: ComputerMemory,
@@ -273,7 +291,7 @@ function isDamaging(weapon: Weapon): weapon is DamagingWeapon {
  *   Missile. They never draw from rng.
  */
 export function chooseWeapon(
-  personality: PersonalityName,
+  personality: ActingPersonality,
   self: Tank,
   target: Tank | null,
   inventory: Pick<Inventory, "owned">,

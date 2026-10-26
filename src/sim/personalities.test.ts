@@ -150,7 +150,12 @@ function fiveTanks(): Tank[] {
 
 describe("chooseTarget", () => {
   it("starts with no Target", () => {
-    expect(newComputerMemory()).toEqual({ targetId: null, lastAim: null, lastLanding: null });
+    expect(newComputerMemory()).toEqual({
+      targetId: null,
+      lastAim: null,
+      lastLanding: null,
+      resolved: null,
+    });
   });
 
   it("picks a living opponent, never itself or a destroyed Tank", () => {
@@ -185,6 +190,7 @@ describe("chooseTarget", () => {
       targetId: 4,
       lastAim: { angle: 45, power: 400 },
       lastLanding: { kind: "hit", x: 250 },
+      resolved: null,
     };
     const kept = structuredClone(memory);
     const rng = new Rng(8);
@@ -207,12 +213,18 @@ describe("chooseTarget", () => {
         targetId: 3,
         lastAim: { angle: 45, power: 400 },
         lastLanding: { kind: "hit", x: 250 },
+        resolved: null,
       };
       (tanks[3] as Tank).health = 0;
       (tanks[0] as Tank).health = 0;
       const target = chooseTarget(memory, self, tanks, rng, "shooter") as Tank;
       expect([2, 4]).toContain(target.playerId);
-      expect(memory).toEqual({ targetId: target.playerId, lastAim: null, lastLanding: null });
+      expect(memory).toEqual({
+        targetId: target.playerId,
+        lastAim: null,
+        lastLanding: null,
+        resolved: null,
+      });
     }
   });
 
@@ -236,10 +248,11 @@ describe("chooseTarget", () => {
         targetId: 4,
         lastAim: { angle: 45, power: 300 },
         lastLanding: { kind: "hit", x: 300 },
+        resolved: null,
       };
       const target = chooseTarget(memory, self, tanks, rng, "shooter");
       expect(target?.playerId).toBe(1);
-      expect(memory).toEqual({ targetId: 1, lastAim: null, lastLanding: null });
+      expect(memory).toEqual({ targetId: 1, lastAim: null, lastLanding: null, resolved: null });
     }
   });
 
@@ -251,6 +264,7 @@ describe("chooseTarget", () => {
       targetId: 4,
       lastAim: { angle: 45, power: 50 },
       lastLanding: { kind: "hit", x: 320 },
+      resolved: null,
     };
     expect(chooseTarget(memory, self, tanks, new Rng(1), "shooter")).toBeNull();
     expect(memory).toEqual(newComputerMemory());
