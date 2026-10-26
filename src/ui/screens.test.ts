@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   DEFAULT_PLAYERS,
   DEFAULT_ROUNDS,
@@ -38,6 +38,12 @@ import {
   startOnce,
   type ShopRow,
 } from "./screens";
+
+// These tests describe play from a $2,000 start; keep them independent of the tuned constant.
+vi.mock("../sim/constants", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../sim/constants")>()),
+  STARTING_MONEY: 2_000,
+}));
 
 describe("Player choices on the Setup screen", () => {
   it("offers Human, Moron, Shooter and Tosser", () => {
