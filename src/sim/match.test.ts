@@ -209,6 +209,18 @@ describe("Match", () => {
     expect(b.requireRound().tanks).toEqual(a.requireRound().tanks);
     expect(b.requireRound().terrain.cells).toEqual(a.requireRound().terrain.cells);
   });
+
+  it("gives every Round one flavour stream, reproducible from the seed and apart from the simulation's", () => {
+    const a = newMatch({ seed: 42 });
+    const b = newMatch({ seed: 42 });
+    const flavourA = a.requireRound().flavourRng;
+    const draws = (rng: Rng): number[] => Array.from({ length: 10 }, () => rng.next());
+    const fromA = draws(flavourA);
+    expect(draws(b.requireRound().flavourRng)).toEqual(fromA);
+    expect(fromA).not.toEqual(draws(new Rng(42)));
+    finishRound(a, draw);
+    expect(a.requireRound().flavourRng).toBe(flavourA);
+  });
 });
 
 describe("Match Shop", () => {
