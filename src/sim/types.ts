@@ -124,3 +124,17 @@ export interface DeathAnimation {
   readonly y: number; // the row under the Tank, as Tank.y
   elapsed: number; // seconds since it started
 }
+
+/** What an on-screen line is: an Epitaph over a destroyed Tank, or a Taunt over a firing one. */
+export type LineKind = "epitaph" | "taunt";
+
+/**
+ * A line of text shown for a few seconds above a Player's Tank, wherever that Tank stands. Pure
+ * flavour: it never holds up the Round.
+ */
+export interface Line {
+  readonly kind: LineKind;
+  readonly playerId: number; // whose Tank it is shown above, in whose colour
+  readonly text: string;
+  secondsLeft: number; // gone once this reaches 0
+}

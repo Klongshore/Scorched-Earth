@@ -4,6 +4,7 @@ import type { Renderer } from "./render/renderer";
 import { MAX_TICKS_PER_FRAME, TICK_SECONDS } from "./sim/constants";
 import { Match } from "./sim/match";
 import type { RoundAction } from "./sim/round";
+import type { Line } from "./sim/types";
 import {
   clearOverlay,
   showRoundResults,
@@ -20,8 +21,19 @@ import {
  */
 const MAX_BACKLOG_SECONDS = 0.25;
 
-/** How long the field stays in view after a Round ends before Round results appear. */
+/** Least time the field stays in view after a Round ends before Round results appear. */
 const ROUND_RESULTS_DELAY_SECONDS = 1;
+
+/**
+ * Seconds from a Round ending until Round results appear, given the lines then on screen: the
+ * larger of ROUND_RESULTS_DELAY_SECONDS and the longest Epitaph still showing, so the last line
+ * of the Round can be read.
+ */
+export function roundResultsDelay(lines: readonly Readonly<Line>[]): number {
+  return lines
+    .filter((l) => l.kind === "epitaph")
+    .reduce((delay, l) => Math.max(delay, l.secondsLeft), ROUND_RESULTS_DELAY_SECONDS);
+}
 
 /**
  * Feed one frame's wall-clock time into a fixed-timestep accumulator. Calls `tick` with
@@ -229,8 +241,11 @@ export class Game {
     if (!round || match.stage.kind !== "playing") return;
     round.tick(dt);
     if (this.screen !== "round" || round.phase.kind !== "over") return;
-    if (match.results.length < round.number) match.recordRoundResult();
-    // Keep ticking and drawing for a moment so the final Explosion stays visible.
+    if (match.results.length < round.number) {
+      match.recordRoundResult();
+      this.resultsDelay = roundResultsDelay(round.lines);
+    }
+    // Keep ticking and drawing for a moment so the final Death Animation and Epitaphs stay visible.
     this.resultsDelay -= dt;
     if (this.resultsDelay <= 0) {
       this.enter("roundResults");

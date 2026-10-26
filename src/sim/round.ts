@@ -3,6 +3,7 @@ import {
   COMPUTER_THINK_TICKS,
   DEATH_ANIMATION_KINDS,
   DEATH_ANIMATION_SECONDS,
+  EPITAPH_SECONDS,
   EXPLOSION_SECONDS,
   FIELD_HEIGHT,
   FIELD_WIDTH,
@@ -16,11 +17,13 @@ import {
   MIRV_PIECES,
   MIRV_PIECE_WEAPON,
   MIRV_SPREAD,
+  TAUNT_SECONDS,
   WIND_MAX,
   weaponNamed,
 } from "./constants";
 import { detonate } from "./explosion";
 import { emptyLoadout, inventoryIn, type Inventory, type Loadout } from "./inventory";
+import { pickEpitaph } from "./lines";
 import { moneyEarned } from "./money";
 import {
   chooseAim,
@@ -42,12 +45,20 @@ import type {
   DeathAnimation,
   Explosion,
   HealthLoss,
+  Line,
+  LineKind,
   Player,
   Projectile,
   Tank,
   Weapon,
   WeaponName,
 } from "./types";
+
+/** How long each kind of line stays on screen, in seconds. */
+const LINE_SECONDS: Readonly<Record<LineKind, number>> = {
+  epitaph: EPITAPH_SECONDS,
+  taunt: TAUNT_SECONDS,
+};
 
 export type Phase =
   | { kind: "aiming"; thinkTicks: number | null } // ticks left to think; non-null only for Computer Players
@@ -101,6 +112,8 @@ export class Round {
   private healthBeforeSettling: number[] | null = null;
   /** playerIds of destroyed Tanks whose Death Animation has started: gone from the field. */
   private readonly gone = new Set<number>();
+  /** Every line on screen, oldest first. */
+  private readonly shownLines: Line[] = [];
 
   constructor(
     number: number,
@@ -192,8 +205,19 @@ export class Round {
     if (next) this.loadout.chosenWeapons[playerId] = next.name;
   }
 
+  /**
+   * Every Epitaph and Taunt on screen, oldest first, each shown above its Player's Tank. Read only:
+   * they count down on every tick, in every phase, and never hold up the Round.
+   */
+  get lines(): readonly Readonly<Line>[] {
+    return this.shownLines;
+  }
+
   /** Advance the simulation by one tick. */
   tick(dt: number): void {
+    // Lines age first, so one added this tick starts with its full time.
+    for (const line of this.shownLines) line.secondsLeft -= dt;
+    keepWhere(this.shownLines, (l) => l.secondsLeft > 0);
     const phase = this.phase;
     switch (phase.kind) {
       case "aiming":
@@ -385,14 +409,22 @@ export class Round {
   }
 
   /**
-   * A husk's Death Animation starts where it stands, of a kind the flavour Rng picks, and its Tank
-   * is gone from then on.
+   * A husk's Death Animation starts where it stands, of a kind the flavour Rng picks, with its
+   * Epitaph, and its Tank is gone from then on. Destroyed in its own Player's Turn, it destroyed
+   * itself.
    */
   private startDeathAnimation(tank: Tank): DeathAnimation {
     this.gone.add(tank.playerId);
     const kinds = DEATH_ANIMATION_KINDS;
     const kind = kinds[this.flavourRng.int(0, kinds.length - 1)] ?? "fireball";
+    const selfInflicted = tank.playerId === this.currentPlayerId;
+    this.say("epitaph", tank.playerId, pickEpitaph(this.flavourRng, selfInflicted));
     return { playerId: tank.playerId, kind, x: tank.x, y: tank.y, elapsed: 0 };
+  }
+
+  /** Show a line above a Player's Tank for as long as its kind lasts. */
+  private say(kind: LineKind, playerId: number, text: string): void {
+    this.shownLines.push({ kind, playerId, text, secondsLeft: LINE_SECONDS[kind] });
   }
 
   private endTurn(): void {

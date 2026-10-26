@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { FrameLoop, advance, seedFromQuery } from "./game";
-import { MAX_TICKS_PER_FRAME, TICK_SECONDS } from "./sim/constants";
+import { FrameLoop, advance, roundResultsDelay, seedFromQuery } from "./game";
+import { EPITAPH_SECONDS, MAX_TICKS_PER_FRAME, TICK_SECONDS } from "./sim/constants";
+import type { Line } from "./sim/types";
 
 function run(accumulator: number, frameSeconds: number) {
   const dts: number[] = [];
@@ -136,5 +137,29 @@ describe("FrameLoop", () => {
     scheduler.runFrame(2000);
     expect(count).toBe(1);
     expect(scheduler.pending.size).toBe(0);
+  });
+});
+
+describe("roundResultsDelay", () => {
+  const line = (kind: Line["kind"], secondsLeft: number): Line => ({
+    kind,
+    playerId: 0,
+    text: "Oops.",
+    secondsLeft,
+  });
+
+  it("waits 1 s with no Epitaph showing", () => {
+    expect(roundResultsDelay([])).toBe(1);
+    expect(roundResultsDelay([line("epitaph", 0.4)])).toBe(1);
+  });
+
+  it("waits for the longest Epitaph still showing", () => {
+    expect(roundResultsDelay([line("epitaph", 1.5), line("epitaph", EPITAPH_SECONDS)])).toBe(
+      EPITAPH_SECONDS,
+    );
+  });
+
+  it("never waits for a Taunt", () => {
+    expect(roundResultsDelay([line("taunt", 2.5)])).toBe(1);
   });
 });
