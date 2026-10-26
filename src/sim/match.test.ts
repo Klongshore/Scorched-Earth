@@ -512,6 +512,27 @@ describe("Match integration", () => {
     expect({ wins: match.roundWins, results: match.results }).toMatchSnapshot();
   });
 
+  it("replays a seeded Match with Unknown Players identically, and draws their Personalities after everything else", () => {
+    const unknown: PlayerSetup = { kind: "computer", personality: "unknown" };
+    const setup = { players: [unknown, moron, unknown, moron, unknown], rounds: 3, seed: 31 };
+    const a = new Match(setup);
+    const b = new Match(setup);
+    playOut(a, 3 * 200_000);
+    playOut(b, 3 * 200_000);
+    expect(a.results.length).toBe(3);
+    expect({ wins: b.roundWins, results: b.results }).toEqual({
+      wins: a.roundWins,
+      results: a.results,
+    });
+
+    // The Unknown draw comes last in Round setup, so the field is the same as without Unknowns.
+    const plain = new Match({ ...setup, players: [moron, moron, moron, moron, moron] });
+    const withUnknown = new Match(setup);
+    expect(withUnknown.requireRound().terrain.cells).toEqual(plain.requireRound().terrain.cells);
+    expect(withUnknown.requireRound().wind).toBe(plain.requireRound().wind);
+    expect(withUnknown.requireRound().turnOrder).toEqual(plain.requireRound().turnOrder);
+  });
+
   describe("3-Round Matches of 10 Computer Players, shopping and firing what they bought, finish within the tick budget", () => {
     const shooter: PlayerSetup = { kind: "computer", personality: "shooter" };
     const tosser: PlayerSetup = { kind: "computer", personality: "tosser" };
