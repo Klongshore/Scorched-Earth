@@ -42,7 +42,7 @@ import { createPlayers } from "./players";
 import { launch, stepProjectile } from "./projectile";
 import { Rng } from "./rng";
 import { Round } from "./round";
-import { centre, newTank, powerCap } from "./tank";
+import { centre, hitTest, newTank, powerCap } from "./tank";
 import { Terrain } from "./terrain";
 import type { PlayerSetup, Tank, Weapon, WeaponName } from "./types";
 
@@ -792,7 +792,14 @@ describe("Computer Players choose Weapons", () => {
     });
   });
 
-  for (const personality of ["shooter", "tosser", "chooser", "spoiler"] as const) {
+  for (const personality of [
+    "shooter",
+    "tosser",
+    "poolshark",
+    "chooser",
+    "spoiler",
+    "cyborg",
+  ] as const) {
     describe(personality, () => {
       it("fires the Nuke at a far Target and a Missile at a Target closer than 75 px", () => {
         const inventory = inventoryOf({ Missile: 5, Nuke: 1 });
@@ -1107,5 +1114,42 @@ describe("Cyborg Personality", () => {
     expect(chooseWeapon("cyborg", self, target, inventory, new Rng(1))).toBe(
       chooseWeapon("shooter", self, target, inventory, new Rng(1)),
     );
+  });
+
+  it("with no error, hits the Tank itself through the strongest Wind, even on long flights and close Targets", () => {
+    const rng = new Rng(12);
+    let checked = 0;
+    let longest = 0;
+    for (let i = 0; i < 600; i++) {
+      const self = tankAt(0, rng.int(30, FIELD_WIDTH - 30));
+      const target = tankAt(1, rng.int(30, FIELD_WIDTH - 30));
+      const wind = rng.int(0, 1) === 0 ? -WIND_MAX : WIND_MAX;
+      if (!isReachable(self, target, "cyborg", wind)) continue;
+      const aim = chooseAim("cyborg", self, [self, target], newComputerMemory(), rng, wind);
+      const hit = landingInWind(self, target, aim, wind);
+      if (!hit) throw new Error("Projectile did not hit anything");
+      expect(hitTest(target, hit.x, hit.y)).toBe(true);
+      longest = Math.max(longest, Math.abs(self.x - target.x));
+      checked++;
+    }
+    expect(checked).toBeGreaterThan(100);
+    expect(longest).toBeGreaterThan(400);
+  });
+});
+
+describe("a Target needing less Power than can be fired", () => {
+  it("is not reachable through Wind, so Wind-aware Personalities never count a sure overshoot", () => {
+    for (let dx = 1; dx <= 15; dx++) {
+      for (let wind = -WIND_MAX; wind <= WIND_MAX; wind++) {
+        const self = tankAt(0, 100);
+        const target = tankAt(1, 100 + dx);
+        for (const personality of ["chooser", "spoiler", "cyborg"] as const) {
+          if (!isReachable(self, target, personality, wind)) continue;
+          for (let seed = 0; seed < 10; seed++) {
+            expect(windAim(self, target, wind, new Rng(seed), 0).power).toBeGreaterThanOrEqual(1);
+          }
+        }
+      }
+    }
   });
 });

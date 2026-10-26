@@ -109,7 +109,11 @@ function feasibleAims(self: Tank, target: Tank, personality: TargetingPersonalit
  * PersonalityName, then one entry to RULES below: nothing else in this module changes.
  */
 interface PersonalityRules {
-  /** Whether it keeps its Target across Turns, rather than choosing again every Turn. */
+  /**
+   * Whether it keeps its Target across Turns, rather than choosing again every Turn. One that
+   * does not also starts every Turn without a remembered aim or landing: only the Tosser uses
+   * them, and chooseTarget clears them whenever it chooses afresh.
+   */
   readonly keepsTarget: boolean;
   /** Whether `self` can hit `target` the way this Personality fires, ignoring Terrain. */
   reachable(self: Tank, target: Tank, wind: number): boolean;
@@ -125,19 +129,19 @@ interface PersonalityRules {
 }
 
 /** The lowest-Health candidate, Shield ignored; ties go to the earliest, with no draw. */
-function weakestTarget(_self: Tank, candidates: readonly Tank[]): Tank {
+function weakestTarget(candidates: readonly Tank[]): Tank {
   return candidates.reduce((weakest, t) => (t.health < weakest.health ? t : weakest));
 }
 
 /** The weakest human Player's candidate if any, else the weakest candidate. */
 function weakestHumanTarget(
-  self: Tank,
+  _self: Tank,
   candidates: readonly Tank[],
   _rng: Rng,
   humanIds: ReadonlySet<number>,
 ): Tank {
   const humans = candidates.filter((t) => humanIds.has(t.playerId));
-  return weakestTarget(self, humans.length > 0 ? humans : candidates);
+  return weakestTarget(humans.length > 0 ? humans : candidates);
 }
 
 /** A random candidate, as the Shooter and Tosser have always chosen: one `int` draw. */
@@ -183,14 +187,14 @@ const RULES: Record<TargetingPersonality, PersonalityRules> = {
   chooser: {
     keepsTarget: false,
     reachable: (self, target, wind) => windFeasibleAims(self, target, wind).length > 0,
-    selectTarget: weakestTarget,
+    selectTarget: (_self, candidates) => weakestTarget(candidates),
     aim: (self, target, _memory, rng, wind) =>
       windAim(self, target, wind, rng, CHOOSER_POWER_ERROR),
   },
   spoiler: {
     keepsTarget: false,
     reachable: (self, target, wind) => windFeasibleAims(self, target, wind).length > 0,
-    selectTarget: weakestTarget,
+    selectTarget: (_self, candidates) => weakestTarget(candidates),
     aim: (self, target, _memory, rng, wind) =>
       windAim(self, target, wind, rng, SPOILER_POWER_ERROR),
   },
@@ -369,11 +373,17 @@ function powerToHitInWind(self: Tank, target: Tank, angle: number, wind: number)
   const cos = Math.cos(radians);
   const tan = Math.tan(radians);
   const drift = wind * WIND_ACCELERATION_PER_UNIT;
-  const flightSquared = (2 * (dy + dx * tan)) / (GRAVITY + drift * tan);
+  const lift = GRAVITY + drift * tan;
+  if (!(lift > 0)) return null;
+  const flightSquared = (2 * (dy + dx * tan)) / lift;
   if (!(flightSquared > 0)) return null;
   const flight = Math.sqrt(flightSquared);
   const speed = (dx / flight - 0.5 * drift * flight) / cos;
-  return speed > 0 ? Math.round(speed / POWER_TO_SPEED) : null;
+  if (!(speed > 0)) return null;
+  const power = Math.round(speed / POWER_TO_SPEED);
+  // A Power that rounds below what can be fired (or to 0, which drops at the barrel) would
+  // be clamped up and overshoot, so such a Target is not reachable at this Angle.
+  return power >= Math.max(MIN_POWER, 1) ? power : null;
 }
 
 /** The Shooter's Angles toward `target` that hit it through `wind` within the Power cap. */
