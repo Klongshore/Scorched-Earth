@@ -472,20 +472,24 @@ describe("Match integration", () => {
     // Re-pinned when Fall Damage was added, since it changes how Rounds play out.
     // Rounds are played directly, sharing one Rng as a Match does, because a Match now lets its
     // Computer Players shop, which draws from the Rng too.
+    // Death Animations only add time at the end of a Turn, so ticks spent dying are not counted.
     const players = createPlayers([moron, moron, moron, moron]);
     const rng = new Rng(77);
     let ticks = 0;
+    let dyingTicks = 0;
     const results: RoundResult[] = [];
     let round: Round | null = null;
     for (let number = 1; number <= 3; number++) {
       round = new Round(number, players, rng);
       while (round.phase.kind !== "over") {
+        if (round.phase.kind === "dying") dyingTicks++;
+        else ticks++;
         round.tick(TICK_SECONDS);
-        ticks++;
       }
       results.push(round.phase.result);
     }
     expect(ticks).toBe(72269);
+    expect(dyingTicks).toBeGreaterThan(0);
     expect(results).toEqual([win(2), win(0), win(3)]);
     expect(round?.tanks).toEqual([
       { ...newTank(0, 231, 421), angle: 161, power: 0, health: 0 },

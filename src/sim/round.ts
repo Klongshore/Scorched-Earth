@@ -1,6 +1,7 @@
 import {
   BABY_MISSILE,
   COMPUTER_THINK_TICKS,
+  DEATH_ANIMATION_SECONDS,
   EXPLOSION_SECONDS,
   FIELD_HEIGHT,
   FIELD_WIDTH,
@@ -36,13 +37,24 @@ import { raiseShield } from "./shield";
 import { clampAim, hitTest, isAlive } from "./tank";
 import type { Terrain } from "./terrain";
 import { generateHills } from "./terrainGen";
-import type { Explosion, HealthLoss, Player, Projectile, Tank, Weapon, WeaponName } from "./types";
+import type {
+  DeathAnimation,
+  Explosion,
+  HealthLoss,
+  Player,
+  Projectile,
+  Tank,
+  Weapon,
+  WeaponName,
+} from "./types";
 
 export type Phase =
   | { kind: "aiming"; thinkTicks: number | null } // ticks left to think; non-null only for Computer Players
   // Everything in the air: Projectiles still flying and Explosions still showing.
   | { kind: "resolving"; projectiles: Projectile[]; explosions: Explosion[] }
   | { kind: "settling" }
+  // Every Tank destroyed this Turn plays its Death Animation together; the Turn ends once all finish.
+  | { kind: "dying"; animations: DeathAnimation[] }
   | { kind: "over"; result: RoundResult };
 
 export type RoundResult = { kind: "win"; playerId: number } | { kind: "draw" };
@@ -86,6 +98,8 @@ export class Round {
    * Null outside Settling.
    */
   private healthBeforeSettling: number[] | null = null;
+  /** playerIds of destroyed Tanks whose Death Animation has started: gone from the field. */
+  private readonly gone = new Set<number>();
 
   constructor(
     number: number,
@@ -204,8 +218,12 @@ export class Round {
         ) {
           this.paySettling(this.healthBeforeSettling);
           this.healthBeforeSettling = null;
-          this.endTurn();
+          this.startDying();
         }
+        break;
+      case "dying":
+        for (const animation of phase.animations) animation.elapsed += dt;
+        if (phase.animations.every((a) => a.elapsed >= DEATH_ANIMATION_SECONDS)) this.endTurn();
         break;
       case "over":
         break;
@@ -337,6 +355,38 @@ export class Round {
     if (inventory.count("Parachute") <= 0) return false;
     inventory.useOne("Parachute");
     return true;
+  }
+
+  /**
+   * True while a Player's Tank is a husk: destroyed this Turn and still on the field, its Death
+   * Animation not yet started.
+   */
+  isHusk(playerId: number): boolean {
+    return !isAlive(this.tankOf(playerId)) && !this.gone.has(playerId);
+  }
+
+  /** True once a Player's Tank has been destroyed and its Death Animation has started. */
+  isGone(playerId: number): boolean {
+    return this.gone.has(playerId);
+  }
+
+  /**
+   * Everything else is at rest: every husk starts its Death Animation together or, with none, the
+   * Turn ends now.
+   */
+  private startDying(): void {
+    const husks = this.tanks.filter((t) => this.isHusk(t.playerId));
+    if (husks.length === 0) {
+      this.endTurn();
+      return;
+    }
+    this.phase = { kind: "dying", animations: husks.map((t) => this.startDeathAnimation(t)) };
+  }
+
+  /** A husk's Death Animation starts where it stands, and its Tank is gone from then on. */
+  private startDeathAnimation(tank: Tank): DeathAnimation {
+    this.gone.add(tank.playerId);
+    return { playerId: tank.playerId, x: tank.x, y: tank.y, elapsed: 0 };
   }
 
   private endTurn(): void {

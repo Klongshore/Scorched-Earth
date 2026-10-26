@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   BARREL_LENGTH,
   COMPUTER_THINK_SECONDS,
+  DEATH_ANIMATION_SECONDS,
   EXPLOSION_SECONDS,
   FALL_SAFE_PIXELS,
   FIELD_HEIGHT,
@@ -28,9 +29,9 @@ import { Rng } from "./rng";
 import { emptyLoadout } from "./inventory";
 import { Round, type RoundAction } from "./round";
 import { fallDamage } from "./settling";
-import { barrelTip, centre, isSupported, occupiesCell } from "./tank";
+import { barrelTip, centre, hitTest, isSupported, occupiesCell } from "./tank";
 import type { Terrain } from "./terrain";
-import type { Explosion, PlayerSetup, Tank, WeaponName } from "./types";
+import type { DeathAnimation, Explosion, PlayerSetup, Tank, WeaponName } from "./types";
 
 const HUMAN: PlayerSetup = { kind: "human" };
 const MORON: PlayerSetup = { kind: "computer", personality: "moron" };
@@ -1292,5 +1293,257 @@ describe("Round with Dirt Weapons", () => {
     runUntil(round, turnOver);
     expect(hangingCells(round)).toBe(0);
     expect(round.terrain.surfaceY(225)).toBeLessThan(GROUND);
+  });
+});
+
+describe("Round Death Animations", () => {
+  const settled = (r: Round): boolean => r.phase.kind === "aiming" || r.phase.kind === "over";
+
+  /** Ticks a Death Animation lasts, aged the same way as an Explosion. */
+  function dyingTicks(): number {
+    let ticks = 0;
+    for (let elapsed = 0; elapsed < DEATH_ANIMATION_SECONDS; elapsed += TICK_SECONDS) ticks++;
+    return ticks;
+  }
+
+  /** Flat Terrain at GROUND, Wind 0, and three Humans' Tanks moved to these columns, in Turn order. */
+  function threeTanks(xs: readonly [number, number, number]): {
+    round: Round;
+    tanks: [Tank, Tank, Tank];
+  } {
+    const round = new Round(1, createPlayers([HUMAN, HUMAN, HUMAN]), new Rng(1));
+    round.wind = 0;
+    round.terrain.flatten(0, FIELD_WIDTH - 1, GROUND);
+    const tanks = round.turnOrder.map((id) => round.tankOf(id)) as [Tank, Tank, Tank];
+    tanks.forEach((t, i) => {
+      t.x = xs[i] as number;
+      t.y = GROUND;
+    });
+    return { round, tanks };
+  }
+
+  /** The Round's Death Animations; fails unless it is in the dying phase. */
+  function animationsOf(round: Round): DeathAnimation[] {
+    const { phase } = round;
+    if (phase.kind !== "dying") return expect.fail(`${phase.kind}, not dying`);
+    return phase.animations;
+  }
+
+  /** Give the current Human one MIRV, choose it, and fire it at 60° with 400 Power. */
+  function fireMirv(round: Round, firer: Tank): void {
+    round.inventoryOf(firer.playerId).add("MIRV", 1);
+    round.act({ kind: "cycleWeapon", delta: 1 });
+    firer.angle = 60;
+    firer.power = 400;
+    round.act({ kind: "fire" });
+  }
+
+  it("enters the dying phase after Settling, with one Death Animation where the Tank stood", () => {
+    const { round, firer, other } = scenario(300, 312);
+    other.health = 1;
+    fireStraightUp(round, firer);
+    const phases: string[] = [];
+    runUntil(round, (r) => {
+      if (phases.at(-1) !== r.phase.kind) phases.push(r.phase.kind);
+      return r.phase.kind === "dying";
+    });
+    expect(phases).toEqual(["resolving", "settling", "dying"]);
+    expect(round.currentPlayerId).toBe(firer.playerId);
+    expect(animationsOf(round)).toEqual([
+      { playerId: other.playerId, x: other.x, y: other.y, elapsed: 0 },
+    ]);
+  });
+
+  it("starts the next Turn only once the Death Animation's duration has passed", () => {
+    const { round, tanks } = threeTanks([150, 300, 162]);
+    const [firer, , victim] = tanks;
+    victim.health = 1;
+    fireStraightUp(round, firer);
+    // The Baby Missile lands on the firer, 12 px from the victim; the third Tank is out of reach.
+    runUntil(round, (r) => r.phase.kind === "dying");
+    let ticks = 0;
+    runUntil(round, (r) => {
+      if (r.phase.kind === "dying") {
+        ticks++;
+        expect(r.currentPlayerId).toBe(firer.playerId);
+      }
+      return r.phase.kind !== "dying";
+    });
+    expect(ticks).toBe(dyingTicks());
+    expect(round.phase.kind).toBe("aiming");
+    expect(round.currentPlayerId).not.toBe(firer.playerId);
+  });
+
+  it("ages every Death Animation by each tick's time", () => {
+    const { round, other } = scenario(150, 500);
+    other.health = 0;
+    round.phase = { kind: "settling" };
+    runUntil(round, (r) => r.phase.kind === "dying");
+    round.tick(TICK_SECONDS);
+    round.tick(TICK_SECONDS);
+    expect(animationsOf(round)[0]?.elapsed).toBeCloseTo(2 * TICK_SECONDS, 10);
+  });
+
+  it("never enters the dying phase when no Tank was destroyed", () => {
+    const { round, firer } = scenario(150, 500);
+    fireStraightUp(round, firer);
+    const phases = new Set<string>();
+    runUntil(round, (r) => {
+      phases.add(r.phase.kind);
+      return r.phase.kind === "aiming";
+    });
+    expect(firer.health).toBeLessThan(MAX_HEALTH);
+    expect(phases.has("dying")).toBe(false);
+    expect(round.currentPlayerId).not.toBe(firer.playerId);
+  });
+
+  it("ends the Round in a win only after the final Death Animation", () => {
+    const { round, firer, other } = scenario(300, 312);
+    other.health = 1;
+    fireStraightUp(round, firer);
+    runUntil(round, (r) => r.phase.kind === "dying");
+    let ticks = 0;
+    runUntil(round, (r) => {
+      if (r.phase.kind === "dying") ticks++;
+      return r.phase.kind === "over";
+    });
+    expect(ticks).toBe(dyingTicks());
+    expect(round.phase).toEqual({
+      kind: "over",
+      result: { kind: "win", playerId: firer.playerId },
+    });
+  });
+
+  it("animates both Tanks of a Draw together, then ends in the Draw", () => {
+    const { round, firer, other } = scenario(300, 312);
+    firer.health = 1;
+    other.health = 1;
+    fireStraightUp(round, firer);
+    runUntil(round, (r) => r.phase.kind === "dying");
+    expect(
+      animationsOf(round)
+        .map((a) => a.playerId)
+        .sort(),
+    ).toEqual([0, 1]);
+    runUntil(round, (r) => r.phase.kind === "over");
+    expect(round.phase).toEqual({ kind: "over", result: { kind: "draw" } });
+  });
+
+  it("animates a Tank destroyed by an Explosion and one destroyed by Fall Damage together", () => {
+    const { round, tanks } = threeTanks([150, 162, 500]);
+    const [firer, shot, faller] = tanks;
+    shot.health = 1;
+    faller.health = 1;
+    undercutTank(round, faller, 30);
+    fireStraightUp(round, firer);
+    runUntil(round, (r) => r.phase.kind === "dying");
+    expect(
+      animationsOf(round)
+        .map((a) => a.playerId)
+        .sort(),
+    ).toEqual([shot.playerId, faller.playerId].sort());
+    expect(firer.health).toBeGreaterThan(0);
+  });
+
+  it("animates a Tank that sank to the bottom of the field", () => {
+    const { round, other } = scenario(150, 500);
+    for (let y = other.y; y < FIELD_HEIGHT; y++) round.terrain.carveCircle(other.x, y, 12);
+    round.phase = { kind: "settling" };
+    runUntil(round, (r) => r.phase.kind === "dying");
+    expect(other.health).toBe(0);
+    expect(animationsOf(round).map((a) => a.playerId)).toEqual([other.playerId]);
+  });
+
+  it("animates every Tank a MIRV's pieces destroy together", () => {
+    // Find where the MIRV's outermost pieces land, then stand a 1-Health Tank under each.
+    const dry = threeTanks([100, 620, 630]);
+    fireMirv(dry.round, dry.tanks[0]);
+    const xs: number[] = [];
+    runUntil(dry.round, (r) => {
+      if (r.phase.kind === "resolving") {
+        for (const e of r.phase.explosions) if (!xs.includes(e.x)) xs.push(e.x);
+      }
+      return settled(r);
+    });
+    const left = Math.round(Math.min(...xs));
+    const right = Math.round(Math.max(...xs));
+
+    const { round, tanks } = threeTanks([100, left, right]);
+    const [firer, a, b] = tanks;
+    a.health = 1;
+    b.health = 1;
+    fireMirv(round, firer);
+    runUntil(round, (r) => r.phase.kind !== "resolving" && r.phase.kind !== "settling");
+    expect(
+      animationsOf(round)
+        .map((x) => x.playerId)
+        .sort(),
+    ).toEqual([a.playerId, b.playerId].sort());
+  });
+
+  it("reports a destroyed Tank as a husk until its Death Animation starts, then as gone", () => {
+    const { round, firer, other } = scenario(300, 312);
+    other.health = 1;
+    expect(round.isHusk(other.playerId)).toBe(false);
+    expect(round.isGone(other.playerId)).toBe(false);
+    fireStraightUp(round, firer);
+    runUntil(round, () => other.health === 0);
+    runUntil(round, (r) => {
+      if (r.phase.kind !== "dying") {
+        expect(r.isHusk(other.playerId)).toBe(true);
+        expect(r.isGone(other.playerId)).toBe(false);
+      }
+      return r.phase.kind === "dying";
+    });
+    expect(round.isHusk(other.playerId)).toBe(false);
+    expect(round.isGone(other.playerId)).toBe(true);
+    runUntil(round, (r) => r.phase.kind === "over");
+    expect(round.isHusk(other.playerId)).toBe(false);
+    expect(round.isGone(other.playerId)).toBe(true);
+    // A living Tank is neither.
+    expect(round.isHusk(firer.playerId)).toBe(false);
+    expect(round.isGone(firer.playerId)).toBe(false);
+  });
+
+  it("never lets a husk be hit", () => {
+    const { round, firer, other } = scenario(300, 312);
+    other.health = 1;
+    fireStraightUp(round, firer);
+    runUntil(round, (r) => r.isHusk(other.playerId));
+    const c = centre(other);
+    expect(hitTest(other, c.x, c.y)).toBe(false);
+  });
+
+  it("changes no Health, Shield, Terrain or earnings while dying", () => {
+    const { round, tanks } = threeTanks([150, 300, 162]);
+    const [firer, survivor, victim] = tanks;
+    victim.health = 1;
+    survivor.shield = { name: "Heavy Shield", strength: 10 };
+    fireStraightUp(round, firer);
+    runUntil(round, (r) => r.phase.kind === "dying");
+    const before = {
+      tanks: structuredClone(round.tanks),
+      cells: [...round.terrain.cells],
+      version: round.terrain.version,
+      earnings: [...round.earnings],
+    };
+    runUntil(round, (r) => r.phase.kind !== "dying");
+    expect(round.tanks).toEqual(before.tanks);
+    expect([...round.terrain.cells]).toEqual(before.cells);
+    expect(round.terrain.version).toBe(before.version);
+    expect(round.earnings).toEqual(before.earnings);
+  });
+
+  it("ignores actions while dying", () => {
+    const { round, tanks } = threeTanks([150, 300, 162]);
+    const [firer, , victim] = tanks;
+    victim.health = 1;
+    fireStraightUp(round, firer);
+    runUntil(round, (r) => r.phase.kind === "dying");
+    const angle = firer.angle;
+    round.act({ kind: "adjustAngle", delta: 10 });
+    round.act({ kind: "fire" });
+    expect(firer.angle).toBe(angle);
+    expect(round.phase.kind).toBe("dying");
   });
 });
