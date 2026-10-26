@@ -4,7 +4,8 @@ import { powerCap } from "../sim/tank";
 import { HUD_BAR_BACKGROUND, HUD_STRIP, HUD_TEXT } from "./palette";
 
 const FONT = "14px monospace";
-const STRIP_HEIGHT = 36;
+/** Height in px of the HUD strip drawn across the top of the field. */
+export const STRIP_HEIGHT = 36;
 const LINE_1_Y = 14;
 const LINE_2_Y = 30;
 const LEFT = 8;

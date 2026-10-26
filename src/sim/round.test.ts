@@ -3,6 +3,7 @@ import {
   BARREL_LENGTH,
   COMPUTER_THINK_SECONDS,
   DEATH_ANIMATION_SECONDS,
+  EPITAPH_SECONDS,
   EXPLOSION_SECONDS,
   FALL_SAFE_PIXELS,
   FIELD_HEIGHT,
@@ -27,6 +28,7 @@ import { damageAt, detonate } from "./explosion";
 import { createPlayers } from "./players";
 import { Rng } from "./rng";
 import { emptyLoadout } from "./inventory";
+import { EPITAPHS, SELF_INFLICTED_EPITAPHS } from "./lines";
 import { Round, type RoundAction } from "./round";
 import { fallDamage } from "./settling";
 import { barrelTip, centre, hitTest, isSupported, occupiesCell } from "./tank";
@@ -1545,5 +1547,117 @@ describe("Round Death Animations", () => {
     round.act({ kind: "fire" });
     expect(firer.angle).toBe(angle);
     expect(round.phase.kind).toBe("dying");
+  });
+});
+
+describe("Round Epitaphs", () => {
+  /** Ticks until something counted down by each tick's time from `seconds` runs out. */
+  function ticksFor(seconds: number): number {
+    let ticks = 0;
+    for (let left = seconds; left > 0; left -= TICK_SECONDS) ticks++;
+    return ticks;
+  }
+
+  /** Flat Terrain, Wind 0, the firer at 300 and the other Tank 12 px away, with this flavour seed. */
+  function closeRound(flavourSeed: number): { round: Round; firer: Tank; other: Tank } {
+    const players = createPlayers([HUMAN, HUMAN]);
+    const round = new Round(1, players, new Rng(1), emptyLoadout(players), new Rng(flavourSeed));
+    round.wind = 0;
+    round.terrain.flatten(0, FIELD_WIDTH - 1, GROUND);
+    const firer = round.currentTank();
+    const other = round.tanks.find((t) => t !== firer) as Tank;
+    firer.x = 300;
+    firer.y = GROUND;
+    other.x = 312;
+    other.y = GROUND;
+    return { round, firer, other };
+  }
+
+  /** The firer's Baby Missile lands on itself and destroys the chosen Tanks. */
+  function shootAndDestroy(flavourSeed: number, firerDies: boolean, otherDies: boolean) {
+    const scene = closeRound(flavourSeed);
+    if (firerDies) scene.firer.health = 1;
+    if (otherDies) scene.other.health = 1;
+    fireStraightUp(scene.round, scene.firer);
+    return scene;
+  }
+
+  it("adds one Epitaph per destroyed Tank as its Death Animation starts", () => {
+    const { round } = shootAndDestroy(1, true, true);
+    runUntil(round, (r) => {
+      if (r.phase.kind !== "dying") expect(r.lines).toEqual([]);
+      return r.phase.kind === "dying";
+    });
+    expect(round.lines.map((l) => l.playerId).sort()).toEqual([0, 1]);
+    for (const line of round.lines) {
+      expect(line.kind).toBe("epitaph");
+      expect(line.secondsLeft).toBe(EPITAPH_SECONDS);
+      expect([...EPITAPHS, ...SELF_INFLICTED_EPITAPHS]).toContain(line.text);
+    }
+  });
+
+  it("counts Epitaphs down every tick, after the Round is over too, then removes them", () => {
+    const { round, other } = shootAndDestroy(1, false, true);
+    runUntil(round, (r) => r.phase.kind === "dying");
+    const [epitaph] = round.lines;
+    expect(epitaph?.playerId).toBe(other.playerId);
+    let ticks = 0;
+    runUntil(round, (r) => {
+      if (r.lines.length === 0) return true;
+      ticks++;
+      return false;
+    });
+    expect(ticks).toBe(ticksFor(EPITAPH_SECONDS));
+    expect(ticksFor(EPITAPH_SECONDS)).toBeGreaterThan(ticksFor(DEATH_ANIMATION_SECONDS));
+    expect(round.phase.kind).toBe("over");
+  });
+
+  it("never holds up the next Turn", () => {
+    const { round, firer } = shootAndDestroy(1, false, true);
+    runUntil(round, (r) => r.phase.kind === "over");
+    expect(round.phase).toEqual({
+      kind: "over",
+      result: { kind: "win", playerId: firer.playerId },
+    });
+    expect(round.lines).toHaveLength(1);
+    expect(round.lines[0]?.secondsLeft).toBeCloseTo(
+      EPITAPH_SECONDS - ticksFor(DEATH_ANIMATION_SECONDS) * TICK_SECONDS,
+      10,
+    );
+  });
+
+  it("can give a self-inflicted Epitaph only to a Tank that destroyed itself", () => {
+    const selfTexts = new Set<string>();
+    const otherTexts = new Set<string>();
+    for (let seed = 1; seed <= 100; seed++) {
+      const own = shootAndDestroy(seed, true, false);
+      runUntil(own.round, (r) => r.phase.kind === "dying");
+      for (const l of own.round.lines) selfTexts.add(l.text);
+      const other = shootAndDestroy(seed, false, true);
+      runUntil(other.round, (r) => r.phase.kind === "dying");
+      for (const l of other.round.lines) otherTexts.add(l.text);
+    }
+    expect(SELF_INFLICTED_EPITAPHS.some((t) => selfTexts.has(t))).toBe(true);
+    expect(SELF_INFLICTED_EPITAPHS.some((t) => otherTexts.has(t))).toBe(false);
+  });
+
+  it("gives the same Epitaphs from the same seeds", () => {
+    const texts = (flavourSeed: number): string[] => {
+      const { round } = shootAndDestroy(flavourSeed, true, true);
+      runUntil(round, (r) => r.phase.kind === "dying");
+      return round.lines.map((l) => `${l.playerId}:${l.text}`);
+    };
+    expect(texts(7)).toEqual(texts(7));
+    const varied = new Set(Array.from({ length: 20 }, (_, i) => texts(i + 1).join("|")));
+    expect(varied.size).toBeGreaterThan(1);
+  });
+
+  it("leaves the outcome as the simulation Rng alone decides it, whatever the flavour seed", () => {
+    const outcome = (flavourSeed: number) => {
+      const { round } = shootAndDestroy(flavourSeed, false, true);
+      runUntil(round, (r) => r.phase.kind === "over");
+      return { phase: round.phase, tanks: round.tanks, earnings: round.earnings };
+    };
+    expect(outcome(1)).toEqual(outcome(2));
   });
 });

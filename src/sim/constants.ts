@@ -119,6 +119,11 @@ export const SETTLE_PASSES_PER_TICK = 2;
 // Death Animations
 export const DEATH_ANIMATION_SECONDS = 1.2; // every destroyed Tank's, played together at the end of a Turn
 
+// Epitaphs and Taunts
+export const EPITAPH_SECONDS = 3; // from the start of the destroyed Tank's Death Animation
+export const TAUNT_SECONDS = 2.5;
+export const MAX_LINE_LENGTH = 40; // characters; every Epitaph and Taunt fits the field when drawn
+
 // Terrain generation
 export const TERRAIN_BASE_FRACTION = 0.65; // mean surface height as a fraction of FIELD_HEIGHT from the top
 export const TERRAIN_MIN_FRACTION = 0.3;
