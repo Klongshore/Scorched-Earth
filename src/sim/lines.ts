@@ -1,3 +1,4 @@
+import { TAUNT_CHANCE } from "./constants";
 import type { Rng } from "./rng";
 
 /**
@@ -90,4 +91,13 @@ export const TAUNTS: readonly string[] = [
 export function pickEpitaph(flavourRng: Rng, selfInflicted: boolean): string {
   const pool = selfInflicted ? [...EPITAPHS, ...SELF_INFLICTED_EPITAPHS] : EPITAPHS;
   return pool[flavourRng.int(0, pool.length - 1)] as string;
+}
+
+/**
+ * Whether a Turn has a Taunt and, if so, which: one draw of the flavour Rng decides whether
+ * (TAUNT_CHANCE), and a second, only when it does, picks the Taunt.
+ */
+export function rollTaunt(flavourRng: Rng): string | null {
+  if (flavourRng.next() >= TAUNT_CHANCE) return null;
+  return TAUNTS[flavourRng.int(0, TAUNTS.length - 1)] as string;
 }

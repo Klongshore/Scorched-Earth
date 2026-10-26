@@ -137,6 +137,7 @@ export const DEATH_ANIMATION_KINDS: readonly DeathAnimationKind[] = [
 // Epitaphs and Taunts
 export const EPITAPH_SECONDS = 3; // from the start of the destroyed Tank's Death Animation
 export const TAUNT_SECONDS = 2.5;
+export const TAUNT_CHANCE = 0.25; // of each Turn having a Taunt, rolled as the Turn begins
 export const MAX_LINE_LENGTH = 40; // characters; every Epitaph and Taunt fits the field when drawn
 
 // Terrain generation

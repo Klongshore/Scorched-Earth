@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { MAX_LINE_LENGTH } from "./constants";
-import { EPITAPHS, SELF_INFLICTED_EPITAPHS, TAUNTS, pickEpitaph } from "./lines";
+import { MAX_LINE_LENGTH, TAUNT_CHANCE } from "./constants";
+import { EPITAPHS, SELF_INFLICTED_EPITAPHS, TAUNTS, pickEpitaph, rollTaunt } from "./lines";
 import { Rng } from "./rng";
 
 const POOLS = { EPITAPHS, SELF_INFLICTED_EPITAPHS, TAUNTS };
@@ -45,5 +45,31 @@ describe("pickEpitaph", () => {
       return Array.from({ length: 10 }, () => pickEpitaph(rng, true));
     };
     expect(picks(3)).toEqual(picks(3));
+  });
+});
+
+describe("rollTaunt", () => {
+  it("gives a Taunt about one time in four, and nothing otherwise", () => {
+    const rng = new Rng(5);
+    const rolls = Array.from({ length: 4000 }, () => rollTaunt(rng));
+    for (const r of rolls) if (r !== null) expect(TAUNTS).toContain(r);
+    const share = rolls.filter((r) => r !== null).length / rolls.length;
+    expect(TAUNT_CHANCE).toBe(0.25);
+    expect(share).toBeGreaterThan(0.2);
+    expect(share).toBeLessThan(0.3);
+  });
+
+  it("picks every Taunt over many rolls", () => {
+    const rng = new Rng(2);
+    const seen = new Set(Array.from({ length: 4000 }, () => rollTaunt(rng)));
+    for (const t of TAUNTS) expect(seen).toContain(t);
+  });
+
+  it("is reproducible from the flavour Rng", () => {
+    const rolls = (seed: number) => {
+      const rng = new Rng(seed);
+      return Array.from({ length: 20 }, () => rollTaunt(rng));
+    };
+    expect(rolls(3)).toEqual(rolls(3));
   });
 });

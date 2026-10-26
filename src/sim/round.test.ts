@@ -4,6 +4,7 @@ import {
   COMPUTER_THINK_SECONDS,
   DEATH_ANIMATION_KINDS,
   DEATH_ANIMATION_SECONDS,
+  COMPUTER_THINK_TICKS,
   EPITAPH_SECONDS,
   EXPLOSION_SECONDS,
   FALL_SAFE_PIXELS,
@@ -18,6 +19,7 @@ import {
   POWER_PER_HEALTH,
   ROLLER_MAX_SECONDS,
   ROLLER_SPEED,
+  TAUNT_SECONDS,
   TANK_HALF_WIDTH,
   TANK_HEIGHT,
   TICK_SECONDS,
@@ -29,7 +31,7 @@ import { damageAt, detonate } from "./explosion";
 import { createPlayers } from "./players";
 import { Rng } from "./rng";
 import { emptyLoadout } from "./inventory";
-import { EPITAPHS, SELF_INFLICTED_EPITAPHS } from "./lines";
+import { EPITAPHS, SELF_INFLICTED_EPITAPHS, TAUNTS } from "./lines";
 import { Round, type RoundAction } from "./round";
 import { fallDamage } from "./settling";
 import { barrelTip, centre, hitTest, isSupported, occupiesCell } from "./tank";
@@ -1713,5 +1715,123 @@ describe("Round Epitaphs", () => {
       return { phase: round.phase, tanks: round.tanks, earnings: round.earnings };
     };
     expect(outcome(1)).toEqual(outcome(2));
+  });
+});
+
+describe("Round Taunts", () => {
+  const SEEDS = Array.from({ length: 40 }, (_, i) => i + 1);
+
+  function roundOf(setups: PlayerSetup[], seed: number, flavourSeed: number): Round {
+    const players = createPlayers(setups);
+    return new Round(1, players, new Rng(seed), emptyLoadout(players), new Rng(flavourSeed));
+  }
+
+  /** Ticks until the first shot is in the air. */
+  function ticksToFire(round: Round): number {
+    let ticks = 0;
+    runUntil(round, (r) => {
+      if (r.phase.kind === "resolving") return true;
+      ticks++;
+      return false;
+    });
+    return ticks;
+  }
+
+  it("shows a rolled Taunt while a Computer Player thinks, without changing when it fires", () => {
+    let taunted = 0;
+    for (const flavourSeed of SEEDS) {
+      const round = roundOf([MORON, MORON], 3, flavourSeed);
+      const firer = round.currentPlayerId;
+      const lines = round.lines.map((l) => ({ ...l }));
+      expect(lines.length).toBeLessThanOrEqual(1);
+      for (const line of lines) {
+        expect(line.kind).toBe("taunt");
+        expect(line.playerId).toBe(firer);
+        expect(line.secondsLeft).toBe(TAUNT_SECONDS);
+        expect(TAUNTS).toContain(line.text);
+        taunted++;
+      }
+      // The aim and Weapon are the simulation Rng's alone, whatever the flavour seed.
+      const other = roundOf([MORON, MORON], 3, flavourSeed + 1000);
+      expect(round.tanks).toEqual(other.tanks);
+      expect(round.currentWeapon()).toEqual(other.currentWeapon());
+      expect(ticksToFire(round)).toBe(COMPUTER_THINK_TICKS);
+    }
+    expect(taunted).toBeGreaterThan(0);
+    expect(taunted).toBeLessThan(SEEDS.length);
+  });
+
+  it("adds a Human's rolled Taunt at launch, never while aiming", () => {
+    let taunted = 0;
+    for (const flavourSeed of SEEDS) {
+      const round = roundOf([HUMAN, HUMAN], 1, flavourSeed);
+      round.act({ kind: "adjustAngle", delta: 5 });
+      round.tick(TICK_SECONDS);
+      round.act({ kind: "adjustPower", delta: -5 });
+      expect(round.lines).toEqual([]);
+      const firer = round.currentPlayerId;
+      round.act({ kind: "fire" });
+      expect(round.phase.kind).toBe("resolving");
+      for (const line of round.lines) {
+        expect(line).toMatchObject({ kind: "taunt", playerId: firer, secondsLeft: TAUNT_SECONDS });
+        expect(TAUNTS).toContain(line.text);
+        taunted++;
+      }
+    }
+    expect(taunted).toBeGreaterThan(0);
+    expect(taunted).toBeLessThan(SEEDS.length);
+  });
+
+  it("keeps a Taunt up while the Projectile flies, then lets it expire", () => {
+    const flavourSeed = SEEDS.find((seed) => {
+      const round = roundOf([HUMAN, HUMAN], 1, seed);
+      round.act({ kind: "fire" });
+      return round.lines.length > 0;
+    });
+    const round = roundOf([HUMAN, HUMAN], 1, flavourSeed ?? 0);
+    round.wind = 0;
+    round.currentTank().angle = 60;
+    round.act({ kind: "fire" });
+    let ticks = 0;
+    runUntil(round, (r) => {
+      if (r.lines.length === 0) return true;
+      if (ticks * TICK_SECONDS < 1) expect(r.phase.kind).toBe("resolving");
+      ticks++;
+      return false;
+    });
+    let expected = 0;
+    for (let left = TAUNT_SECONDS; left > 0; left -= TICK_SECONDS) expected++;
+    expect(ticks).toBe(expected);
+  });
+
+  it("rolls a Taunt on roughly a quarter of Turns", () => {
+    let turns = 0;
+    let taunts = 0;
+    for (const flavourSeed of SEEDS.concat(SEEDS.map((s) => s + 100))) {
+      const round = roundOf([HUMAN, HUMAN], 1, flavourSeed);
+      for (let turn = 0; turn < 5 && round.phase.kind === "aiming"; turn++) {
+        round.currentTank().angle = 90;
+        round.currentTank().power = 1;
+        round.act({ kind: "fire" });
+        turns++;
+        if (round.lines.some((l) => l.kind === "taunt" && l.secondsLeft === TAUNT_SECONDS))
+          taunts++;
+        runUntil(round, (r) => r.phase.kind === "aiming" || r.phase.kind === "over");
+      }
+    }
+    expect(taunts / turns).toBeGreaterThan(0.15);
+    expect(taunts / turns).toBeLessThan(0.35);
+  });
+
+  it("decides Taunts from the flavour Rng only: the simulation seed never changes them", () => {
+    const taunt = (seed: number, flavourSeed: number): string | null => {
+      const round = roundOf([HUMAN, HUMAN], seed, flavourSeed);
+      round.act({ kind: "fire" });
+      return round.lines[0]?.text ?? null;
+    };
+    for (const flavourSeed of SEEDS) {
+      expect(taunt(1, flavourSeed)).toBe(taunt(99, flavourSeed));
+      expect(taunt(1, flavourSeed)).toBe(taunt(1, flavourSeed));
+    }
   });
 });
