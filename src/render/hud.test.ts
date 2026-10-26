@@ -131,4 +131,11 @@ describe("healthLine (HUD line 2)", () => {
     expect(healthLine(match)).toBeNull();
     expect(healthLine(new Match({ players: [human, human], rounds: 3, seed: 1 }))).toBeNull();
   });
+
+  it("shows nothing for aiming while Death Animations play, as while Settling", () => {
+    const { match, round } = playing();
+    round.phase = { kind: "dying", animations: [] };
+    expect(healthLine(match)).toBeNull();
+    expect(aimLine(match)).toEqual([]);
+  });
 });

@@ -116,6 +116,9 @@ export const ROLLER_MAX_SECONDS = 8; // explodes where it is after rolling this 
 export const EXPLOSION_SECONDS = 0.5;
 export const SETTLE_PASSES_PER_TICK = 2;
 
+// Death Animations
+export const DEATH_ANIMATION_SECONDS = 1.2; // every destroyed Tank's, played together at the end of a Turn
+
 // Terrain generation
 export const TERRAIN_BASE_FRACTION = 0.65; // mean surface height as a fraction of FIELD_HEIGHT from the top
 export const TERRAIN_MIN_FRACTION = 0.3;
