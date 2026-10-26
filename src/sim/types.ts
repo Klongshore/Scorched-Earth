@@ -6,7 +6,8 @@ export type PersonalityName =
   | "tosser"
   | "chooser"
   | "spoiler"
-  | "cyborg";
+  | "cyborg"
+  | "unknown";
 
 /** What the Setup screen asks for, one per Player. */
 export type PlayerSetup = { kind: "human" } | { kind: "computer"; personality: PersonalityName };

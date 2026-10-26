@@ -29,6 +29,7 @@ import {
   chooseAim,
   chooseWeapon,
   newComputerMemory,
+  resolveUnknown,
   type ComputerMemory,
   type Landing,
 } from "./personalities";
@@ -140,6 +141,11 @@ export class Round {
     this.tanks = placeTanks(rng, this.terrain, playerIds);
     this.wind = rng.int(-WIND_MAX, WIND_MAX);
     this.turnOrder = rng.shuffle(playerIds);
+    // An Unknown becomes a fixed Personality for this Round. After every other draw here, and
+    // only for Unknown Players, so Matches without one draw exactly as before.
+    for (const p of players) {
+      if (p.personality === "unknown") this.requireMemory(p.id).resolved = resolveUnknown(rng);
+    }
     this.currentIndex = 0;
     // Every owner's strongest Shield goes up before the first Turn, in Player order.
     for (const p of players) raiseShield(this.tankOf(p.id), this.inventoryOf(p.id));
@@ -479,8 +485,10 @@ export class Round {
       // Only once its Shield is gone, never replacing a damaged one. Draws nothing from rng.
       if (!tank.shield) raiseShield(tank, this.inventoryOf(player.id));
       const memory = this.requireMemory(player.id);
+      const personality = memory.resolved ?? player.personality;
+      if (personality === "unknown") throw new Error(`Player ${player.id} never resolved`);
       const aim = chooseAim(
-        player.personality,
+        personality,
         tank,
         this.tanks,
         memory,
@@ -491,7 +499,7 @@ export class Round {
       // After the aim, so the aim's draws keep their order.
       const target = this.tanks.find((t) => t.playerId === memory.targetId) ?? null;
       this.loadout.chosenWeapons[player.id] = chooseWeapon(
-        player.personality,
+        personality,
         tank,
         target,
         this.inventoryOf(player.id),

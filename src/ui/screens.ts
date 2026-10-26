@@ -28,6 +28,7 @@ export const PLAYER_OPTIONS: readonly { readonly label: string; readonly setup: 
   { label: "Chooser", setup: { kind: "computer", personality: "chooser" } },
   { label: "Spoiler", setup: { kind: "computer", personality: "spoiler" } },
   { label: "Cyborg", setup: { kind: "computer", personality: "cyborg" } },
+  { label: "Unknown", setup: { kind: "computer", personality: "unknown" } },
 ];
 
 export const DEFAULT_PLAYERS_SETUP: readonly PlayerSetup[] = [

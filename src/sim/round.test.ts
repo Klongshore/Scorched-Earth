@@ -1042,7 +1042,12 @@ describe("Round Landings", () => {
     const second = new Round(2, players, rng);
     for (const id of [0, 1, 2]) {
       if (id === second.currentPlayerId) continue;
-      expect(second.memoryOf(id)).toEqual({ targetId: null, lastAim: null, lastLanding: null });
+      expect(second.memoryOf(id)).toEqual({
+        targetId: null,
+        lastAim: null,
+        lastLanding: null,
+        resolved: null,
+      });
     }
   });
 });
@@ -1851,5 +1856,37 @@ describe("Round Taunts", () => {
       expect(taunt(1, flavourSeed)).toBe(taunt(99, flavourSeed));
       expect(taunt(1, flavourSeed)).toBe(taunt(1, flavourSeed));
     }
+  });
+});
+
+describe("Round Unknown", () => {
+  const UNKNOWN: PlayerSetup = { kind: "computer", personality: "unknown" };
+  const resolvedOf = (r: Round, id: number) => r.memoryOf(id)?.resolved ?? null;
+
+  it("resolves an Unknown once per Round to one of four Personalities and keeps the Player's unknown", () => {
+    const seen = new Set<string>();
+    for (let seed = 1; seed <= 60; seed++) {
+      const players = createPlayers([UNKNOWN, HUMAN]);
+      const round = new Round(1, players, new Rng(seed));
+      const resolved = resolvedOf(round, 0);
+      expect(["poolshark", "chooser", "spoiler", "cyborg"]).toContain(resolved);
+      seen.add(resolved as string);
+      for (let i = 0; i < 3; i++) {
+        round.phase = { kind: "settling" };
+        runUntil(round, (r) => r.phase.kind === "aiming" || r.phase.kind === "over");
+        expect(resolvedOf(round, 0)).toBe(resolved);
+      }
+      expect(players[0]?.personality).toBe("unknown");
+    }
+    expect([...seen].sort()).toEqual(["chooser", "cyborg", "poolshark", "spoiler"]);
+  });
+
+  it("leaves other Personalities unresolved", () => {
+    const round = new Round(
+      1,
+      createPlayers([UNKNOWN, { kind: "computer", personality: "moron" }]),
+      new Rng(3),
+    );
+    expect(resolvedOf(round, 1)).toBeNull();
   });
 });
