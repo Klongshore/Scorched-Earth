@@ -46,13 +46,20 @@ vi.mock("../sim/constants", async (importOriginal) => ({
 }));
 
 describe("Player choices on the Setup screen", () => {
-  it("offers Human, Moron, Shooter and Tosser", () => {
-    expect(PLAYER_OPTIONS.map((o) => o.label)).toEqual(["Human", "Moron", "Shooter", "Tosser"]);
+  it("offers Human, Moron, Shooter, Tosser and Chooser", () => {
+    expect(PLAYER_OPTIONS.map((o) => o.label)).toEqual([
+      "Human",
+      "Moron",
+      "Shooter",
+      "Tosser",
+      "Chooser",
+    ]);
     expect(PLAYER_OPTIONS.map((o) => o.setup)).toEqual([
       { kind: "human" },
       { kind: "computer", personality: "moron" },
       { kind: "computer", personality: "shooter" },
       { kind: "computer", personality: "tosser" },
+      { kind: "computer", personality: "chooser" },
     ]);
   });
 

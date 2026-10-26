@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   BABY_MISSILE,
+  CHOOSER_POWER_ERROR,
   COMPUTER_THINK_SECONDS,
   COMPUTER_THINK_TICKS,
   FIELD_HEIGHT,
@@ -30,6 +31,7 @@ import {
   isReachable,
   newComputerMemory,
   shooterAim,
+  windAim,
   type Aim,
   type ComputerMemory,
   type Landing,
@@ -775,7 +777,7 @@ describe("Computer Players choose Weapons", () => {
     });
   });
 
-  for (const personality of ["shooter", "tosser"] as const) {
+  for (const personality of ["shooter", "tosser", "chooser"] as const) {
     describe(personality, () => {
       it("fires the Nuke at a far Target and a Missile at a Target closer than 75 px", () => {
         const inventory = inventoryOf({ Missile: 5, Nuke: 1 });
@@ -832,4 +834,94 @@ describe("Computer Players choose Weapons", () => {
       });
     });
   }
+});
+
+/** Where a Projectile fired with `aim` from `self` hits on flat Terrain through `wind`. */
+function landingInWind(self: Tank, target: Tank, aim: Aim, wind: number) {
+  const terrain = flat();
+  const p = launch({ ...self, ...aim }, BABY_MISSILE);
+  for (let i = 0; i < 10_000; i++) {
+    const outcome = stepProjectile(p, wind, terrain, [self, target], TICK_SECONDS);
+    if (outcome.kind === "hit") return outcome;
+    if (outcome.kind === "lost") return null;
+  }
+  return null;
+}
+
+describe("Chooser Personality", () => {
+  it("targets the weakest opponent, ignoring Shield, and chooses again every Turn", () => {
+    const tanks = fiveTanks();
+    const self = tanks[2] as Tank;
+    (tanks[0] as Tank).health = 60;
+    (tanks[1] as Tank).health = 30;
+    (tanks[1] as Tank).shield = { name: "Shield", strength: 100 };
+    (tanks[3] as Tank).health = 45;
+    const memory = newComputerMemory();
+    const rng = new Rng(3);
+    expect(chooseTarget(memory, self, tanks, rng, "chooser")?.playerId).toBe(1);
+    (tanks[3] as Tank).health = 10;
+    expect(chooseTarget(memory, self, tanks, rng, "chooser")?.playerId).toBe(3);
+    (tanks[3] as Tank).health = 0;
+    expect(chooseTarget(memory, self, tanks, rng, "chooser")?.playerId).toBe(1);
+  });
+
+  it("breaks Health ties toward the lowest Player id without drawing from the Rng", () => {
+    const tanks = fiveTanks();
+    const self = tanks[2] as Tank;
+    for (const t of tanks) t.health = 50;
+    const rng = new Rng(9);
+    expect(chooseTarget(newComputerMemory(), self, tanks, rng, "chooser")?.playerId).toBe(0);
+    expect(rng.next()).toBe(new Rng(9).next());
+  });
+
+  it("with no error, hits any Target it can reach, in any Wind", () => {
+    const rng = new Rng(6);
+    let checked = 0;
+    for (let i = 0; i < 400; i++) {
+      const self = tankAt(0, rng.int(30, FIELD_WIDTH - 30));
+      const target = tankAt(1, rng.int(30, FIELD_WIDTH - 30));
+      const wind = rng.int(-WIND_MAX, WIND_MAX);
+      if (Math.abs(self.x - target.x) < 40) continue;
+      if (!isReachable(self, target, "chooser", wind)) continue;
+      const hit = landingInWind(self, target, windAim(self, target, wind, rng, 0), wind);
+      const c = centre(target);
+      if (!hit) throw new Error("Projectile did not hit anything");
+      expect(Math.hypot(hit.x - c.x, hit.y - c.y)).toBeLessThanOrEqual(BABY_MISSILE.radius);
+      checked++;
+    }
+    expect(checked).toBeGreaterThan(100);
+  });
+
+  it("stays within its Power error of the zero-error Power", () => {
+    const self = tankAt(0, 100);
+    const target = tankAt(1, 450);
+    const bases = new Set<number>();
+    for (let i = 0; i < 300; i++) {
+      const ideal = windAim(self, target, 10, new Rng(i), 0);
+      bases.add(ideal.angle);
+      const aim = windAim(self, target, 10, new Rng(i), CHOOSER_POWER_ERROR);
+      expect(aim.angle).toBe(ideal.angle);
+      expect(Math.abs(aim.power - ideal.power)).toBeLessThanOrEqual(
+        Math.ceil(ideal.power * CHOOSER_POWER_ERROR) + 1,
+      );
+    }
+    expect(bases.size).toBeGreaterThan(1);
+  });
+
+  it("passes the Wind to chooseAim", () => {
+    const self = tankAt(0, 100);
+    const target = tankAt(1, 450);
+    const tanks = [self, target];
+    const calm = chooseAim("chooser", self, tanks, newComputerMemory(), new Rng(1), 0);
+    const tail = chooseAim("chooser", self, tanks, newComputerMemory(), new Rng(1), 20);
+    expect(tail.power).toBeLessThan(calm.power);
+  });
+
+  it("fires a random aim like a Moron when no opponent is reachable", () => {
+    const self = tankAt(0, 100);
+    const target = tankAt(1, 100 + 5); // too close to reach in its band
+    const tanks = [self, target];
+    const aim = chooseAim("chooser", self, tanks, newComputerMemory(), new Rng(4), 0);
+    expect(aim).toEqual(chooseAim("moron", self, tanks, newComputerMemory(), new Rng(4)));
+  });
 });

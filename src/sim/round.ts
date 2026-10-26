@@ -477,7 +477,7 @@ export class Round {
       // Only once its Shield is gone, never replacing a damaged one. Draws nothing from rng.
       if (!tank.shield) raiseShield(tank, this.inventoryOf(player.id));
       const memory = this.requireMemory(player.id);
-      const aim = chooseAim(player.personality, tank, this.tanks, memory, this.rng);
+      const aim = chooseAim(player.personality, tank, this.tanks, memory, this.rng, this.wind);
       // After the aim, so the aim's draws keep their order.
       const target = this.tanks.find((t) => t.playerId === memory.targetId) ?? null;
       this.loadout.chosenWeapons[player.id] = chooseWeapon(

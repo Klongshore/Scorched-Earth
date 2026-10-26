@@ -174,6 +174,9 @@ export const SHOOTER_MIN_ANGLE = 30; // degrees above the horizontal, toward the
 export const SHOOTER_MAX_ANGLE = 60;
 export const SHOOTER_POWER_ERROR = 0.05; // ±5%
 
+// Chooser
+export const CHOOSER_POWER_ERROR = 0.02; // ±2%, while allowing for Wind
+
 // Tosser
 export const TOSSER_ANGLE = 45; // degrees above the horizontal, toward the Target
 export const TOSSER_FIRST_POWER_ERROR = 0.25; // ±25%, on its first Turn at a Target
