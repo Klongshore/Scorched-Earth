@@ -1,10 +1,21 @@
 import type { Cue } from "../sim/cues";
+import type { Weapon } from "../sim/types";
 
 /**
  * Which Sound Effect to play. Later cues add more names. Each name is synthesized by the audio
  * module; this module only decides which, how loud and where.
  */
-export type SoundName = "launch" | "blast" | "thud";
+export type SoundName =
+  | "launch" // a blast Weapon's shot
+  | "launchMirv"
+  | "launchFunky"
+  | "launchRoller"
+  | "launchDirt"
+  | "blast"
+  | "thud"
+  | "split" // a MIRV breaking up
+  | "scatter" // a Funky Bomb throwing out bomblets
+  | "rollStart"; // a Roller touching down and starting to roll
 
 export interface SoundPlan {
   readonly sound: SoundName;
@@ -19,9 +30,18 @@ export interface SoundPlan {
 /** Blast radius treated as the biggest there is (the Nuke's). */
 const BIGGEST_RADIUS = 75;
 const LAUNCH_GAIN = 0.35;
+const EVENT_GAIN = 0.5;
 const MIN_GAIN = 0.25;
 const MAX_GAIN = 1;
 const THUD_GAIN_SCALE = 0.7;
+
+const LAUNCH_SOUNDS: Readonly<Record<Weapon["kind"], SoundName>> = {
+  blast: "launch",
+  mirv: "launchMirv",
+  funky: "launchFunky",
+  roller: "launchRoller",
+  dirt: "launchDirt",
+};
 
 /** Pan from a column: the left edge is -1, the right edge is 1. */
 export function panAt(x: number, fieldWidth: number): number {
@@ -32,7 +52,24 @@ export function panAt(x: number, fieldWidth: number): number {
 export function planSound(cue: Cue, fieldWidth: number): SoundPlan | null {
   switch (cue.kind) {
     case "fired":
-      return { sound: "launch", gain: LAUNCH_GAIN, pan: panAt(cue.x, fieldWidth), size: 0 };
+      return {
+        sound: LAUNCH_SOUNDS[cue.weaponKind],
+        gain: LAUNCH_GAIN,
+        pan: panAt(cue.x, fieldWidth),
+        size: 0,
+      };
+    case "split":
+      return { sound: "split", gain: EVENT_GAIN, pan: panAt(cue.x, fieldWidth), size: 0 };
+    case "scattered":
+      return { sound: "scatter", gain: EVENT_GAIN, pan: panAt(cue.x, fieldWidth), size: 0 };
+    case "rollStarted":
+      return { sound: "rollStart", gain: EVENT_GAIN, pan: panAt(cue.x, fieldWidth), size: 0 };
+    // The flight whistle and the rolling rumble last as long as they last: the SoundPlayer starts
+    // and stops them, so there is no one-shot to plan.
+    case "launched":
+    case "landed":
+    case "rollEnded":
+      return null;
     case "exploded": {
       const size = Math.max(0, Math.min(1, cue.radius / BIGGEST_RADIUS));
       // A modest curve: small blasts stay audible, big ones are clearly louder.
