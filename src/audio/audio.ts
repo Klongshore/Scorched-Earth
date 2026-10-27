@@ -1,5 +1,6 @@
 import { FIELD_WIDTH } from "../sim/constants";
 import type { Cue } from "../sim/cues";
+import { loadMuted, saveMuted } from "./mute";
 import { planSound, type SoundPlan } from "./plan";
 
 type AudioContextConstructor = new () => AudioContext;
@@ -19,7 +20,9 @@ function audioContextConstructor(scope: object): AudioContextConstructor | null 
 export class SoundPlayer {
   private context: AudioContext | null = null;
   private noise: AudioBuffer | null = null;
+  private master: GainNode | null = null;
   private failed = false;
+  private muted = loadMuted();
 
   constructor(private readonly scope: object = globalThis) {}
 
@@ -35,6 +38,9 @@ export class SoundPlayer {
         }
         this.context = new Ctor();
         this.noise = noiseBuffer(this.context);
+        this.master = this.context.createGain();
+        this.master.gain.value = this.muted ? 0 : 1;
+        this.master.connect(this.context.destination);
       }
       if (this.context.state === "suspended") void this.context.resume().catch(() => {});
     } catch {
@@ -43,10 +49,25 @@ export class SoundPlayer {
     }
   }
 
+  isMuted(): boolean {
+    return this.muted;
+  }
+
+  /** Mute or unmute all Sound Effects, including any already playing, and remember the choice. */
+  setMuted(muted: boolean): void {
+    this.muted = muted;
+    saveMuted(muted);
+    try {
+      if (this.master) this.master.gain.value = muted ? 0 : 1;
+    } catch {
+      // Silence is best effort.
+    }
+  }
+
   /** Play the Sound Effect for each cue, in order. */
   play(cues: readonly Cue[]): void {
     const ctx = this.context;
-    if (!ctx || ctx.state !== "running") return;
+    if (!ctx || ctx.state !== "running" || this.muted) return;
     for (const cue of cues) {
       const plan = planSound(cue, FIELD_WIDTH);
       if (!plan) continue;
@@ -64,7 +85,7 @@ export class SoundPlayer {
     out.gain.value = plan.gain;
     const panner = ctx.createStereoPanner();
     panner.pan.value = plan.pan;
-    out.connect(panner).connect(ctx.destination);
+    out.connect(panner).connect(this.master ?? ctx.destination);
     switch (plan.sound) {
       case "launch":
         this.sweep(ctx, out, now, 0.18, 700, 180, "sawtooth", 0.5);

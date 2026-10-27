@@ -1,5 +1,6 @@
 import { SoundPlayer } from "./audio/audio";
 import { attachKeyboard } from "./input/keyboard";
+import { attachMute } from "./input/mute";
 import { attachTouchControls } from "./input/touch";
 import type { Renderer } from "./render/renderer";
 import { MAX_TICKS_PER_FRAME, TICK_SECONDS } from "./sim/constants";
@@ -102,6 +103,8 @@ export type GameOptions = {
   readonly seed?: number;
   /** Where to put the on-screen controls for touch screens; they only work during a Round. */
   readonly touchControls?: HTMLElement;
+  /** The on-screen Mute button for touch screens. */
+  readonly muteButton?: HTMLElement;
 };
 
 /** The app controller: owns the screen state, the keyboard and the fixed-timestep loop. */
@@ -117,6 +120,7 @@ export class Game {
   private detachKeyboard: (() => void) | null = null;
   private detachTouch: (() => void) | null = null;
   private detachUnlock: (() => void) | null = null;
+  private detachMute: (() => void) | null = null;
   private readonly loop: FrameLoop;
   private readonly sound = new SoundPlayer();
 
@@ -147,6 +151,16 @@ export class Game {
     this.detachUnlock = () => {
       for (const g of gestures) this.window.removeEventListener(g, unlock);
     };
+    const { muteButton } = this.options;
+    const showMute = (): void => {
+      muteButton?.classList.toggle("muted", this.sound.isMuted());
+      muteButton?.setAttribute("aria-pressed", String(this.sound.isMuted()));
+    };
+    showMute();
+    this.detachMute = attachMute(this.window, muteButton, () => {
+      this.sound.setMuted(!this.sound.isMuted());
+      showMute();
+    });
     this.showSetup();
     this.loop.start();
   }
@@ -159,6 +173,8 @@ export class Game {
     this.detachTouch = null;
     this.detachUnlock?.();
     this.detachUnlock = null;
+    this.detachMute?.();
+    this.detachMute = null;
   }
 
   /** Move to `screen`; the on-screen controls are greyed out except during a Round. */
