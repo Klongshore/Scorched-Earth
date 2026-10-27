@@ -1,4 +1,4 @@
-import type { Weapon, WeaponName } from "./types";
+import type { DeathAnimationKind, Weapon, WeaponName } from "./types";
 
 /**
  * Something that happened in a Round, recorded for the game loop to turn into a Sound Effect.
@@ -21,7 +21,20 @@ export type Cue =
       readonly x: number;
       readonly y: number;
       readonly radius: number;
-    };
+    }
+  /** A Tank lost Health and survived; (x, y) is where it stands. */
+  | { readonly kind: "tankHit"; readonly x: number; readonly y: number }
+  /** A Tank was destroyed and its Death Animation of this kind began at (x, y). */
+  | {
+      readonly kind: "tankDestroyed";
+      readonly animation: DeathAnimationKind;
+      readonly x: number;
+      readonly y: number;
+    }
+  /** The Round ended with one Tank standing. */
+  | { readonly kind: "roundWon" }
+  /** The Round ended with no Tank standing. */
+  | { readonly kind: "roundDraw" };
 
 /** The cues recorded since the last drain, oldest first. */
 export class CueBuffer {

@@ -403,6 +403,7 @@ export class Round {
       y,
       radius: explosion.radius,
     });
+    this.recordHits(explosion.hits);
     this.earn(p.firedBy, moneyEarned(explosion.hits, p.firedBy));
     return explosion;
   }
@@ -423,7 +424,17 @@ export class Round {
         destroyed: !isAlive(t),
       });
     });
+    this.recordHits(losses);
     this.earn(this.currentPlayerId, moneyEarned(losses, this.currentPlayerId));
+  }
+
+  /** Record a hit cue for each Tank that lost Health and survived. */
+  private recordHits(losses: readonly HealthLoss[]): void {
+    for (const loss of losses) {
+      if (loss.destroyed || loss.healthRemoved <= 0) continue;
+      const tank = this.tankOf(loss.playerId);
+      this.cues.record({ kind: "tankHit", x: tank.x, y: tank.y });
+    }
   }
 
   /** Use up one of a Player's Parachutes; false if they own none. */
@@ -470,6 +481,7 @@ export class Round {
     const kind = this.flavourRng.pick(DEATH_ANIMATION_KINDS);
     const selfInflicted = tank.playerId === this.currentPlayerId;
     this.say("epitaph", tank.playerId, pickEpitaph(this.flavourRng, selfInflicted));
+    this.cues.record({ kind: "tankDestroyed", animation: kind, x: tank.x, y: tank.y });
     return { playerId: tank.playerId, kind, x: tank.x, y: tank.y, elapsed: 0 };
   }
 
@@ -483,10 +495,12 @@ export class Round {
     const [survivor] = alive;
     if (!survivor) {
       this.phase = { kind: "over", result: { kind: "draw" } };
+      this.cues.record({ kind: "roundDraw" });
       return;
     }
     if (alive.length === 1) {
       this.phase = { kind: "over", result: { kind: "win", playerId: survivor.playerId } };
+      this.cues.record({ kind: "roundWon" });
       return;
     }
     do {

@@ -1,10 +1,21 @@
 import type { Cue } from "../sim/cues";
+import type { DeathAnimationKind } from "../sim/types";
 
 /**
  * Which Sound Effect to play. Later cues add more names. Each name is synthesized by the audio
  * module; this module only decides which, how loud and where.
  */
-export type SoundName = "launch" | "blast" | "thud";
+export type SoundName =
+  | "launch"
+  | "blast"
+  | "thud"
+  | "hit"
+  | "destroyFireball"
+  | "destroySparks"
+  | "destroyDisintegrate"
+  | "destroyPop"
+  | "roundWin"
+  | "roundDraw";
 
 export interface SoundPlan {
   readonly sound: SoundName;
@@ -22,6 +33,16 @@ const LAUNCH_GAIN = 0.35;
 const MIN_GAIN = 0.25;
 const MAX_GAIN = 1;
 const THUD_GAIN_SCALE = 0.7;
+const HIT_GAIN = 0.6;
+const DESTROY_GAIN = 0.9;
+const STING_GAIN = 0.7;
+
+const DESTROY_SOUNDS: Record<DeathAnimationKind, SoundName> = {
+  fireball: "destroyFireball",
+  sparkShower: "destroySparks",
+  disintegration: "destroyDisintegrate",
+  popAndSmoke: "destroyPop",
+};
 
 /** Pan from a column: the left edge is -1, the right edge is 1. */
 export function panAt(x: number, fieldWidth: number): number {
@@ -45,5 +66,18 @@ export function planSound(cue: Cue, fieldWidth: number): SoundPlan | null {
         size,
       };
     }
+    case "tankHit":
+      return { sound: "hit", gain: HIT_GAIN, pan: panAt(cue.x, fieldWidth), size: 0 };
+    case "tankDestroyed":
+      return {
+        sound: DESTROY_SOUNDS[cue.animation],
+        gain: DESTROY_GAIN,
+        pan: panAt(cue.x, fieldWidth),
+        size: 0.5,
+      };
+    case "roundWon":
+      return { sound: "roundWin", gain: STING_GAIN, pan: 0, size: 0 };
+    case "roundDraw":
+      return { sound: "roundDraw", gain: STING_GAIN, pan: 0, size: 0 };
   }
 }

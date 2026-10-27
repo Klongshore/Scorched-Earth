@@ -81,6 +81,39 @@ export class SoundPlayer {
         this.sweep(ctx, out, now, 0.25 + plan.size * 0.2, 110, 40, "sine", 1);
         this.burst(ctx, out, now, 0.12, 300, 0.35);
         break;
+      case "hit":
+        this.sweep(ctx, out, now, 0.12, 320, 120, "square", 0.5);
+        this.burst(ctx, out, now, 0.1, 2000, 0.6);
+        break;
+      case "destroyFireball":
+        this.burst(ctx, out, now, 1.4, 1400, 1);
+        this.sweep(ctx, out, now, 1.4, 90, 25, "sine", 1);
+        break;
+      case "destroySparks":
+        for (let i = 0; i < 6; i++) {
+          const t = now + i * 0.07;
+          this.burst(ctx, out, t, 0.08, 7000, 0.5);
+          this.sweep(ctx, out, t, 0.08, 3200 - i * 300, 1800, "square", 0.15);
+        }
+        break;
+      case "destroyDisintegrate":
+        this.burst(ctx, out, now, 1.2, 5000, 0.8);
+        this.sweep(ctx, out, now, 1.2, 900, 60, "sawtooth", 0.4);
+        break;
+      case "destroyPop":
+        this.sweep(ctx, out, now, 0.08, 600, 200, "sine", 1);
+        this.burst(ctx, out, now + 0.05, 0.7, 900, 0.5);
+        break;
+      case "roundWin":
+        [523, 659, 784, 1047].forEach((f, i) =>
+          this.sweep(ctx, out, now + i * 0.12, 0.35, f, f, "triangle", 0.6),
+        );
+        break;
+      case "roundDraw":
+        [392, 330, 262].forEach((f, i) =>
+          this.sweep(ctx, out, now + i * 0.18, 0.4, f, f * 0.97, "triangle", 0.6),
+        );
+        break;
     }
   }
 
