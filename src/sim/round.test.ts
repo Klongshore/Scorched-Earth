@@ -1890,3 +1890,96 @@ describe("Round Unknown", () => {
     expect(resolvedOf(round, 1)).toBeNull();
   });
 });
+
+describe("Round cues", () => {
+  const turnOver = (r: Round): boolean => r.phase.kind === "aiming" || r.phase.kind === "over";
+
+  function choose(round: Round, name: WeaponName): void {
+    round.inventoryOf(round.currentPlayerId).add(name, 1);
+    for (let i = 0; i < WEAPONS.length && round.currentWeapon().name !== name; i++) {
+      round.act({ kind: "cycleWeapon", delta: 1 });
+    }
+    expect(round.currentWeapon().name).toBe(name);
+  }
+
+  it("has nothing to drain before anything happens, and drains only once", () => {
+    const round = newRound();
+    expect(round.drainCues()).toEqual([]);
+    round.act({ kind: "fire" });
+    expect(round.drainCues()).toHaveLength(1);
+    expect(round.drainCues()).toEqual([]);
+  });
+
+  it("records fired, then exploded with kind, position and radius", () => {
+    const { round, firer } = scenario(100, 500);
+    firer.angle = 90;
+    firer.power = 400;
+    round.act({ kind: "fire" });
+    runUntil(round, turnOver);
+    const cues = round.drainCues();
+    expect(cues[0]).toEqual({
+      kind: "fired",
+      weapon: "Baby Missile",
+      weaponKind: "blast",
+      x: firer.x,
+    });
+    const exploded = cues.filter((c) => c.kind === "exploded");
+    expect(exploded).toHaveLength(1);
+    expect(exploded[0]).toMatchObject({
+      explosion: "carve",
+      radius: weaponNamed("Baby Missile").radius,
+    });
+  });
+
+  it("records a bigger radius for a Nuke than for a Baby Missile", () => {
+    const { round, firer } = scenario(100, 500);
+    choose(round, "Nuke");
+    fireStraightUp(round, firer);
+    runUntil(round, turnOver);
+    const exploded = round.drainCues().find((c) => c.kind === "exploded");
+    expect(exploded).toMatchObject({ radius: weaponNamed("Nuke").radius });
+  });
+
+  it("records a Dirt Weapon's Explosion as dirt", () => {
+    const { round, firer } = scenario(100, 500);
+    choose(round, "Dirt Ball");
+    fireStraightUp(round, firer);
+    runUntil(round, turnOver);
+    const exploded = round.drainCues().find((c) => c.kind === "exploded");
+    expect(exploded).toMatchObject({ explosion: "dirt", radius: weaponNamed("Dirt Ball").radius });
+  });
+
+  it("records a Computer Player's shot like a human's", () => {
+    const round = new Round(1, createPlayers([MORON, MORON]), new Rng(3));
+    runUntil(round, (r) => r.phase.kind === "resolving");
+    const [fired] = round.drainCues();
+    expect(fired).toMatchObject({ kind: "fired", weapon: "Baby Missile" });
+  });
+
+  it("plays out identically whether or not anything drains the cues", () => {
+    const actions: RoundAction[] = [
+      { kind: "adjustAngle", delta: -30 },
+      { kind: "adjustPower", delta: 120 },
+      { kind: "fire" },
+      { kind: "adjustAngle", delta: 25 },
+      { kind: "fire" },
+    ];
+    const play = (drain: boolean): Round => {
+      const round = newRound(42);
+      for (const action of actions) {
+        round.act(action);
+        for (let i = 0; i < 20000 && !turnOver(round); i++) {
+          round.tick(TICK_SECONDS);
+          if (drain) round.drainCues();
+        }
+      }
+      return round;
+    };
+    const drained = play(true);
+    const silent = play(false);
+    expect(drained.tanks).toEqual(silent.tanks);
+    expect(drained.terrain).toEqual(silent.terrain);
+    expect(drained.wind).toBe(silent.wind);
+    expect(drained.phase.kind).toBe(silent.phase.kind);
+  });
+});
