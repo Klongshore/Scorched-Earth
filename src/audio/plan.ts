@@ -100,6 +100,7 @@ export function planSound(cue: Cue, fieldWidth: number): SoundPlan | null {
     case "launched":
     case "landed":
     case "rollEnded":
+    case "loopAt":
       return null;
     case "exploded": {
       const size = Math.max(0, Math.min(1, cue.radius / BIGGEST_RADIUS));
