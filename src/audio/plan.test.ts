@@ -101,3 +101,19 @@ describe("planSound for Settling", () => {
     expect(opened.pan).toBeGreaterThan(0);
   });
 });
+
+describe("planSound shields", () => {
+  it("gives raised, hit and broken Shields each their own sound", () => {
+    const sounds = [
+      plan({ kind: "shieldRaised", x: 100 }).sound,
+      plan({ kind: "shieldHit", x: 100, y: 300 }).sound,
+      plan({ kind: "shieldBroken", x: 100, y: 300 }).sound,
+    ];
+    expect(new Set(sounds).size).toBe(3);
+  });
+
+  it("pans a Shield sound by the Tank's column", () => {
+    expect(plan({ kind: "shieldRaised", x: 0 }).pan).toBe(-1);
+    expect(plan({ kind: "shieldHit", x: FIELD_WIDTH, y: 300 }).pan).toBe(1);
+  });
+});

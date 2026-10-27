@@ -18,7 +18,10 @@ export type SoundName =
   | "roundDraw"
   | "rumble"
   | "landing"
-  | "parachute";
+  | "parachute"
+  | "shieldUp"
+  | "shieldHit"
+  | "shieldBreak";
 
 export interface SoundPlan {
   readonly sound: SoundName;
@@ -35,6 +38,7 @@ const BIGGEST_RADIUS = 75;
 const LAUNCH_GAIN = 0.35;
 const MIN_GAIN = 0.25;
 const MAX_GAIN = 1;
+const SHIELD_GAIN = 0.5;
 const THUD_GAIN_SCALE = 0.7;
 const HIT_GAIN = 0.6;
 const DESTROY_GAIN = 0.9;
@@ -105,5 +109,11 @@ export function planSound(cue: Cue, fieldWidth: number): SoundPlan | null {
     }
     case "parachuteOpened":
       return { sound: "parachute", gain: PARACHUTE_GAIN, pan: panAt(cue.x, fieldWidth), size: 0 };
+    case "shieldRaised":
+      return { sound: "shieldUp", gain: SHIELD_GAIN, pan: panAt(cue.x, fieldWidth), size: 0 };
+    case "shieldHit":
+      return { sound: "shieldHit", gain: SHIELD_GAIN, pan: panAt(cue.x, fieldWidth), size: 0 };
+    case "shieldBroken":
+      return { sound: "shieldBreak", gain: SHIELD_GAIN, pan: panAt(cue.x, fieldWidth), size: 0 };
   }
 }

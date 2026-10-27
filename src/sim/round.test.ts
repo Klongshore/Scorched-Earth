@@ -30,7 +30,7 @@ import {
 import { damageAt, detonate } from "./explosion";
 import { createPlayers } from "./players";
 import { Rng } from "./rng";
-import { emptyLoadout } from "./inventory";
+import { emptyLoadout, inventoryIn } from "./inventory";
 import { EPITAPHS, SELF_INFLICTED_EPITAPHS, TAUNTS } from "./lines";
 import { Round, type RoundAction } from "./round";
 import type { Cue } from "./cues";
@@ -2097,5 +2097,72 @@ describe("Round settling cues", () => {
   it("records nothing for a Tank that does not fall", () => {
     const { round } = scenario(150, 500);
     expect(settle(round)).toEqual([]);
+  });
+});
+
+describe("Round Shield cues", () => {
+  const turnOver = (r: Round): boolean => r.phase.kind === "aiming" || r.phase.kind === "over";
+
+  /** A Round where the given Players own a Shield, so it is raised at construction. */
+  function shieldedRound(owners: number[]): Round {
+    const players = createPlayers([HUMAN, HUMAN]);
+    const loadout = emptyLoadout(players);
+    for (const id of owners) inventoryIn(loadout, id).add("Shield", 1);
+    return new Round(1, players, new Rng(1), loadout);
+  }
+
+  /** Fire the current Tank's Baby Missile straight up so it lands on the firer's own Shield. */
+  function selfShot(round: Round, strength: number): Tank {
+    const firer = round.currentTank();
+    round.terrain.flatten(0, FIELD_WIDTH - 1, GROUND);
+    firer.x = 100;
+    firer.y = GROUND;
+    round.wind = 0;
+    firer.shield = { name: "Shield", strength };
+    round.drainCues();
+    fireStraightUp(round, firer);
+    runUntil(round, turnOver);
+    return firer;
+  }
+
+  it("buffers a shield raised cue for each Shield from construction", () => {
+    const round = shieldedRound([0, 1]);
+    const cues = round.drainCues();
+    expect(cues).toHaveLength(2);
+    for (const t of round.tanks) expect(cues).toContainEqual({ kind: "shieldRaised", x: t.x });
+  });
+
+  it("records a shield raised cue only for a Tank that raises a Shield", () => {
+    const round = shieldedRound([1]);
+    const only = round.tanks.find((t) => t.playerId === 1) as Tank;
+    expect(round.drainCues()).toEqual([{ kind: "shieldRaised", x: only.x }]);
+  });
+
+  it("records a shield hit when a Shield absorbs damage and stands", () => {
+    const round = shieldedRound([]);
+    const firer = selfShot(round, 1000);
+    const cues = round.drainCues();
+    expect(cues).toContainEqual({ kind: "shieldHit", x: firer.x, y: GROUND });
+    expect(cues.map((c) => c.kind)).not.toContain("shieldBroken");
+  });
+
+  it("records a shield broken when an Explosion runs the Shield Strength out", () => {
+    const round = shieldedRound([]);
+    const firer = selfShot(round, 1);
+    const cues = round.drainCues();
+    expect(cues).toContainEqual({ kind: "shieldBroken", x: firer.x, y: GROUND });
+    expect(cues.map((c) => c.kind)).not.toContain("shieldHit");
+  });
+
+  it("records no shield cue for a Tank without a Shield", () => {
+    const round = shieldedRound([]);
+    const firer = round.currentTank();
+    round.terrain.flatten(0, FIELD_WIDTH - 1, GROUND);
+    firer.x = 100;
+    firer.y = GROUND;
+    round.drainCues();
+    fireStraightUp(round, firer);
+    runUntil(round, turnOver);
+    expect(round.drainCues().map((c) => c.kind)).not.toContain("shieldHit");
   });
 });

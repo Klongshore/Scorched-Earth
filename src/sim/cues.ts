@@ -40,7 +40,13 @@ export type Cue =
   /** A Tank at column `x` landed after a fall, taking `fallDamage` (0 under a Parachute). */
   | { readonly kind: "tankLanded"; readonly x: number; readonly fallDamage: number }
   /** A Tank's Parachute opened at column `x`. */
-  | { readonly kind: "parachuteOpened"; readonly x: number };
+  | { readonly kind: "parachuteOpened"; readonly x: number }
+  /** A Shield went up around the Tank at column `x`. */
+  | { readonly kind: "shieldRaised"; readonly x: number }
+  /** A Shield absorbed Explosion damage and still stands, around the Tank at (x, y). */
+  | { readonly kind: "shieldHit"; readonly x: number; readonly y: number }
+  /** A Shield's Shield Strength ran out, leaving the Tank at (x, y) exposed. */
+  | { readonly kind: "shieldBroken"; readonly x: number; readonly y: number };
 
 /** The cues recorded since the last drain, oldest first. */
 export class CueBuffer {
