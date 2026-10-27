@@ -13,6 +13,8 @@ export class Terrain {
   readonly cells: Uint8Array;
   /** Incremented on every change, so the renderer knows when to redraw. */
   version = 0;
+  /** How many cells the latest settlePass moved (for the rumble of falling dirt). */
+  lastPassMoved = 0;
   /**
    * Columns [unsettledFrom, unsettledTo] may hold dirt with air below it. Every edit widens the
    * range; settlePass scans only these columns and narrows the range to the ones still moving.
@@ -164,6 +166,7 @@ export class Terrain {
     const w = this.width;
     let from = Infinity;
     let to = -Infinity;
+    this.lastPassMoved = 0;
     for (let x = Math.max(0, this.unsettledFrom); x <= Math.min(w - 1, this.unsettledTo); x++) {
       const columnMoved = this.settleColumn(
         x,
@@ -197,6 +200,7 @@ export class Terrain {
       ) {
         this.cells[index] = 0;
         this.cells[index + w] = 1;
+        this.lastPassMoved++;
         moved = true;
       }
     }

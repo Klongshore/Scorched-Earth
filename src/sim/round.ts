@@ -269,8 +269,13 @@ export class Round {
         // on Settling's first tick, before anything moves, and paid for once all is at rest.
         this.healthBeforeSettling ??= this.tanks.map((t) => t.health);
         if (
-          !settleTick(this.terrain, this.tanks, (id) => this.useParachute(id)) &&
-          !landTanks(this.terrain, this.tanks)
+          !settleTick(
+            this.terrain,
+            this.tanks,
+            (id) => this.useParachute(id),
+            (cue) => this.cues.record(cue),
+          ) &&
+          !landTanks(this.terrain, this.tanks, (cue) => this.cues.record(cue))
         ) {
           this.paySettling(this.healthBeforeSettling);
           this.healthBeforeSettling = null;

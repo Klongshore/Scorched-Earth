@@ -4,7 +4,7 @@ import type { Cue } from "../sim/cues";
  * Which Sound Effect to play. Later cues add more names. Each name is synthesized by the audio
  * module; this module only decides which, how loud and where.
  */
-export type SoundName = "launch" | "blast" | "thud";
+export type SoundName = "launch" | "blast" | "thud" | "rumble" | "landing" | "parachute";
 
 export interface SoundPlan {
   readonly sound: SoundName;
@@ -22,6 +22,13 @@ const LAUNCH_GAIN = 0.35;
 const MIN_GAIN = 0.25;
 const MAX_GAIN = 1;
 const THUD_GAIN_SCALE = 0.7;
+/** Dirt cells moving in one tick treated as the loudest rumble. */
+const LOUDEST_DIRT_MOVE = 400;
+const RUMBLE_MAX_GAIN = 0.6;
+const LANDING_GAIN = 0.3;
+const PARACHUTE_GAIN = 0.35;
+/** Fall Damage treated as the hardest landing. */
+const HARDEST_FALL_DAMAGE = 50;
 
 /** Pan from a column: the left edge is -1, the right edge is 1. */
 export function panAt(x: number, fieldWidth: number): number {
@@ -45,5 +52,21 @@ export function planSound(cue: Cue, fieldWidth: number): SoundPlan | null {
         size,
       };
     }
+    case "dirtMoving": {
+      const size = Math.max(0, Math.min(1, cue.amount / LOUDEST_DIRT_MOVE));
+      // One rumble for the whole field: centred, and louder the more dirt moves.
+      return { sound: "rumble", gain: RUMBLE_MAX_GAIN * Math.sqrt(size), pan: 0, size };
+    }
+    case "tankLanded": {
+      const size = Math.max(0, Math.min(1, cue.fallDamage / HARDEST_FALL_DAMAGE));
+      return {
+        sound: "landing",
+        gain: LANDING_GAIN + (MAX_GAIN - LANDING_GAIN) * Math.sqrt(size),
+        pan: panAt(cue.x, fieldWidth),
+        size,
+      };
+    }
+    case "parachuteOpened":
+      return { sound: "parachute", gain: PARACHUTE_GAIN, pan: panAt(cue.x, fieldWidth), size: 0 };
   }
 }

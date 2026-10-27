@@ -21,7 +21,13 @@ export type Cue =
       readonly x: number;
       readonly y: number;
       readonly radius: number;
-    };
+    }
+  /** Settling moved `amount` cells of dirt this tick. Recorded only while dirt moves, never at rest. */
+  | { readonly kind: "dirtMoving"; readonly amount: number }
+  /** A Tank at column `x` landed after a fall, taking `fallDamage` (0 under a Parachute). */
+  | { readonly kind: "tankLanded"; readonly x: number; readonly fallDamage: number }
+  /** A Tank's Parachute opened at column `x`. */
+  | { readonly kind: "parachuteOpened"; readonly x: number };
 
 /** The cues recorded since the last drain, oldest first. */
 export class CueBuffer {

@@ -33,6 +33,7 @@ import { Rng } from "./rng";
 import { emptyLoadout } from "./inventory";
 import { EPITAPHS, SELF_INFLICTED_EPITAPHS, TAUNTS } from "./lines";
 import { Round, type RoundAction } from "./round";
+import type { Cue } from "./cues";
 import { fallDamage } from "./settling";
 import { barrelTip, centre, hitTest, isSupported, occupiesCell } from "./tank";
 import type { Terrain } from "./terrain";
@@ -1981,5 +1982,57 @@ describe("Round cues", () => {
     expect(drained.terrain).toEqual(silent.terrain);
     expect(drained.wind).toBe(silent.wind);
     expect(drained.phase.kind).toBe(silent.phase.kind);
+  });
+});
+
+describe("Round settling cues", () => {
+  const settle = (round: Round): Cue[] => {
+    round.drainCues();
+    round.phase = { kind: "settling" };
+    runUntil(round, (r) => r.phase.kind === "aiming");
+    return round.drainCues();
+  };
+
+  it("records dirt moving with how much moved while dirt falls, and none once at rest", () => {
+    const { round } = scenario(150, 500);
+    for (let y = GROUND - 30; y < GROUND - 20; y++) {
+      for (let x = 300; x < 320; x++) round.terrain.set(x, y, true);
+    }
+    const cues = settle(round);
+    const moving = cues.filter((c) => c.kind === "dirtMoving");
+    expect(moving.length).toBeGreaterThan(0);
+    for (const cue of moving) expect(cue.amount).toBeGreaterThan(0);
+    const last = cues.map((c) => c.kind).lastIndexOf("dirtMoving");
+    expect(cues.slice(last + 1).some((c) => c.kind === "dirtMoving")).toBe(false);
+    // At rest, a further Settling records no dirt moving at all.
+    expect(settle(round).filter((c) => c.kind === "dirtMoving")).toEqual([]);
+  });
+
+  it("records a Tank landing with its Fall Damage", () => {
+    const { round, other } = scenario(150, 500);
+    undercutTank(round, other, 40);
+    const cues = settle(round);
+    const landed = cues.filter((c) => c.kind === "tankLanded");
+    expect(landed).toEqual([{ kind: "tankLanded", x: 500, fallDamage: fallDamage(40) }]);
+    expect(fallDamage(40)).toBeGreaterThan(0);
+    expect(cues.some((c) => c.kind === "parachuteOpened")).toBe(false);
+  });
+
+  it("records a Parachute opening and a landing with no Fall Damage", () => {
+    const { round, other } = scenario(150, 500);
+    round.inventoryOf(other.playerId).add("Parachute", 5);
+    undercutTank(round, other, 60);
+    const cues = settle(round);
+    expect(cues.filter((c) => c.kind === "parachuteOpened")).toEqual([
+      { kind: "parachuteOpened", x: 500 },
+    ]);
+    expect(cues.filter((c) => c.kind === "tankLanded")).toEqual([
+      { kind: "tankLanded", x: 500, fallDamage: 0 },
+    ]);
+  });
+
+  it("records nothing for a Tank that does not fall", () => {
+    const { round } = scenario(150, 500);
+    expect(settle(round)).toEqual([]);
   });
 });
