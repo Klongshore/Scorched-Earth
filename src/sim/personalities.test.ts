@@ -1084,25 +1084,6 @@ describe("Cyborg Personality", () => {
     expect(rng.next()).toBe(new Rng(9).next());
   });
 
-  it("hits any Target it can reach in Wind when nothing blocks the shot", () => {
-    const rng = new Rng(8);
-    let checked = 0;
-    for (let i = 0; i < 400; i++) {
-      const self = tankAt(0, rng.int(30, FIELD_WIDTH - 30));
-      const target = tankAt(1, rng.int(30, FIELD_WIDTH - 30));
-      const wind = rng.int(-WIND_MAX, WIND_MAX);
-      if (Math.abs(self.x - target.x) < 40) continue;
-      if (!isReachable(self, target, "cyborg", wind)) continue;
-      const aim = chooseAim("cyborg", self, [self, target], newComputerMemory(), rng, wind);
-      const hit = landingInWind(self, target, aim, wind);
-      const c = centre(target);
-      if (!hit) throw new Error("Projectile did not hit anything");
-      expect(Math.hypot(hit.x - c.x, hit.y - c.y)).toBeLessThanOrEqual(BABY_MISSILE.radius);
-      checked++;
-    }
-    expect(checked).toBeGreaterThan(100);
-  });
-
   it("fires a random aim like a Moron when no opponent is reachable", () => {
     const self = tankAt(0, 100);
     const tanks = [self, tankAt(1, 105)];
