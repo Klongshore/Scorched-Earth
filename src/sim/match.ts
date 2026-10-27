@@ -2,8 +2,10 @@ import {
   FLAVOUR_SEED_SALT,
   MAX_PLAYERS,
   MAX_ROUNDS,
+  MAX_STARTING_MONEY,
   MIN_PLAYERS,
   MIN_ROUNDS,
+  MIN_STARTING_MONEY,
   MONEY_PER_ROUND_WIN,
   STARTING_MONEY,
   forSaleNamed,
@@ -18,6 +20,7 @@ import type { Player, PlayerSetup, ShopName } from "./types";
 export interface MatchSetup {
   readonly players: readonly PlayerSetup[]; // one per Player, MIN_PLAYERS..MAX_PLAYERS
   readonly rounds: number; // MIN_ROUNDS..MAX_ROUNDS
+  readonly startingMoney?: number; // MIN_STARTING_MONEY..MAX_STARTING_MONEY; defaults to STARTING_MONEY
   readonly seed: number;
 }
 
@@ -61,12 +64,22 @@ export class Match {
     if (!Number.isInteger(rounds) || rounds < MIN_ROUNDS || rounds > MAX_ROUNDS) {
       throw new Error(`Rounds must be an integer in ${MIN_ROUNDS}..${MAX_ROUNDS}, got ${rounds}`);
     }
+    const startingMoney = setup.startingMoney ?? STARTING_MONEY;
+    if (
+      !Number.isInteger(startingMoney) ||
+      startingMoney < MIN_STARTING_MONEY ||
+      startingMoney > MAX_STARTING_MONEY
+    ) {
+      throw new Error(
+        `Starting Money must be an integer in ${MIN_STARTING_MONEY}..${MAX_STARTING_MONEY}, got ${startingMoney}`,
+      );
+    }
     this.rng = new Rng(setup.seed);
     this.flavourRng = new Rng(setup.seed ^ FLAVOUR_SEED_SALT);
     this.players = createPlayers(setup.players);
     this.totalRounds = rounds;
     this.roundWins = this.players.map(() => 0);
-    this.money = this.players.map(() => STARTING_MONEY);
+    this.money = this.players.map(() => startingMoney);
     this.earnedThisRound = this.players.map(() => 0);
     this.loadout = emptyLoadout(this.players);
     this.openShop();

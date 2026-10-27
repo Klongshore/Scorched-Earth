@@ -3,8 +3,11 @@ import {
   DEFAULT_ROUNDS,
   MAX_PLAYERS,
   MAX_ROUNDS,
+  MAX_STARTING_MONEY,
   MIN_PLAYERS,
   MIN_ROUNDS,
+  MIN_STARTING_MONEY,
+  STARTING_MONEY,
   FOR_SALE,
 } from "../sim/constants";
 import type { Match } from "../sim/match";
@@ -16,6 +19,7 @@ import type { Player, PlayerSetup, ShopName } from "../sim/types";
 export interface SetupChoice {
   readonly players: readonly PlayerSetup[]; // one per Player, in order
   readonly rounds: number;
+  readonly startingMoney: number;
 }
 
 /** The choices each Player's dropdown offers, in display order. */
@@ -66,8 +70,16 @@ function setupFromOption(value: string): PlayerSetup {
 }
 
 /** Turn the form's dropdown values (one per Player, in order) and Rounds box into a choice. */
-export function setupChoiceFrom(optionValues: readonly string[], rounds: string): SetupChoice {
-  return { players: optionValues.map(setupFromOption), rounds: clampRounds(rounds) };
+export function setupChoiceFrom(
+  optionValues: readonly string[],
+  rounds: string,
+  startingMoney: string = String(STARTING_MONEY),
+): SetupChoice {
+  return {
+    players: optionValues.map(setupFromOption),
+    rounds: clampRounds(rounds),
+    startingMoney: clampStartingMoney(startingMoney),
+  };
 }
 
 /** Money as shown to Players: a dollar sign, a thousands separator and no decimals. */
@@ -83,6 +95,13 @@ export function clampRounds(value: string | number): number {
   const n = typeof value === "number" ? value : value.trim() === "" ? NaN : Number(value);
   if (!Number.isFinite(n)) return DEFAULT_ROUNDS;
   return Math.min(MAX_ROUNDS, Math.max(MIN_ROUNDS, Math.round(n)));
+}
+
+/** Turn whatever is in the Starting Money box into valid Money (MIN_STARTING_MONEY..MAX_STARTING_MONEY). */
+export function clampStartingMoney(value: string | number): number {
+  const n = typeof value === "number" ? value : value.trim() === "" ? NaN : Number(value);
+  if (!Number.isFinite(n)) return STARTING_MONEY;
+  return Math.min(MAX_STARTING_MONEY, Math.max(MIN_STARTING_MONEY, Math.round(n)));
 }
 
 export function clearOverlay(overlay: HTMLElement): void {
@@ -188,19 +207,34 @@ export function showSetup(
   });
   roundsLabel.append(el("span", "Rounds"), rounds);
 
+  const moneyLabel = el("label");
+  const money = el("input");
+  money.type = "number";
+  money.name = "startingMoney";
+  money.min = String(MIN_STARTING_MONEY);
+  money.max = String(MAX_STARTING_MONEY);
+  money.step = "1000";
+  money.value = String(STARTING_MONEY);
+  money.addEventListener("change", () => {
+    money.value = String(clampStartingMoney(money.value));
+  });
+  moneyLabel.append(el("span", "Starting Money ($)"), money);
+
   const start = el("button", "Start");
   start.type = "submit";
   start.autofocus = true;
-  form.append(roundsLabel, start);
+  form.append(roundsLabel, moneyLabel, start);
 
   const submit = startOnce(
     () =>
       setupChoiceFrom(
         selects.map((s) => s.value),
         rounds.value,
+        money.value,
       ),
     (choice) => {
       rounds.value = String(choice.rounds);
+      money.value = String(choice.startingMoney);
       onStart(choice);
     },
   );
