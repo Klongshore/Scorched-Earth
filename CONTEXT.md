@@ -173,3 +173,13 @@ _Avoid_: Death text, death message, last words
 **Taunt**:
 An occasional random line of bravado or threat shown above a Tank as its Player is about to fire. It never delays the shot.
 _Avoid_: Trash talk, quip, banter (as a single line)
+
+### Sound
+
+**Sound Effect**:
+A short sound played for something that happens in a Round: a shot fired, a Projectile in flight, an Explosion, a Shield raised or broken, a Tank destroyed, dirt falling. It is pure spectacle: it never changes the outcome of a Round, so a seeded Match plays out the same with sound on or off.
+_Avoid_: SFX, noise, audio clip
+
+**Mute**:
+The switch that silences every Sound Effect. Sound is on until the Player mutes it, and the choice is kept between visits.
+_Avoid_: Volume, settings
