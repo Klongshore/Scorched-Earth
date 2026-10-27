@@ -59,7 +59,7 @@ A Personality that always aims at the weakest Tank and allows for Wind, with a s
 A Personality that aims like a Chooser but with half the random error.
 
 **Cyborg**:
-A Personality that aims at the weakest Tank, preferring a human Player's Tank over a computer's, and allows for Wind with no random error, so it hits unless Terrain is in the way.
+A Personality that aims at the weakest Tank, preferring a human Player's Tank over a computer's, and allows for Wind with only a tiny random error.
 
 **Unknown**:
 A Personality that becomes Poolshark, Chooser, Spoiler or Cyborg, picked at random at the start of each Round. It is shown as Unknown everywhere in the interface, never as what it became.
