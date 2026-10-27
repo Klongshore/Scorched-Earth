@@ -174,26 +174,26 @@ export const COMPUTER_THINK_TICKS = Math.round(COMPUTER_THINK_SECONDS / TICK_SEC
 // Shooter
 export const SHOOTER_MIN_ANGLE = 30; // degrees above the horizontal, toward the Target
 export const SHOOTER_MAX_ANGLE = 60;
-export const SHOOTER_POWER_ERROR = 0.06; // ±6%
-export const SHOOTER_ANGLE_ERROR = 3; // ±3 degrees
+export const SHOOTER_POWER_ERROR = 0.1; // ±10%
+export const SHOOTER_ANGLE_ERROR = 5; // ±5 degrees
 
 // Chooser
-export const CHOOSER_POWER_ERROR = 0.025; // ±2.5%, while allowing for Wind
+export const CHOOSER_POWER_ERROR = 0.05; // ±5%, while allowing for Wind
 
-export const CHOOSER_ANGLE_ERROR = 3; // ±3 degrees
+export const CHOOSER_ANGLE_ERROR = 5; // ±5 degrees
 
 // Spoiler
 export const SPOILER_POWER_ERROR = CHOOSER_POWER_ERROR / 2; // half a Chooser's
-export const SPOILER_ANGLE_ERROR = 2; // ±2 degrees
+export const SPOILER_ANGLE_ERROR = 4; // ±4 degrees
 
 // Cyborg
-export const CYBORG_POWER_ERROR = 0.01; // ±1%, while allowing for Wind
-export const CYBORG_ANGLE_ERROR = 1; // ±1 degree
+export const CYBORG_POWER_ERROR = 0.03; // ±3%, while allowing for Wind
+export const CYBORG_ANGLE_ERROR = 3; // ±3 degrees
 
 // Tosser
 export const TOSSER_ANGLE = 45; // degrees above the horizontal, toward the Target
-export const TOSSER_FIRST_POWER_ERROR = 0.3; // ±30%, on its first Turn at a Target
-export const TOSSER_FIRST_ANGLE_ERROR = 3; // ±3 degrees, likewise
+export const TOSSER_FIRST_POWER_ERROR = 0.4; // ±40%, on its first Turn at a Target
+export const TOSSER_FIRST_ANGLE_ERROR = 5; // ±5 degrees, likewise
 export const TOSSER_LOST_FACTOR = 0.8; // Power correction after a Projectile lost on the Target's side
 export const TOSSER_MIN_FACTOR = 0.5;
 export const TOSSER_MAX_FACTOR = 1.5;

@@ -5,23 +5,23 @@ exports[`Match integration > replays a seeded Match of only Morons, Shooters and
   "results": [
     {
       "kind": "win",
-      "playerId": 4,
-    },
-    {
-      "kind": "win",
       "playerId": 3,
     },
     {
       "kind": "win",
       "playerId": 4,
     },
+    {
+      "kind": "win",
+      "playerId": 3,
+    },
   ],
   "wins": [
     0,
     0,
     0,
-    1,
     2,
+    1,
     0,
   ],
 }
