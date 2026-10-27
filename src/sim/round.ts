@@ -21,6 +21,7 @@ import {
   WIND_MAX,
   weaponNamed,
 } from "./constants";
+import { CueBuffer, type Cue } from "./cues";
 import { detonate } from "./explosion";
 import { emptyLoadout, inventoryIn, type Inventory, type Loadout } from "./inventory";
 import { pickEpitaph, rollTaunt } from "./lines";
@@ -112,6 +113,8 @@ export class Round {
   private healthBeforeSettling: number[] | null = null;
   /** playerIds of destroyed Tanks whose Death Animation has started: gone from the field. */
   private readonly gone = new Set<number>();
+  /** Cues recorded since the game loop last drained them; buffered from construction. */
+  private readonly cues = new CueBuffer();
   /** Every line on screen, oldest first. */
   private readonly shownLines: Line[] = [];
   /** The Taunt rolled for this Turn and not yet shown; null when the Turn has none. */
@@ -182,6 +185,14 @@ export class Round {
         this.fire();
         break;
     }
+  }
+
+  /**
+   * Hand over every cue recorded since the last drain, oldest first, and forget them. Read by the
+   * game loop for Sound Effects only; draining (or not) never changes the Round.
+   */
+  drainCues(): Cue[] {
+    return this.cues.drain();
   }
 
   /** The Weapon the current Player will fire. */
@@ -272,6 +283,12 @@ export class Round {
     const weapon = this.currentWeapon();
     this.inventoryOf(this.currentPlayerId).useOne(weapon.name);
     const projectile = launch(this.currentTank(), weapon);
+    this.cues.record({
+      kind: "fired",
+      weapon: weapon.name,
+      weaponKind: weapon.kind,
+      x: this.currentTank().x,
+    });
     this.barrelProjectile = projectile;
     this.phase = { kind: "resolving", projectiles: [projectile], explosions: [] };
     this.sayPendingTaunt(); // a Human's Taunt; a Computer Player's was shown as it began thinking
@@ -371,6 +388,13 @@ export class Round {
   /** Detonate a Weapon (the Projectile's own by default) at (x, y), crediting its firer's earnings. */
   private explode(p: Projectile, x: number, y: number, weapon: Weapon = p.weapon): Explosion {
     const explosion = detonate(x, y, weapon, this.terrain, this.tanks);
+    this.cues.record({
+      kind: "exploded",
+      explosion: explosion.kind,
+      x,
+      y,
+      radius: explosion.radius,
+    });
     this.earn(p.firedBy, moneyEarned(explosion.hits, p.firedBy));
     return explosion;
   }
