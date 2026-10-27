@@ -2,6 +2,7 @@ import { powerToHit } from "./aiming";
 import {
   BABY_MISSILE,
   CHOOSER_POWER_ERROR,
+  CYBORG_POWER_ERROR,
   SPOILER_POWER_ERROR,
   GRAVITY,
   MAX_ANGLE,
@@ -202,7 +203,7 @@ const RULES: Record<TargetingPersonality, PersonalityRules> = {
     keepsTarget: false,
     reachable: (self, target, wind) => windFeasibleAims(self, target, wind).length > 0,
     selectTarget: weakestHumanTarget,
-    aim: (self, target, _memory, rng, wind) => windAim(self, target, wind, rng, 0),
+    aim: (self, target, _memory, rng, wind) => windAim(self, target, wind, rng, CYBORG_POWER_ERROR),
   },
 };
 

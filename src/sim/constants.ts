@@ -174,17 +174,20 @@ export const COMPUTER_THINK_TICKS = Math.round(COMPUTER_THINK_SECONDS / TICK_SEC
 // Shooter
 export const SHOOTER_MIN_ANGLE = 30; // degrees above the horizontal, toward the Target
 export const SHOOTER_MAX_ANGLE = 60;
-export const SHOOTER_POWER_ERROR = 0.05; // ±5%
+export const SHOOTER_POWER_ERROR = 0.06; // ±6%
 
 // Chooser
-export const CHOOSER_POWER_ERROR = 0.02; // ±2%, while allowing for Wind
+export const CHOOSER_POWER_ERROR = 0.025; // ±2.5%, while allowing for Wind
 
 // Spoiler
 export const SPOILER_POWER_ERROR = CHOOSER_POWER_ERROR / 2; // half a Chooser's
 
+// Cyborg
+export const CYBORG_POWER_ERROR = 0.01; // ±1%, while allowing for Wind
+
 // Tosser
 export const TOSSER_ANGLE = 45; // degrees above the horizontal, toward the Target
-export const TOSSER_FIRST_POWER_ERROR = 0.25; // ±25%, on its first Turn at a Target
+export const TOSSER_FIRST_POWER_ERROR = 0.3; // ±30%, on its first Turn at a Target
 export const TOSSER_LOST_FACTOR = 0.8; // Power correction after a Projectile lost on the Target's side
 export const TOSSER_MIN_FACTOR = 0.5;
 export const TOSSER_MAX_FACTOR = 1.5;

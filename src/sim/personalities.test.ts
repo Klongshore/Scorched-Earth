@@ -1116,7 +1116,7 @@ describe("Cyborg Personality", () => {
     );
   });
 
-  it("with no error, hits the Tank itself through the strongest Wind, even on long flights and close Targets", () => {
+  it("windAim with no error hits the Tank itself through the strongest Wind, even on long flights and close Targets", () => {
     const rng = new Rng(12);
     let checked = 0;
     let longest = 0;
@@ -1125,7 +1125,7 @@ describe("Cyborg Personality", () => {
       const target = tankAt(1, rng.int(30, FIELD_WIDTH - 30));
       const wind = rng.int(0, 1) === 0 ? -WIND_MAX : WIND_MAX;
       if (!isReachable(self, target, "cyborg", wind)) continue;
-      const aim = chooseAim("cyborg", self, [self, target], newComputerMemory(), rng, wind);
+      const aim = windAim(self, target, wind, rng, 0);
       const hit = landingInWind(self, target, aim, wind);
       if (!hit) throw new Error("Projectile did not hit anything");
       expect(hitTest(target, hit.x, hit.y)).toBe(true);
