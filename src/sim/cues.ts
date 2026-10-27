@@ -46,7 +46,19 @@ export type Cue =
   /** A Shield absorbed Explosion damage and still stands, around the Tank at (x, y). */
   | { readonly kind: "shieldHit"; readonly x: number; readonly y: number }
   /** A Shield's Shield Strength ran out, leaving the Tank at (x, y) exposed. */
-  | { readonly kind: "shieldBroken"; readonly x: number; readonly y: number };
+  | { readonly kind: "shieldBroken"; readonly x: number; readonly y: number }
+  /** A Projectile took to the air at column `x`: its flight sound starts (or joins in). */
+  | { readonly kind: "launched"; readonly x: number }
+  /** A Projectile's flight ended, landed, lost or replaced by pieces: its flight sound stops. */
+  | { readonly kind: "landed"; readonly x: number }
+  /** A MIRV split into its pieces at (x, y). */
+  | { readonly kind: "split"; readonly x: number; readonly y: number }
+  /** A Funky Bomb scattered its bomblets from (x, y). */
+  | { readonly kind: "scattered"; readonly x: number; readonly y: number }
+  /** A Roller touched Terrain at column `x` and began rolling. */
+  | { readonly kind: "rollStarted"; readonly x: number }
+  /** A rolling Roller stopped rolling (it exploded or rolled off the field). */
+  | { readonly kind: "rollEnded"; readonly x: number };
 
 /** The cues recorded since the last drain, oldest first. */
 export class CueBuffer {

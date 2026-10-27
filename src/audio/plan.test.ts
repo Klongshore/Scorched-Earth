@@ -53,6 +53,26 @@ describe("planSound", () => {
     expect(thud.sound).toBe("thud");
     expect(thud.gain).toBeLessThan(plan(exploded()).gain);
   });
+
+  it("gives each Weapon class its own launch sound", () => {
+    const kinds = ["blast", "mirv", "funky", "roller", "dirt"] as const;
+    const sounds = kinds.map(
+      (weaponKind) => plan({ kind: "fired", weapon: "Missile", weaponKind, x: 320 }).sound,
+    );
+    expect(new Set(sounds).size).toBe(kinds.length);
+  });
+
+  it("plans a sound for a MIRV split, a Funky Bomb scatter and a Roller starting to roll", () => {
+    expect(plan({ kind: "split", x: 100, y: 50 }).sound).toBe("split");
+    expect(plan({ kind: "scattered", x: 100, y: 50 }).sound).toBe("scatter");
+    expect(plan({ kind: "rollStarted", x: 100 }).sound).toBe("rollStart");
+  });
+
+  it("leaves the looping flight and roll sounds to the player", () => {
+    expect(planSound({ kind: "launched", x: 1 }, FIELD_WIDTH)).toBeNull();
+    expect(planSound({ kind: "landed", x: 1 }, FIELD_WIDTH)).toBeNull();
+    expect(planSound({ kind: "rollEnded", x: 1 }, FIELD_WIDTH)).toBeNull();
+  });
 });
 
 describe("planSound for consequences", () => {

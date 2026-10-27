@@ -1,7 +1,12 @@
 import { FIELD_WIDTH } from "../sim/constants";
 import type { Cue } from "../sim/cues";
 import { loadMuted, saveMuted } from "./mute";
-import { planSound, type SoundPlan } from "./plan";
+import { panAt, planSound, type SoundPlan } from "./plan";
+
+/** A sound that keeps going until stopped. */
+interface Loop {
+  stop(at: number): void;
+}
 
 /** Time constant for the rumble's level changes. */
 const RUMBLE_SMOOTHING = 0.06;
@@ -32,6 +37,10 @@ export class SoundPlayer {
   private rumble: { gain: GainNode; filter: BiquadFilterNode } | null = null;
   /** Context time the rumble last heard dirt move. */
   private rumbleHeardAt = 0;
+  /** Projectiles currently in the air, and Rollers currently rolling: each drives a loop. */
+  private flying = 0;
+  private rolling = 0;
+  private loops: { flight: Loop | null; roll: Loop | null } = { flight: null, roll: null };
 
   constructor(private readonly scope: object = globalThis) {}
 
@@ -83,9 +92,11 @@ export class SoundPlayer {
     } catch {
       // Silence, never a broken game.
     }
-    // The rumble runs through the master gain, so it is already silent while muted.
-    if (this.muted) return;
+    // The rumble and the loops run through the master gain, so they are silent while muted. Cues
+    // are still tracked, so the loops stop when their Projectiles do.
     for (const cue of cues) {
+      this.track(cue);
+      if (this.muted) continue;
       const plan = planSound(cue, FIELD_WIDTH);
       if (!plan) continue;
       try {
@@ -95,6 +106,79 @@ export class SoundPlayer {
         // A sound that cannot be made is silence, never a broken game.
       }
     }
+    try {
+      this.syncLoops(ctx, cues);
+    } catch {
+      // As above.
+    }
+  }
+
+  /** Keep count of what is in the air and what is rolling, so the loops know when to stop. */
+  private track(cue: Cue): void {
+    if (cue.kind === "launched") this.flying++;
+    else if (cue.kind === "landed") this.flying = Math.max(0, this.flying - 1);
+    else if (cue.kind === "rollStarted") this.rolling++;
+    else if (cue.kind === "rollEnded") this.rolling = Math.max(0, this.rolling - 1);
+  }
+
+  /** Start a loop when its first Projectile appears; fade it out when its last one is gone. */
+  private syncLoops(ctx: AudioContext, cues: readonly Cue[]): void {
+    const at = (kind: Cue["kind"]): number => {
+      const cue = cues.find((c) => c.kind === kind && "x" in c);
+      return cue && "x" in cue ? panAt(cue.x, FIELD_WIDTH) : 0;
+    };
+    for (const name of ["flight", "roll"] as const) {
+      const wanted = (name === "flight" ? this.flying : this.rolling) > 0;
+      const loop = this.loops[name];
+      if (wanted && !loop) {
+        this.loops[name] = this.startLoop(
+          ctx,
+          name,
+          at(name === "flight" ? "launched" : "rollStarted"),
+        );
+      } else if (!wanted && loop) {
+        loop.stop(ctx.currentTime);
+        this.loops[name] = null;
+      }
+    }
+  }
+
+  /** A whistle (a thin, slowly sliding tone with hiss) or a low rumble, until stopped. */
+  private startLoop(ctx: AudioContext, name: "flight" | "roll", pan: number): Loop {
+    const now = ctx.currentTime;
+    const out = ctx.createGain();
+    out.gain.setValueAtTime(0.0001, now);
+    out.gain.linearRampToValueAtTime(name === "flight" ? 0.22 : 0.35, now + 0.05);
+    const panner = ctx.createStereoPanner();
+    panner.pan.value = pan;
+    out.connect(panner).connect(this.master ?? ctx.destination);
+    const sources: AudioScheduledSourceNode[] = [];
+    const hiss = ctx.createBufferSource();
+    hiss.buffer = this.noise;
+    hiss.loop = true;
+    const filter = ctx.createBiquadFilter();
+    filter.type = name === "flight" ? "bandpass" : "lowpass";
+    filter.frequency.value = name === "flight" ? 3200 : 220;
+    hiss.connect(filter).connect(out);
+    hiss.start(now);
+    sources.push(hiss);
+    const osc = ctx.createOscillator();
+    osc.type = name === "flight" ? "sine" : "sawtooth";
+    osc.frequency.setValueAtTime(name === "flight" ? 1400 : 55, now);
+    if (name === "flight") osc.frequency.linearRampToValueAtTime(700, now + 6);
+    const level = ctx.createGain();
+    level.gain.value = name === "flight" ? 0.5 : 0.4;
+    osc.connect(level).connect(out);
+    osc.start(now);
+    sources.push(osc);
+    return {
+      stop: (at: number) => {
+        out.gain.cancelScheduledValues(at);
+        out.gain.setValueAtTime(Math.max(0.0001, out.gain.value), at);
+        out.gain.linearRampToValueAtTime(0.0001, at + 0.06);
+        for (const s of sources) s.stop(at + 0.08);
+      },
+    };
   }
 
   private synthesize(ctx: AudioContext, plan: SoundPlan): void {
@@ -149,6 +233,35 @@ export class SoundPlayer {
         // A falling crackle: the Shield is gone.
         this.sweep(ctx, out, now, 0.5, 1200, 90, "sawtooth", 0.6);
         this.burst(ctx, out, now, 0.4, 4000, 0.8);
+        break;
+      case "launchMirv":
+        this.sweep(ctx, out, now, 0.22, 500, 1100, "square", 0.35);
+        this.burst(ctx, out, now, 0.1, 3000, 0.4);
+        break;
+      case "launchFunky":
+        this.sweep(ctx, out, now, 0.25, 300, 900, "triangle", 0.6);
+        this.sweep(ctx, out, now + 0.08, 0.2, 900, 300, "triangle", 0.5);
+        break;
+      case "launchRoller":
+        this.sweep(ctx, out, now, 0.3, 160, 70, "sawtooth", 0.5);
+        this.burst(ctx, out, now, 0.25, 500, 0.6);
+        break;
+      case "launchDirt":
+        this.sweep(ctx, out, now, 0.2, 260, 90, "sine", 0.9);
+        this.burst(ctx, out, now, 0.15, 400, 0.4);
+        break;
+      case "split":
+        for (let i = 0; i < 3; i++)
+          this.sweep(ctx, out, now + i * 0.04, 0.12, 1800 - i * 400, 600, "square", 0.25);
+        this.burst(ctx, out, now, 0.1, 4000, 0.35);
+        break;
+      case "scatter":
+        for (let i = 0; i < 5; i++)
+          this.sweep(ctx, out, now + i * 0.05, 0.1, 500 + i * 250, 250, "triangle", 0.35);
+        break;
+      case "rollStart":
+        this.burst(ctx, out, now, 0.2, 600, 0.7);
+        this.sweep(ctx, out, now, 0.2, 120, 60, "sine", 0.8);
         break;
       case "thud":
         this.sweep(ctx, out, now, 0.25 + plan.size * 0.2, 110, 40, "sine", 1);

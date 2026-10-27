@@ -1907,7 +1907,7 @@ describe("Round cues", () => {
     const round = newRound();
     expect(round.drainCues()).toEqual([]);
     round.act({ kind: "fire" });
-    expect(round.drainCues()).toHaveLength(1);
+    expect(round.drainCues()).toHaveLength(2);
     expect(round.drainCues()).toEqual([]);
   });
 
@@ -2164,5 +2164,72 @@ describe("Round Shield cues", () => {
     fireStraightUp(round, firer);
     runUntil(round, turnOver);
     expect(round.drainCues().map((c) => c.kind)).not.toContain("shieldHit");
+  });
+});
+
+describe("Round flight cues", () => {
+  const turnOver = (r: Round): boolean => r.phase.kind === "aiming" || r.phase.kind === "over";
+
+  /** Fire `weapon` at the given Angle and Power, run the Turn out, and return every cue. */
+  function cuesFor(weapon: WeaponName, angle: number, power: number): Cue[] {
+    const { round, firer } = scenario(100, 600);
+    round.inventoryOf(round.currentPlayerId).add(weapon, 1);
+    while (round.currentWeapon().name !== weapon) round.act({ kind: "cycleWeapon", delta: 1 });
+    firer.angle = angle;
+    firer.power = power;
+    round.act({ kind: "fire" });
+    runUntil(round, turnOver);
+    return round.drainCues();
+  }
+
+  const count = (cues: Cue[], kind: Cue["kind"]): number =>
+    cues.filter((c) => c.kind === kind).length;
+
+  it("marks a Projectile launched, then landed before its Explosion", () => {
+    const cues = cuesFor("Missile", 60, 400);
+    const kinds = cues.map((c) => c.kind);
+    expect(count(cues, "launched")).toBe(1);
+    expect(count(cues, "landed")).toBe(1);
+    expect(kinds.indexOf("fired")).toBeLessThan(kinds.indexOf("landed"));
+    expect(kinds.indexOf("landed")).toBeLessThan(kinds.indexOf("exploded"));
+  });
+
+  it("marks a Projectile that leaves the field as landed, with no Explosion", () => {
+    const cues = cuesFor("Missile", 150, 1000);
+    expect(count(cues, "launched")).toBe(1);
+    expect(count(cues, "landed")).toBe(1);
+    expect(count(cues, "exploded")).toBe(0);
+  });
+
+  it("marks a MIRV splitting, with every flight launched and landed once", () => {
+    const cues = cuesFor("MIRV", 60, 400);
+    expect(count(cues, "split")).toBe(1);
+    expect(count(cues, "launched")).toBe(6); // the MIRV and its 5 pieces
+    expect(count(cues, "landed")).toBe(6);
+    const kinds = cues.map((c) => c.kind);
+    expect(kinds.indexOf("split")).toBeLessThan(kinds.indexOf("exploded"));
+  });
+
+  it("marks a Funky Bomb scattering its bomblets", () => {
+    const cues = cuesFor("Funky Bomb", 60, 400);
+    expect(count(cues, "scattered")).toBe(1);
+    expect(count(cues, "launched")).toBeGreaterThanOrEqual(1 + 6);
+    expect(count(cues, "landed")).toBe(count(cues, "launched"));
+  });
+
+  it("marks a Roller starting to roll once it has landed, and the end of its roll", () => {
+    const cues = cuesFor("Roller", 60, 400);
+    const kinds = cues.map((c) => c.kind);
+    expect(count(cues, "rollStarted")).toBe(1);
+    expect(count(cues, "rollEnded")).toBe(1);
+    expect(kinds.indexOf("landed")).toBeLessThan(kinds.indexOf("rollStarted"));
+    expect(kinds.indexOf("rollStarted")).toBeLessThan(kinds.indexOf("rollEnded"));
+  });
+
+  it("marks no split, scatter or roll for a blast Weapon", () => {
+    const cues = cuesFor("Missile", 60, 400);
+    expect(count(cues, "rollStarted")).toBe(0);
+    expect(count(cues, "split")).toBe(0);
+    expect(count(cues, "scattered")).toBe(0);
   });
 });

@@ -302,6 +302,7 @@ export class Round {
       weaponKind: weapon.kind,
       x: this.currentTank().x,
     });
+    this.cues.record({ kind: "launched", x: projectile.x });
     this.barrelProjectile = projectile;
     this.phase = { kind: "resolving", projectiles: [projectile], explosions: [] };
     this.sayPendingTaunt(); // a Human's Taunt; a Computer Player's was shown as it began thinking
@@ -330,27 +331,38 @@ export class Round {
         // A rolling Roller already had its landing recorded where it first touched down.
         const roll = stepRolling(p, this.terrain, this.tanks, dt);
         if (roll.kind === "rolling") projectiles.push(p);
-        else if (roll.kind === "explode") explosions.push(this.explode(p, roll.x, roll.y));
+        else {
+          this.cues.record({ kind: "rollEnded", x: p.x });
+          if (roll.kind === "explode") explosions.push(this.explode(p, roll.x, roll.y));
+        }
         continue;
       }
       const outcome = stepProjectile(p, this.wind, this.terrain, this.tanks, dt);
       if (outcome.kind === "flying") {
-        if (p.weapon.kind === "mirv" && p.vy >= 0) projectiles.push(...this.splitMirv(p));
-        else projectiles.push(p);
+        if (p.weapon.kind === "mirv" && p.vy >= 0) {
+          this.cues.record({ kind: "landed", x: p.x }); // the MIRV's own flight ends here
+          this.cues.record({ kind: "split", x: p.x, y: p.y });
+          projectiles.push(...this.splitMirv(p));
+        } else projectiles.push(p);
       } else if (outcome.kind === "lost") {
+        this.cues.record({ kind: "landed", x: p.x });
         this.landed(p, { kind: "lost", side: outcome.side });
       } else {
+        this.cues.record({ kind: "landed", x: outcome.x });
         this.landed(p, { kind: "hit", x: outcome.x });
         const onTank = this.tanks.some((t) => hitTest(t, outcome.x, outcome.y));
         if (p.weapon.kind === "roller" && !onTank) {
           startRolling(p, outcome.x, outcome.y, this.terrain);
+          this.cues.record({ kind: "rollStarted", x: p.x });
           projectiles.push(p);
         } else {
           // A MIRV that lands before it splits explodes as one of its pieces.
           const weapon = p.weapon.kind === "mirv" ? weaponNamed(MIRV_PIECE_WEAPON) : p.weapon;
           explosions.push(this.explode(p, outcome.x, outcome.y, weapon));
-          if (weapon.kind === "funky")
+          if (weapon.kind === "funky") {
+            this.cues.record({ kind: "scattered", x: outcome.x, y: outcome.y });
             projectiles.push(...this.funkyBomblets(p, outcome.x, outcome.y));
+          }
         }
       }
     }
@@ -370,6 +382,7 @@ export class Round {
     }));
     // The MIRV itself never lands, so the firer remembers its middle piece instead.
     if (this.barrelProjectile === mirv) this.barrelProjectile = pieces[Math.floor(middle)] ?? null;
+    for (const piece of pieces) this.cues.record({ kind: "launched", x: piece.x });
     return pieces;
   }
 
@@ -378,6 +391,7 @@ export class Round {
     const weapon = weaponNamed(FUNKY_BOMBLET_WEAPON);
     const count = this.rng.int(FUNKY_MIN_BOMBLETS, FUNKY_MAX_BOMBLETS);
     return Array.from({ length: count }, () => {
+      this.cues.record({ kind: "launched", x });
       const radians = (this.rng.range(FUNKY_MIN_ANGLE, FUNKY_MAX_ANGLE) * Math.PI) / 180;
       const speed = this.rng.range(FUNKY_MIN_SPEED, FUNKY_MAX_SPEED);
       return {
