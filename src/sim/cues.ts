@@ -34,7 +34,13 @@ export type Cue =
   /** The Round ended with one Tank standing. */
   | { readonly kind: "roundWon" }
   /** The Round ended with no Tank standing. */
-  | { readonly kind: "roundDraw" };
+  | { readonly kind: "roundDraw" }
+  /** Settling moved `amount` cells of dirt this tick. Recorded only while dirt moves, never at rest. */
+  | { readonly kind: "dirtMoving"; readonly amount: number }
+  /** A Tank at column `x` landed after a fall, taking `fallDamage` (0 under a Parachute). */
+  | { readonly kind: "tankLanded"; readonly x: number; readonly fallDamage: number }
+  /** A Tank's Parachute opened at column `x`. */
+  | { readonly kind: "parachuteOpened"; readonly x: number };
 
 /** The cues recorded since the last drain, oldest first. */
 export class CueBuffer {

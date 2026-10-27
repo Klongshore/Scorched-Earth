@@ -76,3 +76,28 @@ describe("planSound for consequences", () => {
     expect(plan({ kind: "roundDraw" }).sound).toBe("roundDraw");
   });
 });
+
+describe("planSound for Settling", () => {
+  it("plans a centred rumble that gets louder the more dirt moves", () => {
+    const small = plan({ kind: "dirtMoving", amount: 20 });
+    const big = plan({ kind: "dirtMoving", amount: 300 });
+    expect(small.sound).toBe("rumble");
+    expect(small.pan).toBe(0);
+    expect(big.gain).toBeGreaterThan(small.gain);
+    expect(plan({ kind: "dirtMoving", amount: 1e6 }).gain).toBeLessThanOrEqual(1);
+  });
+
+  it("plans a louder landing for more Fall Damage, panned to the Tank", () => {
+    const soft = plan({ kind: "tankLanded", x: 80, fallDamage: 0 });
+    const hard = plan({ kind: "tankLanded", x: 80, fallDamage: 40 });
+    expect(soft.sound).toBe("landing");
+    expect(hard.gain).toBeGreaterThan(soft.gain);
+    expect(hard.pan).toBeLessThan(0);
+  });
+
+  it("plans the Parachute sound at the Tank", () => {
+    const opened = plan({ kind: "parachuteOpened", x: 560 });
+    expect(opened.sound).toBe("parachute");
+    expect(opened.pan).toBeGreaterThan(0);
+  });
+});
