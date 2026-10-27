@@ -54,3 +54,25 @@ describe("planSound", () => {
     expect(thud.gain).toBeLessThan(plan(exploded()).gain);
   });
 });
+
+describe("planSound for consequences", () => {
+  it("plans a hit sound at the Tank's position", () => {
+    const result = plan({ kind: "tankHit", x: 0, y: 100 });
+    expect(result.sound).toBe("hit");
+    expect(result.pan).toBe(-1);
+  });
+
+  it("maps each Death Animation kind to its own sound", () => {
+    const kinds = ["fireball", "sparkShower", "disintegration", "popAndSmoke"] as const;
+    const sounds = kinds.map(
+      (animation) => plan({ kind: "tankDestroyed", animation, x: 320, y: 100 }).sound,
+    );
+    expect(new Set(sounds).size).toBe(4);
+    expect(sounds).not.toContain("hit");
+  });
+
+  it("plans different stings for a win and a Draw", () => {
+    expect(plan({ kind: "roundWon" }).sound).toBe("roundWin");
+    expect(plan({ kind: "roundDraw" }).sound).toBe("roundDraw");
+  });
+});

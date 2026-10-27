@@ -1983,3 +1983,66 @@ describe("Round cues", () => {
     expect(drained.phase.kind).toBe(silent.phase.kind);
   });
 });
+
+describe("Round consequence cues", () => {
+  const turnOver = (r: Round): boolean => r.phase.kind === "aiming" || r.phase.kind === "over";
+
+  it("records a hit, and no destruction, for a Tank that loses Health and survives", () => {
+    const { round, firer, other } = scenario(300, 312);
+    other.health = 100;
+    fireStraightUp(round, firer);
+    runUntil(round, turnOver);
+    expect(other.health).toBeGreaterThan(0);
+    expect(other.health).toBeLessThan(100);
+    const cues = round.drainCues();
+    expect(cues).toContainEqual({ kind: "tankHit", x: other.x, y: other.y });
+    expect(cues.some((c) => c.kind === "tankDestroyed")).toBe(false);
+  });
+
+  it("records a destruction with the Death Animation's kind and position for a kill", () => {
+    const { round, firer, other } = scenario(300, 312);
+    other.health = 1;
+    fireStraightUp(round, firer);
+    runUntil(round, (r) => r.phase.kind === "dying");
+    const { phase } = round;
+    if (phase.kind !== "dying") return expect.fail("not dying");
+    const [animation] = phase.animations.filter((a) => a.playerId === other.playerId);
+    const cues = round.drainCues();
+    expect(cues).toContainEqual({
+      kind: "tankDestroyed",
+      animation: animation?.kind,
+      x: other.x,
+      y: other.y,
+    });
+    expect(cues.some((c) => c.kind === "tankHit" && c.x === other.x)).toBe(false);
+  });
+
+  it("records a Round Win when one Tank is left, and no Draw", () => {
+    const { round, firer, other } = scenario(300, 312);
+    other.health = 1;
+    fireStraightUp(round, firer);
+    runUntil(round, (r) => r.phase.kind === "over");
+    const cues = round.drainCues();
+    expect(cues.filter((c) => c.kind === "roundWon")).toHaveLength(1);
+    expect(cues.some((c) => c.kind === "roundDraw")).toBe(false);
+  });
+
+  it("records a Draw when no Tank survives", () => {
+    const round = new Round(1, createPlayers([HUMAN, HUMAN]), new Rng(1));
+    for (const t of round.tanks) t.health = 0;
+    round.phase = { kind: "settling" };
+    runUntil(round, (r) => r.phase.kind === "over");
+    const cues = round.drainCues();
+    expect(cues.filter((c) => c.kind === "tankDestroyed")).toHaveLength(2);
+    expect(cues.filter((c) => c.kind === "roundDraw")).toHaveLength(1);
+    expect(cues.some((c) => c.kind === "roundWon")).toBe(false);
+  });
+
+  it("records no Round end cue while the Round goes on", () => {
+    const { round, firer } = scenario(100, 500);
+    fireStraightUp(round, firer);
+    runUntil(round, turnOver);
+    const cues = round.drainCues();
+    expect(cues.some((c) => c.kind === "roundWon" || c.kind === "roundDraw")).toBe(false);
+  });
+});
