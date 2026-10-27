@@ -4,7 +4,7 @@ import type { Cue } from "../sim/cues";
  * Which Sound Effect to play. Later cues add more names. Each name is synthesized by the audio
  * module; this module only decides which, how loud and where.
  */
-export type SoundName = "launch" | "blast" | "thud";
+export type SoundName = "launch" | "blast" | "thud" | "shieldUp" | "shieldHit" | "shieldBreak";
 
 export interface SoundPlan {
   readonly sound: SoundName;
@@ -21,6 +21,7 @@ const BIGGEST_RADIUS = 75;
 const LAUNCH_GAIN = 0.35;
 const MIN_GAIN = 0.25;
 const MAX_GAIN = 1;
+const SHIELD_GAIN = 0.5;
 const THUD_GAIN_SCALE = 0.7;
 
 /** Pan from a column: the left edge is -1, the right edge is 1. */
@@ -45,5 +46,11 @@ export function planSound(cue: Cue, fieldWidth: number): SoundPlan | null {
         size,
       };
     }
+    case "shieldRaised":
+      return { sound: "shieldUp", gain: SHIELD_GAIN, pan: panAt(cue.x, fieldWidth), size: 0 };
+    case "shieldHit":
+      return { sound: "shieldHit", gain: SHIELD_GAIN, pan: panAt(cue.x, fieldWidth), size: 0 };
+    case "shieldBroken":
+      return { sound: "shieldBreak", gain: SHIELD_GAIN, pan: panAt(cue.x, fieldWidth), size: 0 };
   }
 }

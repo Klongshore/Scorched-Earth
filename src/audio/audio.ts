@@ -77,6 +77,21 @@ export class SoundPlayer {
         this.sweep(ctx, out, now, length, 140 - plan.size * 90, 28, "sine", 0.9);
         break;
       }
+      case "shieldUp":
+        // A rising hum.
+        this.sweep(ctx, out, now, 0.35, 300, 900, "sine", 0.7);
+        this.sweep(ctx, out, now, 0.35, 450, 1350, "triangle", 0.3);
+        break;
+      case "shieldHit":
+        // A short bright ping: the hit was soaked.
+        this.sweep(ctx, out, now, 0.12, 1500, 1100, "square", 0.35);
+        this.burst(ctx, out, now, 0.06, 5000, 0.4);
+        break;
+      case "shieldBreak":
+        // A falling crackle: the Shield is gone.
+        this.sweep(ctx, out, now, 0.5, 1200, 90, "sawtooth", 0.6);
+        this.burst(ctx, out, now, 0.4, 4000, 0.8);
+        break;
       case "thud":
         this.sweep(ctx, out, now, 0.25 + plan.size * 0.2, 110, 40, "sine", 1);
         this.burst(ctx, out, now, 0.12, 300, 0.35);

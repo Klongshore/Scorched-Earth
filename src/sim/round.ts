@@ -151,7 +151,7 @@ export class Round {
     }
     this.currentIndex = 0;
     // Every owner's strongest Shield goes up before the first Turn, in Player order.
-    for (const p of players) raiseShield(this.tankOf(p.id), this.inventoryOf(p.id));
+    for (const p of players) this.raise(this.tankOf(p.id), p.id);
     this.beginTurn();
   }
 
@@ -187,7 +187,7 @@ export class Round {
         break;
       case "raiseShield":
         // Stays aiming: the Turn goes on with the same Player.
-        raiseShield(tank, this.inventoryOf(this.currentPlayerId));
+        this.raise(tank, this.currentPlayerId);
         break;
       case "fire":
         this.fire();
@@ -386,6 +386,24 @@ export class Round {
     });
   }
 
+  /** Raise a Player's strongest Shield, recording a cue when one actually goes up. */
+  private raise(tank: Tank, playerId: number): void {
+    if (raiseShield(tank, this.inventoryOf(playerId))) {
+      this.cues.record({ kind: "shieldRaised", x: tank.x });
+    }
+  }
+
+  /** Cue each Shield an Explosion drained: broken if it ran out, hit if it still stands. */
+  private recordShieldCues(before: readonly (number | null)[]): void {
+    this.tanks.forEach((t, i) => {
+      const was = before[i];
+      if (was === null || was === undefined) return;
+      const now = t.shield?.strength ?? 0;
+      if (now >= was) return;
+      this.cues.record({ kind: now > 0 ? "shieldHit" : "shieldBroken", x: t.x, y: t.y });
+    });
+  }
+
   /** A Projectile has landed or been lost; the firer remembers it only if it came from the barrel. */
   private landed(p: Projectile, landing: Landing): void {
     if (p !== this.barrelProjectile) return;
@@ -395,7 +413,9 @@ export class Round {
 
   /** Detonate a Weapon (the Projectile's own by default) at (x, y), crediting its firer's earnings. */
   private explode(p: Projectile, x: number, y: number, weapon: Weapon = p.weapon): Explosion {
+    const shieldsBefore = this.tanks.map((t) => t.shield?.strength ?? null);
     const explosion = detonate(x, y, weapon, this.terrain, this.tanks);
+    this.recordShieldCues(shieldsBefore);
     this.cues.record({
       kind: "exploded",
       explosion: explosion.kind,
@@ -507,7 +527,7 @@ export class Round {
       const tank = this.currentTank();
       if (!player.personality) throw new Error(`Computer player ${player.id} has no Personality`);
       // Only once its Shield is gone, never replacing a damaged one. Draws nothing from rng.
-      if (!tank.shield) raiseShield(tank, this.inventoryOf(player.id));
+      if (!tank.shield) this.raise(tank, player.id);
       const memory = this.requireMemory(player.id);
       const personality = memory.resolved ?? player.personality;
       if (personality === "unknown") throw new Error(`Player ${player.id} never resolved`);

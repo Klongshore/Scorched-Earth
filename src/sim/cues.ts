@@ -21,7 +21,13 @@ export type Cue =
       readonly x: number;
       readonly y: number;
       readonly radius: number;
-    };
+    }
+  /** A Shield went up around the Tank at column `x`. */
+  | { readonly kind: "shieldRaised"; readonly x: number }
+  /** A Shield absorbed Explosion damage and still stands, around the Tank at (x, y). */
+  | { readonly kind: "shieldHit"; readonly x: number; readonly y: number }
+  /** A Shield's Shield Strength ran out, leaving the Tank at (x, y) exposed. */
+  | { readonly kind: "shieldBroken"; readonly x: number; readonly y: number };
 
 /** The cues recorded since the last drain, oldest first. */
 export class CueBuffer {
