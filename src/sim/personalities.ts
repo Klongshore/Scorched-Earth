@@ -1,18 +1,23 @@
 import { powerToHit } from "./aiming";
 import {
   BABY_MISSILE,
+  CHOOSER_ANGLE_ERROR,
   CHOOSER_POWER_ERROR,
+  CYBORG_ANGLE_ERROR,
   CYBORG_POWER_ERROR,
+  SPOILER_ANGLE_ERROR,
   SPOILER_POWER_ERROR,
   GRAVITY,
   MAX_ANGLE,
   MIN_ANGLE,
   MIN_POWER,
   POWER_TO_SPEED,
+  SHOOTER_ANGLE_ERROR,
   SHOOTER_MAX_ANGLE,
   SHOOTER_MIN_ANGLE,
   SHOOTER_POWER_ERROR,
   TOSSER_ANGLE,
+  TOSSER_FIRST_ANGLE_ERROR,
   TOSSER_FIRST_POWER_ERROR,
   TOSSER_LOST_FACTOR,
   TOSSER_MAX_FACTOR,
@@ -190,20 +195,20 @@ const RULES: Record<TargetingPersonality, PersonalityRules> = {
     reachable: (self, target, wind) => windFeasibleAims(self, target, wind).length > 0,
     selectTarget: (_self, candidates) => weakestTarget(candidates),
     aim: (self, target, _memory, rng, wind) =>
-      windAim(self, target, wind, rng, CHOOSER_POWER_ERROR),
+      windAim(self, target, wind, rng, CHOOSER_POWER_ERROR, CHOOSER_ANGLE_ERROR),
   },
   spoiler: {
     keepsTarget: false,
     reachable: (self, target, wind) => windFeasibleAims(self, target, wind).length > 0,
     selectTarget: (_self, candidates) => weakestTarget(candidates),
     aim: (self, target, _memory, rng, wind) =>
-      windAim(self, target, wind, rng, SPOILER_POWER_ERROR),
+      windAim(self, target, wind, rng, SPOILER_POWER_ERROR, SPOILER_ANGLE_ERROR),
   },
   cyborg: {
     keepsTarget: false,
     reachable: (self, target, wind) => windFeasibleAims(self, target, wind).length > 0,
     selectTarget: weakestHumanTarget,
-    aim: (self, target, _memory, rng, wind) => windAim(self, target, wind, rng, CYBORG_POWER_ERROR),
+    aim: (self, target, _memory, rng, wind) => windAim(self, target, wind, rng, CYBORG_POWER_ERROR, CYBORG_ANGLE_ERROR),
   },
 };
 
@@ -336,16 +341,21 @@ function towards(self: Tank, target: Tank, base: number): number {
   return target.x >= self.x ? base : 180 - base;
 }
 
-/** `aim`'s Angle, with its Power off by a random factor of up to ±`error`, within the cap. */
-function withPowerError(self: Tank, aim: Aim, error: number, rng: Rng): Aim {
+/**
+ * `aim` with its Power off by a random factor of up to ±`error`, within the cap, and its
+ * Angle off by up to ±`angleError` whole degrees. The Power was solved for the exact Angle,
+ * so an Angle error makes the shot miss.
+ */
+function withAimError(self: Tank, aim: Aim, error: number, angleError: number, rng: Rng): Aim {
   const power = Math.round(aim.power * (1 + rng.range(-error, error)));
-  return { angle: aim.angle, power: capped(self, power) };
+  const angle = aim.angle + rng.int(-angleError, angleError);
+  return { angle, power: capped(self, power) };
 }
 
 /**
  * The Shooter's aim at `target`: a random Angle among those in its band toward the Target
  * that can hit it within the Power cap, and the Power to hit it ignoring Wind and Terrain,
- * plus up to ±powerError. Throws if no such Angle exists: chooseTarget only picks Targets in
+ * plus up to ±powerError and ±angleError degrees. Throws if no such Angle exists: chooseTarget only picks Targets in
  * reach.
  */
 export function shooterAim(
@@ -353,10 +363,11 @@ export function shooterAim(
   target: Tank,
   rng: Rng,
   powerError: number = SHOOTER_POWER_ERROR,
+  angleError: number = SHOOTER_ANGLE_ERROR,
 ): Aim {
   const aims = feasibleAims(self, target, "shooter");
   if (aims.length === 0) throw new Error(`Player ${target.playerId} is out of reach`);
-  return withPowerError(self, aims[rng.int(0, aims.length - 1)] as Aim, powerError, rng);
+  return withAimError(self, aims[rng.int(0, aims.length - 1)] as Aim, powerError, angleError, rng);
 }
 
 /**
@@ -401,14 +412,21 @@ function windFeasibleAims(self: Tank, target: Tank, wind: number): Aim[] {
 /**
  * An aim at `target` that allows for `wind`: a random Angle among the Shooter's band toward
  * it that can hit it through the Wind within the Power cap, and the Power to do so ignoring
- * Terrain, plus up to ±powerError. Pass the Personality's error constant, so Spoiler and
+ * Terrain, plus up to ±powerError and ±angleError degrees. Pass the Personality's error constants, so Spoiler and
  * Cyborg can reuse this with theirs. Throws if no such Angle exists: chooseTarget only picks
  * Targets in reach.
  */
-export function windAim(self: Tank, target: Tank, wind: number, rng: Rng, powerError: number): Aim {
+export function windAim(
+  self: Tank,
+  target: Tank,
+  wind: number,
+  rng: Rng,
+  powerError: number,
+  angleError: number = 0,
+): Aim {
   const aims = windFeasibleAims(self, target, wind);
   if (aims.length === 0) throw new Error(`Player ${target.playerId} is out of reach`);
-  return withPowerError(self, aims[rng.int(0, aims.length - 1)] as Aim, powerError, rng);
+  return withAimError(self, aims[rng.int(0, aims.length - 1)] as Aim, powerError, angleError, rng);
 }
 
 /**
@@ -423,7 +441,7 @@ function tosserAim(self: Tank, target: Tank, memory: ComputerMemory, rng: Rng): 
   if (!lastAim || !lastLanding || powerWithinCap(self, target, lastAim.angle) === null) {
     const [first] = feasibleAims(self, target, "tosser");
     if (!first) throw new Error(`Player ${target.playerId} is out of reach`);
-    return withPowerError(self, first, TOSSER_FIRST_POWER_ERROR, rng);
+    return withAimError(self, first, TOSSER_FIRST_POWER_ERROR, TOSSER_FIRST_ANGLE_ERROR, rng);
   }
   const factor = Math.min(
     TOSSER_MAX_FACTOR,

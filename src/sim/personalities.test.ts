@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   BABY_MISSILE,
   CHOOSER_POWER_ERROR,
+  SPOILER_ANGLE_ERROR,
   SPOILER_POWER_ERROR,
   COMPUTER_THINK_SECONDS,
   COMPUTER_THINK_TICKS,
@@ -12,10 +13,12 @@ import {
   MIN_ANGLE,
   SHOOTER_MAX_ANGLE,
   SHOOTER_MIN_ANGLE,
+  SHOOTER_ANGLE_ERROR,
   SHOOTER_POWER_ERROR,
   TANK_HALF_WIDTH,
   TICK_SECONDS,
   TOSSER_ANGLE,
+  TOSSER_FIRST_ANGLE_ERROR,
   TOSSER_FIRST_POWER_ERROR,
   TOSSER_LOST_FACTOR,
   TOSSER_MAX_FACTOR,
@@ -398,8 +401,8 @@ describe("Shooter Personality", () => {
       expect(Number.isInteger(aim.angle)).toBe(true);
       expect(Number.isInteger(aim.power)).toBe(true);
       const band = target.x >= self.x ? aim.angle : 180 - aim.angle;
-      expect(band).toBeGreaterThanOrEqual(SHOOTER_MIN_ANGLE);
-      expect(band).toBeLessThanOrEqual(SHOOTER_MAX_ANGLE);
+      expect(band).toBeGreaterThanOrEqual(SHOOTER_MIN_ANGLE - SHOOTER_ANGLE_ERROR);
+      expect(band).toBeLessThanOrEqual(SHOOTER_MAX_ANGLE + SHOOTER_ANGLE_ERROR);
       if (target.x !== self.x) expect(aim.angle < 90).toBe(target.x > self.x);
       expect(aim.power).toBeGreaterThanOrEqual(0);
       expect(aim.power).toBeLessThanOrEqual(powerCap(self));
@@ -426,7 +429,7 @@ describe("Shooter Personality", () => {
         const self = tankAt(0, fromX);
         const target = tankAt(1, toX);
         for (let i = 0; i < 5; i++) {
-          const hit = landing(self, target, shooterAim(self, target, rng, 0));
+          const hit = landing(self, target, shooterAim(self, target, rng, 0, 0));
           const c = centre(target);
           expect(Math.hypot(hit.x - c.x, hit.y - c.y)).toBeLessThanOrEqual(BABY_MISSILE.radius);
         }
@@ -439,9 +442,9 @@ describe("Shooter Personality", () => {
     const target = tankAt(1, 450);
     for (let seed = 0; seed < 200; seed++) {
       // The same seed picks the same Angle, so the only difference is the error.
-      const ideal = shooterAim(self, target, new Rng(seed), 0);
+      const ideal = shooterAim(self, target, new Rng(seed), 0, 0);
       const aim = shooterAim(self, target, new Rng(seed));
-      expect(aim.angle).toBe(ideal.angle);
+      expect(Math.abs(aim.angle - ideal.angle)).toBeLessThanOrEqual(SHOOTER_ANGLE_ERROR);
       expect(Math.abs(aim.power - ideal.power)).toBeLessThanOrEqual(
         Math.ceil(ideal.power * SHOOTER_POWER_ERROR),
       );
@@ -455,7 +458,7 @@ describe("Shooter Personality", () => {
       const self = tankAt(0, rng.int(20, FIELD_WIDTH - 20), rng.int(1, MAX_HEALTH));
       const target = tankAt(1, rng.int(20, FIELD_WIDTH - 20));
       if (!isReachable(self, target, "shooter")) continue;
-      const aim = shooterAim(self, target, rng, 0);
+      const aim = shooterAim(self, target, rng, 0, 0);
       expect(feasible(self, target, aim.angle)).toBe(true);
       expect(aim.power).toBe(powerToHit(self, target, aim.angle));
       checked++;
@@ -473,7 +476,7 @@ describe("Shooter Personality", () => {
       const self = tankAt(0, selfX, rng.int(1, MAX_HEALTH));
       const target = tankAt(1, targetX);
       if (!isReachable(self, target, "shooter")) continue;
-      const hit = landing(self, target, shooterAim(self, target, rng, 0));
+      const hit = landing(self, target, shooterAim(self, target, rng, 0, 0));
       const c = centre(target);
       expect(Math.hypot(hit.x - c.x, hit.y - c.y)).toBeLessThanOrEqual(BABY_MISSILE.radius);
       checked++;
@@ -484,7 +487,7 @@ describe("Shooter Personality", () => {
     const self = tankAt(0, 30, 66);
     const target = tankAt(1, 600);
     for (let i = 0; i < 50; i++) {
-      const hit = landing(self, target, shooterAim(self, target, rng, 0));
+      const hit = landing(self, target, shooterAim(self, target, rng, 0, 0));
       const c = centre(target);
       expect(Math.hypot(hit.x - c.x, hit.y - c.y)).toBeLessThanOrEqual(BABY_MISSILE.radius);
     }
@@ -499,7 +502,7 @@ describe("Shooter Personality", () => {
     expect(usable.length).toBeLessThan(SHOOTER_MAX_ANGLE - SHOOTER_MIN_ANGLE + 1);
     const rng = new Rng(6);
     const picked = new Set<number>();
-    for (let i = 0; i < 500; i++) picked.add(shooterAim(self, target, rng, 0).angle);
+    for (let i = 0; i < 500; i++) picked.add(shooterAim(self, target, rng, 0, 0).angle);
     expect([...picked].sort((a, b) => a - b)).toEqual(usable);
   });
 
@@ -552,7 +555,7 @@ describe("Tosser Personality", () => {
       const angle = targetX > selfX ? TOSSER_ANGLE : 180 - TOSSER_ANGLE;
       if (!feasible(self, target, angle)) continue; // covered by the next test
       const aim = chooseAim("tosser", self, tanks, memory, rng);
-      expect(aim.angle).toBe(angle);
+      expect(Math.abs(aim.angle - angle)).toBeLessThanOrEqual(TOSSER_FIRST_ANGLE_ERROR);
       expect(Number.isInteger(aim.power)).toBe(true);
       const ideal = powerToHit(self, target, angle) as number;
       expect(aim.power).toBeGreaterThanOrEqual(
@@ -575,7 +578,7 @@ describe("Tosser Personality", () => {
       .filter((a) => feasible(self, target, a))
       .sort((a, b) => Math.abs(a - TOSSER_ANGLE) - Math.abs(b - TOSSER_ANGLE))[0] as number;
     const aim = chooseAim("tosser", self, tanks, memory, new Rng(3));
-    expect(aim.angle).toBe(nearest);
+    expect(Math.abs(aim.angle - nearest)).toBeLessThanOrEqual(TOSSER_FIRST_ANGLE_ERROR);
     const ideal = powerToHit(self, target, nearest) as number;
     expect(Math.abs(aim.power - ideal)).toBeLessThanOrEqual(
       Math.ceil(ideal * TOSSER_FIRST_POWER_ERROR),
@@ -590,7 +593,7 @@ describe("Tosser Personality", () => {
     memory.lastAim = { angle: SHOOTER_MIN_ANGLE, power: powerCap(self) };
     memory.lastLanding = { kind: "hit", x: 400 };
     const aim = chooseAim("tosser", self, tanks, memory, new Rng(5));
-    expect(aim.angle).toBe(TOSSER_ANGLE);
+    expect(Math.abs(aim.angle - TOSSER_ANGLE)).toBeLessThanOrEqual(TOSSER_FIRST_ANGLE_ERROR);
     expect(memory.lastAim).toEqual(aim);
     expect(memory.targetId).toBe(1);
   });
@@ -1027,7 +1030,7 @@ describe("Spoiler Personality", () => {
     for (let i = 0; i < 200; i++) {
       const ideal = windAim(self, target, 10, new Rng(i), 0);
       const aim = chooseAim("spoiler", self, tanks, newComputerMemory(), new Rng(i), 10);
-      expect(aim.angle).toBe(ideal.angle);
+      expect(Math.abs(aim.angle - ideal.angle)).toBeLessThanOrEqual(SPOILER_ANGLE_ERROR);
       expect(Math.abs(aim.power - ideal.power)).toBeLessThanOrEqual(
         Math.ceil(ideal.power * SPOILER_POWER_ERROR) + 1,
       );
