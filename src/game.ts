@@ -201,6 +201,7 @@ export class Game {
     this.match = new Match({
       players: choice.players,
       rounds: choice.rounds,
+      startingMoney: choice.startingMoney,
       seed: this.options.seed ?? Date.now() >>> 0,
     });
     this.shopOrPlay();

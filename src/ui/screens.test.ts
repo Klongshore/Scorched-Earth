@@ -106,7 +106,17 @@ describe("Player choices on the Setup screen", () => {
     expect(setupChoiceFrom([moron, human], "100")).toEqual({
       players: [{ kind: "computer", personality: "moron" }, { kind: "human" }],
       rounds: MAX_ROUNDS,
+      startingMoney: 2_000,
     });
+  });
+
+  it("clamps Starting Money to $0..$1,000,000 and falls back to the default when blank", () => {
+    const money = (value: string): number =>
+      setupChoiceFrom(["human", "human"], "1", value).startingMoney;
+    expect(money("5000")).toBe(5_000);
+    expect(money("2000000")).toBe(1_000_000);
+    expect(money("-5")).toBe(0);
+    expect(money("")).toBe(2_000);
   });
 
   it("rejects an option value it does not offer", () => {

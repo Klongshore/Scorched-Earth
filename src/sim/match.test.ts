@@ -14,6 +14,24 @@ vi.mock("./constants", async (importOriginal) => ({
   STARTING_MONEY: 2_000,
 }));
 
+describe("Starting Money", () => {
+  it("gives every Player the chosen amount, up to $1,000,000", () => {
+    const match = new Match({
+      players: [human, human],
+      rounds: 1,
+      seed: 1,
+      startingMoney: 1_000_000,
+    });
+    expect(match.money).toEqual([1_000_000, 1_000_000]);
+  });
+
+  it("rejects an amount above $1,000,000", () => {
+    expect(
+      () => new Match({ players: [human, human], rounds: 1, seed: 1, startingMoney: 1_000_001 }),
+    ).toThrow();
+  });
+});
+
 const human: PlayerSetup = { kind: "human" };
 const moron: PlayerSetup = { kind: "computer", personality: "moron" };
 
