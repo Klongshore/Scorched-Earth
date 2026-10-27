@@ -21,6 +21,7 @@ import {
   WIND_MAX,
   weaponNamed,
 } from "./constants";
+import { CueBuffer, type Cue } from "./cues";
 import { detonate } from "./explosion";
 import { emptyLoadout, inventoryIn, type Inventory, type Loadout } from "./inventory";
 import { pickEpitaph, rollTaunt } from "./lines";
@@ -114,6 +115,8 @@ export class Round {
   private healthBeforeSettling: number[] | null = null;
   /** playerIds of destroyed Tanks whose Death Animation has started: gone from the field. */
   private readonly gone = new Set<number>();
+  /** Cues recorded since the game loop last drained them; buffered from construction. */
+  private readonly cues = new CueBuffer();
   /** Every line on screen, oldest first. */
   private readonly shownLines: Line[] = [];
   /** The Taunt rolled for this Turn and not yet shown; null when the Turn has none. */
@@ -148,7 +151,7 @@ export class Round {
     }
     this.currentIndex = 0;
     // Every owner's strongest Shield goes up before the first Turn, in Player order.
-    for (const p of players) raiseShield(this.tankOf(p.id), this.inventoryOf(p.id));
+    for (const p of players) this.raise(this.tankOf(p.id), p.id);
     this.beginTurn();
   }
 
@@ -184,12 +187,20 @@ export class Round {
         break;
       case "raiseShield":
         // Stays aiming: the Turn goes on with the same Player.
-        raiseShield(tank, this.inventoryOf(this.currentPlayerId));
+        this.raise(tank, this.currentPlayerId);
         break;
       case "fire":
         this.fire();
         break;
     }
+  }
+
+  /**
+   * Hand over every cue recorded since the last drain, oldest first, and forget them. Read by the
+   * game loop for Sound Effects only; draining (or not) never changes the Round.
+   */
+  drainCues(): Cue[] {
+    return this.cues.drain();
   }
 
   /** The Weapon the current Player will fire. */
@@ -258,8 +269,13 @@ export class Round {
         // on Settling's first tick, before anything moves, and paid for once all is at rest.
         this.healthBeforeSettling ??= this.tanks.map((t) => t.health);
         if (
-          !settleTick(this.terrain, this.tanks, (id) => this.useParachute(id)) &&
-          !landTanks(this.terrain, this.tanks)
+          !settleTick(
+            this.terrain,
+            this.tanks,
+            (id) => this.useParachute(id),
+            (cue) => this.cues.record(cue),
+          ) &&
+          !landTanks(this.terrain, this.tanks, (cue) => this.cues.record(cue))
         ) {
           this.paySettling(this.healthBeforeSettling);
           this.healthBeforeSettling = null;
@@ -280,6 +296,13 @@ export class Round {
     const weapon = this.currentWeapon();
     this.inventoryOf(this.currentPlayerId).useOne(weapon.name);
     const projectile = launch(this.currentTank(), weapon);
+    this.cues.record({
+      kind: "fired",
+      weapon: weapon.name,
+      weaponKind: weapon.kind,
+      x: this.currentTank().x,
+    });
+    this.cues.record({ kind: "launched", x: projectile.x });
     this.barrelProjectile = projectile;
     this.phase = { kind: "resolving", projectiles: [projectile], explosions: [] };
     this.sayPendingTaunt(); // a Human's Taunt; a Computer Player's was shown as it began thinking
@@ -308,27 +331,38 @@ export class Round {
         // A rolling Roller already had its landing recorded where it first touched down.
         const roll = stepRolling(p, this.terrain, this.tanks, dt);
         if (roll.kind === "rolling") projectiles.push(p);
-        else if (roll.kind === "explode") explosions.push(this.explode(p, roll.x, roll.y));
+        else {
+          this.cues.record({ kind: "rollEnded", x: p.x });
+          if (roll.kind === "explode") explosions.push(this.explode(p, roll.x, roll.y));
+        }
         continue;
       }
       const outcome = stepProjectile(p, this.wind, this.terrain, this.tanks, dt);
       if (outcome.kind === "flying") {
-        if (p.weapon.kind === "mirv" && p.vy >= 0) projectiles.push(...this.splitMirv(p));
-        else projectiles.push(p);
+        if (p.weapon.kind === "mirv" && p.vy >= 0) {
+          this.cues.record({ kind: "landed", x: p.x }); // the MIRV's own flight ends here
+          this.cues.record({ kind: "split", x: p.x, y: p.y });
+          projectiles.push(...this.splitMirv(p));
+        } else projectiles.push(p);
       } else if (outcome.kind === "lost") {
+        this.cues.record({ kind: "landed", x: p.x });
         this.landed(p, { kind: "lost", side: outcome.side });
       } else {
+        this.cues.record({ kind: "landed", x: outcome.x });
         this.landed(p, { kind: "hit", x: outcome.x });
         const onTank = this.tanks.some((t) => hitTest(t, outcome.x, outcome.y));
         if (p.weapon.kind === "roller" && !onTank) {
           startRolling(p, outcome.x, outcome.y, this.terrain);
+          this.cues.record({ kind: "rollStarted", x: p.x });
           projectiles.push(p);
         } else {
           // A MIRV that lands before it splits explodes as one of its pieces.
           const weapon = p.weapon.kind === "mirv" ? weaponNamed(MIRV_PIECE_WEAPON) : p.weapon;
           explosions.push(this.explode(p, outcome.x, outcome.y, weapon));
-          if (weapon.kind === "funky")
+          if (weapon.kind === "funky") {
+            this.cues.record({ kind: "scattered", x: outcome.x, y: outcome.y });
             projectiles.push(...this.funkyBomblets(p, outcome.x, outcome.y));
+          }
         }
       }
     }
@@ -348,6 +382,7 @@ export class Round {
     }));
     // The MIRV itself never lands, so the firer remembers its middle piece instead.
     if (this.barrelProjectile === mirv) this.barrelProjectile = pieces[Math.floor(middle)] ?? null;
+    for (const piece of pieces) this.cues.record({ kind: "launched", x: piece.x });
     return pieces;
   }
 
@@ -356,6 +391,7 @@ export class Round {
     const weapon = weaponNamed(FUNKY_BOMBLET_WEAPON);
     const count = this.rng.int(FUNKY_MIN_BOMBLETS, FUNKY_MAX_BOMBLETS);
     return Array.from({ length: count }, () => {
+      this.cues.record({ kind: "launched", x });
       const radians = (this.rng.range(FUNKY_MIN_ANGLE, FUNKY_MAX_ANGLE) * Math.PI) / 180;
       const speed = this.rng.range(FUNKY_MIN_SPEED, FUNKY_MAX_SPEED);
       return {
@@ -369,6 +405,24 @@ export class Round {
     });
   }
 
+  /** Raise a Player's strongest Shield, recording a cue when one actually goes up. */
+  private raise(tank: Tank, playerId: number): void {
+    if (raiseShield(tank, this.inventoryOf(playerId))) {
+      this.cues.record({ kind: "shieldRaised", x: tank.x });
+    }
+  }
+
+  /** Cue each Shield an Explosion drained: broken if it ran out, hit if it still stands. */
+  private recordShieldCues(before: readonly (number | null)[]): void {
+    this.tanks.forEach((t, i) => {
+      const was = before[i];
+      if (was === null || was === undefined) return;
+      const now = t.shield?.strength ?? 0;
+      if (now >= was) return;
+      this.cues.record({ kind: now > 0 ? "shieldHit" : "shieldBroken", x: t.x, y: t.y });
+    });
+  }
+
   /** A Projectile has landed or been lost; the firer remembers it only if it came from the barrel. */
   private landed(p: Projectile, landing: Landing): void {
     if (p !== this.barrelProjectile) return;
@@ -378,7 +432,17 @@ export class Round {
 
   /** Detonate a Weapon (the Projectile's own by default) at (x, y), crediting its firer's earnings. */
   private explode(p: Projectile, x: number, y: number, weapon: Weapon = p.weapon): Explosion {
+    const shieldsBefore = this.tanks.map((t) => t.shield?.strength ?? null);
     const explosion = detonate(x, y, weapon, this.terrain, this.tanks);
+    this.recordShieldCues(shieldsBefore);
+    this.cues.record({
+      kind: "exploded",
+      explosion: explosion.kind,
+      x,
+      y,
+      radius: explosion.radius,
+    });
+    this.recordHits(explosion.hits);
     this.earn(p.firedBy, moneyEarned(explosion.hits, p.firedBy));
     return explosion;
   }
@@ -399,7 +463,17 @@ export class Round {
         destroyed: !isAlive(t),
       });
     });
+    this.recordHits(losses);
     this.earn(this.currentPlayerId, moneyEarned(losses, this.currentPlayerId));
+  }
+
+  /** Record a hit cue for each Tank that lost Health and survived. */
+  private recordHits(losses: readonly HealthLoss[]): void {
+    for (const loss of losses) {
+      if (loss.destroyed || loss.healthRemoved <= 0) continue;
+      const tank = this.tankOf(loss.playerId);
+      this.cues.record({ kind: "tankHit", x: tank.x, y: tank.y });
+    }
   }
 
   /** Use up one of a Player's Parachutes; false if they own none. */
@@ -446,6 +520,7 @@ export class Round {
     const kind = this.flavourRng.pick(DEATH_ANIMATION_KINDS);
     const selfInflicted = tank.playerId === this.currentPlayerId;
     this.say("epitaph", tank.playerId, pickEpitaph(this.flavourRng, selfInflicted));
+    this.cues.record({ kind: "tankDestroyed", animation: kind, x: tank.x, y: tank.y });
     return { playerId: tank.playerId, kind, x: tank.x, y: tank.y, elapsed: 0 };
   }
 
@@ -459,10 +534,12 @@ export class Round {
     const [survivor] = alive;
     if (!survivor) {
       this.phase = { kind: "over", result: { kind: "draw" } };
+      this.cues.record({ kind: "roundDraw" });
       return;
     }
     if (alive.length === 1) {
       this.phase = { kind: "over", result: { kind: "win", playerId: survivor.playerId } };
+      this.cues.record({ kind: "roundWon" });
       return;
     }
     do {
@@ -483,7 +560,7 @@ export class Round {
       const tank = this.currentTank();
       if (!player.personality) throw new Error(`Computer player ${player.id} has no Personality`);
       // Only once its Shield is gone, never replacing a damaged one. Draws nothing from rng.
-      if (!tank.shield) raiseShield(tank, this.inventoryOf(player.id));
+      if (!tank.shield) this.raise(tank, player.id);
       const memory = this.requireMemory(player.id);
       const personality = memory.resolved ?? player.personality;
       if (personality === "unknown") throw new Error(`Player ${player.id} never resolved`);

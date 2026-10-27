@@ -1,4 +1,6 @@
+import { SoundPlayer } from "./audio/audio";
 import { attachKeyboard } from "./input/keyboard";
+import { attachMute } from "./input/mute";
 import { attachTouchControls } from "./input/touch";
 import type { Renderer } from "./render/renderer";
 import { MAX_TICKS_PER_FRAME, TICK_SECONDS } from "./sim/constants";
@@ -101,6 +103,8 @@ export type GameOptions = {
   readonly seed?: number;
   /** Where to put the on-screen controls for touch screens; they only work during a Round. */
   readonly touchControls?: HTMLElement;
+  /** The on-screen Mute button for touch screens. */
+  readonly muteButton?: HTMLElement;
 };
 
 /** The app controller: owns the screen state, the keyboard and the fixed-timestep loop. */
@@ -115,7 +119,10 @@ export class Game {
   private accumulator = 0;
   private detachKeyboard: (() => void) | null = null;
   private detachTouch: (() => void) | null = null;
+  private detachUnlock: (() => void) | null = null;
+  private detachMute: (() => void) | null = null;
   private readonly loop: FrameLoop;
+  private readonly sound = new SoundPlayer();
 
   constructor(
     private readonly window: Window,
@@ -137,6 +144,23 @@ export class Game {
     if (touchControls) {
       this.detachTouch = attachTouchControls(touchControls, (action) => this.onAction(action));
     }
+    // Browsers keep audio locked until a gesture; the first click, tap or key press unlocks it.
+    const unlock = (): void => this.sound.unlock();
+    const gestures = ["pointerdown", "keydown"] as const;
+    for (const g of gestures) this.window.addEventListener(g, unlock);
+    this.detachUnlock = () => {
+      for (const g of gestures) this.window.removeEventListener(g, unlock);
+    };
+    const { muteButton } = this.options;
+    const showMute = (): void => {
+      muteButton?.classList.toggle("muted", this.sound.isMuted());
+      muteButton?.setAttribute("aria-pressed", String(this.sound.isMuted()));
+    };
+    showMute();
+    this.detachMute = attachMute(this.window, muteButton, () => {
+      this.sound.setMuted(!this.sound.isMuted());
+      showMute();
+    });
     this.showSetup();
     this.loop.start();
   }
@@ -147,10 +171,16 @@ export class Game {
     this.detachKeyboard = null;
     this.detachTouch?.();
     this.detachTouch = null;
+    this.detachUnlock?.();
+    this.detachUnlock = null;
+    this.detachMute?.();
+    this.detachMute = null;
   }
 
   /** Move to `screen`; the on-screen controls are greyed out except during a Round. */
   private enter(screen: Screen): void {
+    // A Round ending or beginning leaves no Projectile in flight: stop any flight or roll loop.
+    this.sound.stopLoops();
     this.screen = screen;
     this.options.touchControls?.classList.toggle("idle", screen !== "round");
   }
@@ -253,6 +283,8 @@ export class Game {
     const match = this.match;
     if (match) {
       this.accumulator = advance(this.accumulator, frameSeconds, (dt) => this.tick(match, dt));
+      // Sound is spectacle only: the cues are read after the ticks and never fed back.
+      if (match.round) this.sound.play(match.round.drainCues());
       this.renderer.draw(match);
     } else {
       this.renderer.drawBackdrop();

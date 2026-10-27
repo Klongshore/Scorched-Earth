@@ -30,9 +30,10 @@ import {
 import { damageAt, detonate } from "./explosion";
 import { createPlayers } from "./players";
 import { Rng } from "./rng";
-import { emptyLoadout } from "./inventory";
+import { emptyLoadout, inventoryIn } from "./inventory";
 import { EPITAPHS, SELF_INFLICTED_EPITAPHS, TAUNTS } from "./lines";
 import { Round, type RoundAction } from "./round";
+import type { Cue } from "./cues";
 import { fallDamage } from "./settling";
 import { barrelTip, centre, hitTest, isSupported, occupiesCell } from "./tank";
 import type { Terrain } from "./terrain";
@@ -1888,5 +1889,347 @@ describe("Round Unknown", () => {
       new Rng(3),
     );
     expect(resolvedOf(round, 1)).toBeNull();
+  });
+});
+
+describe("Round cues", () => {
+  const turnOver = (r: Round): boolean => r.phase.kind === "aiming" || r.phase.kind === "over";
+
+  function choose(round: Round, name: WeaponName): void {
+    round.inventoryOf(round.currentPlayerId).add(name, 1);
+    for (let i = 0; i < WEAPONS.length && round.currentWeapon().name !== name; i++) {
+      round.act({ kind: "cycleWeapon", delta: 1 });
+    }
+    expect(round.currentWeapon().name).toBe(name);
+  }
+
+  it("has nothing to drain before anything happens, and drains only once", () => {
+    const round = newRound();
+    expect(round.drainCues()).toEqual([]);
+    round.act({ kind: "fire" });
+    expect(round.drainCues()).toHaveLength(2);
+    expect(round.drainCues()).toEqual([]);
+  });
+
+  it("records fired, then exploded with kind, position and radius", () => {
+    const { round, firer } = scenario(100, 500);
+    firer.angle = 90;
+    firer.power = 400;
+    round.act({ kind: "fire" });
+    runUntil(round, turnOver);
+    const cues = round.drainCues();
+    expect(cues[0]).toEqual({
+      kind: "fired",
+      weapon: "Baby Missile",
+      weaponKind: "blast",
+      x: firer.x,
+    });
+    const exploded = cues.filter((c) => c.kind === "exploded");
+    expect(exploded).toHaveLength(1);
+    expect(exploded[0]).toMatchObject({
+      explosion: "carve",
+      radius: weaponNamed("Baby Missile").radius,
+    });
+  });
+
+  it("records a bigger radius for a Nuke than for a Baby Missile", () => {
+    const { round, firer } = scenario(100, 500);
+    choose(round, "Nuke");
+    fireStraightUp(round, firer);
+    runUntil(round, turnOver);
+    const exploded = round.drainCues().find((c) => c.kind === "exploded");
+    expect(exploded).toMatchObject({ radius: weaponNamed("Nuke").radius });
+  });
+
+  it("records a Dirt Weapon's Explosion as dirt", () => {
+    const { round, firer } = scenario(100, 500);
+    choose(round, "Dirt Ball");
+    fireStraightUp(round, firer);
+    runUntil(round, turnOver);
+    const exploded = round.drainCues().find((c) => c.kind === "exploded");
+    expect(exploded).toMatchObject({ explosion: "dirt", radius: weaponNamed("Dirt Ball").radius });
+  });
+
+  it("records a Computer Player's shot like a human's", () => {
+    const round = new Round(1, createPlayers([MORON, MORON]), new Rng(3));
+    runUntil(round, (r) => r.phase.kind === "resolving");
+    const [fired] = round.drainCues();
+    expect(fired).toMatchObject({ kind: "fired", weapon: "Baby Missile" });
+  });
+
+  it("plays out identically whether or not anything drains the cues", () => {
+    const actions: RoundAction[] = [
+      { kind: "adjustAngle", delta: -30 },
+      { kind: "adjustPower", delta: 120 },
+      { kind: "fire" },
+      { kind: "adjustAngle", delta: 25 },
+      { kind: "fire" },
+    ];
+    const play = (drain: boolean): Round => {
+      const round = newRound(42);
+      for (const action of actions) {
+        round.act(action);
+        for (let i = 0; i < 20000 && !turnOver(round); i++) {
+          round.tick(TICK_SECONDS);
+          if (drain) round.drainCues();
+        }
+      }
+      return round;
+    };
+    const drained = play(true);
+    const silent = play(false);
+    expect(drained.tanks).toEqual(silent.tanks);
+    expect(drained.terrain).toEqual(silent.terrain);
+    expect(drained.wind).toBe(silent.wind);
+    expect(drained.phase.kind).toBe(silent.phase.kind);
+  });
+});
+
+describe("Round consequence cues", () => {
+  const turnOver = (r: Round): boolean => r.phase.kind === "aiming" || r.phase.kind === "over";
+
+  it("records a hit, and no destruction, for a Tank that loses Health and survives", () => {
+    const { round, firer, other } = scenario(300, 312);
+    other.health = 100;
+    fireStraightUp(round, firer);
+    runUntil(round, turnOver);
+    expect(other.health).toBeGreaterThan(0);
+    expect(other.health).toBeLessThan(100);
+    const cues = round.drainCues();
+    expect(cues).toContainEqual({ kind: "tankHit", x: other.x, y: other.y });
+    expect(cues.some((c) => c.kind === "tankDestroyed")).toBe(false);
+  });
+
+  it("records a destruction with the Death Animation's kind and position for a kill", () => {
+    const { round, firer, other } = scenario(300, 312);
+    other.health = 1;
+    fireStraightUp(round, firer);
+    runUntil(round, (r) => r.phase.kind === "dying");
+    const { phase } = round;
+    if (phase.kind !== "dying") return expect.fail("not dying");
+    const [animation] = phase.animations.filter((a) => a.playerId === other.playerId);
+    const cues = round.drainCues();
+    expect(cues).toContainEqual({
+      kind: "tankDestroyed",
+      animation: animation?.kind,
+      x: other.x,
+      y: other.y,
+    });
+    expect(cues.some((c) => c.kind === "tankHit" && c.x === other.x)).toBe(false);
+  });
+
+  it("records a Round Win when one Tank is left, and no Draw", () => {
+    const { round, firer, other } = scenario(300, 312);
+    other.health = 1;
+    fireStraightUp(round, firer);
+    runUntil(round, (r) => r.phase.kind === "over");
+    const cues = round.drainCues();
+    expect(cues.filter((c) => c.kind === "roundWon")).toHaveLength(1);
+    expect(cues.some((c) => c.kind === "roundDraw")).toBe(false);
+  });
+
+  it("records a Draw when no Tank survives", () => {
+    const round = new Round(1, createPlayers([HUMAN, HUMAN]), new Rng(1));
+    for (const t of round.tanks) t.health = 0;
+    round.phase = { kind: "settling" };
+    runUntil(round, (r) => r.phase.kind === "over");
+    const cues = round.drainCues();
+    expect(cues.filter((c) => c.kind === "tankDestroyed")).toHaveLength(2);
+    expect(cues.filter((c) => c.kind === "roundDraw")).toHaveLength(1);
+    expect(cues.some((c) => c.kind === "roundWon")).toBe(false);
+  });
+
+  it("records no Round end cue while the Round goes on", () => {
+    const { round, firer } = scenario(100, 500);
+    fireStraightUp(round, firer);
+    runUntil(round, turnOver);
+    const cues = round.drainCues();
+    expect(cues.some((c) => c.kind === "roundWon" || c.kind === "roundDraw")).toBe(false);
+  });
+});
+
+describe("Round settling cues", () => {
+  const settle = (round: Round): Cue[] => {
+    round.drainCues();
+    round.phase = { kind: "settling" };
+    runUntil(round, (r) => r.phase.kind === "aiming");
+    return round.drainCues();
+  };
+
+  it("records dirt moving with how much moved while dirt falls, and none once at rest", () => {
+    const { round } = scenario(150, 500);
+    for (let y = GROUND - 30; y < GROUND - 20; y++) {
+      for (let x = 300; x < 320; x++) round.terrain.set(x, y, true);
+    }
+    const cues = settle(round);
+    const moving = cues.filter((c) => c.kind === "dirtMoving");
+    expect(moving.length).toBeGreaterThan(0);
+    for (const cue of moving) expect(cue.amount).toBeGreaterThan(0);
+    const last = cues.map((c) => c.kind).lastIndexOf("dirtMoving");
+    expect(cues.slice(last + 1).some((c) => c.kind === "dirtMoving")).toBe(false);
+    // At rest, a further Settling records no dirt moving at all.
+    expect(settle(round).filter((c) => c.kind === "dirtMoving")).toEqual([]);
+  });
+
+  it("records a Tank landing with its Fall Damage", () => {
+    const { round, other } = scenario(150, 500);
+    undercutTank(round, other, 40);
+    const cues = settle(round);
+    const landed = cues.filter((c) => c.kind === "tankLanded");
+    expect(landed).toEqual([{ kind: "tankLanded", x: 500, fallDamage: fallDamage(40) }]);
+    expect(fallDamage(40)).toBeGreaterThan(0);
+    expect(cues.some((c) => c.kind === "parachuteOpened")).toBe(false);
+  });
+
+  it("records a Parachute opening and a landing with no Fall Damage", () => {
+    const { round, other } = scenario(150, 500);
+    round.inventoryOf(other.playerId).add("Parachute", 5);
+    undercutTank(round, other, 60);
+    const cues = settle(round);
+    expect(cues.filter((c) => c.kind === "parachuteOpened")).toEqual([
+      { kind: "parachuteOpened", x: 500 },
+    ]);
+    expect(cues.filter((c) => c.kind === "tankLanded")).toEqual([
+      { kind: "tankLanded", x: 500, fallDamage: 0 },
+    ]);
+  });
+
+  it("records nothing for a Tank that does not fall", () => {
+    const { round } = scenario(150, 500);
+    expect(settle(round)).toEqual([]);
+  });
+});
+
+describe("Round Shield cues", () => {
+  const turnOver = (r: Round): boolean => r.phase.kind === "aiming" || r.phase.kind === "over";
+
+  /** A Round where the given Players own a Shield, so it is raised at construction. */
+  function shieldedRound(owners: number[]): Round {
+    const players = createPlayers([HUMAN, HUMAN]);
+    const loadout = emptyLoadout(players);
+    for (const id of owners) inventoryIn(loadout, id).add("Shield", 1);
+    return new Round(1, players, new Rng(1), loadout);
+  }
+
+  /** Fire the current Tank's Baby Missile straight up so it lands on the firer's own Shield. */
+  function selfShot(round: Round, strength: number): Tank {
+    const firer = round.currentTank();
+    round.terrain.flatten(0, FIELD_WIDTH - 1, GROUND);
+    firer.x = 100;
+    firer.y = GROUND;
+    round.wind = 0;
+    firer.shield = { name: "Shield", strength };
+    round.drainCues();
+    fireStraightUp(round, firer);
+    runUntil(round, turnOver);
+    return firer;
+  }
+
+  it("buffers a shield raised cue for each Shield from construction", () => {
+    const round = shieldedRound([0, 1]);
+    const cues = round.drainCues();
+    expect(cues).toHaveLength(2);
+    for (const t of round.tanks) expect(cues).toContainEqual({ kind: "shieldRaised", x: t.x });
+  });
+
+  it("records a shield raised cue only for a Tank that raises a Shield", () => {
+    const round = shieldedRound([1]);
+    const only = round.tanks.find((t) => t.playerId === 1) as Tank;
+    expect(round.drainCues()).toEqual([{ kind: "shieldRaised", x: only.x }]);
+  });
+
+  it("records a shield hit when a Shield absorbs damage and stands", () => {
+    const round = shieldedRound([]);
+    const firer = selfShot(round, 1000);
+    const cues = round.drainCues();
+    expect(cues).toContainEqual({ kind: "shieldHit", x: firer.x, y: GROUND });
+    expect(cues.map((c) => c.kind)).not.toContain("shieldBroken");
+  });
+
+  it("records a shield broken when an Explosion runs the Shield Strength out", () => {
+    const round = shieldedRound([]);
+    const firer = selfShot(round, 1);
+    const cues = round.drainCues();
+    expect(cues).toContainEqual({ kind: "shieldBroken", x: firer.x, y: GROUND });
+    expect(cues.map((c) => c.kind)).not.toContain("shieldHit");
+  });
+
+  it("records no shield cue for a Tank without a Shield", () => {
+    const round = shieldedRound([]);
+    const firer = round.currentTank();
+    round.terrain.flatten(0, FIELD_WIDTH - 1, GROUND);
+    firer.x = 100;
+    firer.y = GROUND;
+    round.drainCues();
+    fireStraightUp(round, firer);
+    runUntil(round, turnOver);
+    expect(round.drainCues().map((c) => c.kind)).not.toContain("shieldHit");
+  });
+});
+
+describe("Round flight cues", () => {
+  const turnOver = (r: Round): boolean => r.phase.kind === "aiming" || r.phase.kind === "over";
+
+  /** Fire `weapon` at the given Angle and Power, run the Turn out, and return every cue. */
+  function cuesFor(weapon: WeaponName, angle: number, power: number): Cue[] {
+    const { round, firer } = scenario(100, 600);
+    round.inventoryOf(round.currentPlayerId).add(weapon, 1);
+    while (round.currentWeapon().name !== weapon) round.act({ kind: "cycleWeapon", delta: 1 });
+    firer.angle = angle;
+    firer.power = power;
+    round.act({ kind: "fire" });
+    runUntil(round, turnOver);
+    return round.drainCues();
+  }
+
+  const count = (cues: Cue[], kind: Cue["kind"]): number =>
+    cues.filter((c) => c.kind === kind).length;
+
+  it("marks a Projectile launched, then landed before its Explosion", () => {
+    const cues = cuesFor("Missile", 60, 400);
+    const kinds = cues.map((c) => c.kind);
+    expect(count(cues, "launched")).toBe(1);
+    expect(count(cues, "landed")).toBe(1);
+    expect(kinds.indexOf("fired")).toBeLessThan(kinds.indexOf("landed"));
+    expect(kinds.indexOf("landed")).toBeLessThan(kinds.indexOf("exploded"));
+  });
+
+  it("marks a Projectile that leaves the field as landed, with no Explosion", () => {
+    const cues = cuesFor("Missile", 150, 1000);
+    expect(count(cues, "launched")).toBe(1);
+    expect(count(cues, "landed")).toBe(1);
+    expect(count(cues, "exploded")).toBe(0);
+  });
+
+  it("marks a MIRV splitting, with every flight launched and landed once", () => {
+    const cues = cuesFor("MIRV", 60, 400);
+    expect(count(cues, "split")).toBe(1);
+    expect(count(cues, "launched")).toBe(6); // the MIRV and its 5 pieces
+    expect(count(cues, "landed")).toBe(6);
+    const kinds = cues.map((c) => c.kind);
+    expect(kinds.indexOf("split")).toBeLessThan(kinds.indexOf("exploded"));
+  });
+
+  it("marks a Funky Bomb scattering its bomblets", () => {
+    const cues = cuesFor("Funky Bomb", 60, 400);
+    expect(count(cues, "scattered")).toBe(1);
+    expect(count(cues, "launched")).toBeGreaterThanOrEqual(1 + 6);
+    expect(count(cues, "landed")).toBe(count(cues, "launched"));
+  });
+
+  it("marks a Roller starting to roll once it has landed, and the end of its roll", () => {
+    const cues = cuesFor("Roller", 60, 400);
+    const kinds = cues.map((c) => c.kind);
+    expect(count(cues, "rollStarted")).toBe(1);
+    expect(count(cues, "rollEnded")).toBe(1);
+    expect(kinds.indexOf("landed")).toBeLessThan(kinds.indexOf("rollStarted"));
+    expect(kinds.indexOf("rollStarted")).toBeLessThan(kinds.indexOf("rollEnded"));
+  });
+
+  it("marks no split, scatter or roll for a blast Weapon", () => {
+    const cues = cuesFor("Missile", 60, 400);
+    expect(count(cues, "rollStarted")).toBe(0);
+    expect(count(cues, "split")).toBe(0);
+    expect(count(cues, "scattered")).toBe(0);
   });
 });
