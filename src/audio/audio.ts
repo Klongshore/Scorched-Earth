@@ -31,12 +31,15 @@ export class SoundPlayer {
   private context: AudioContext | null = null;
   private noise: AudioBuffer | null = null;
   private master: GainNode | null = null;
+  /** True once audio is known to be unavailable here (no AudioContext constructor). */
   private failed = false;
   private muted = loadMuted();
   /** The one continuous rumble of falling dirt, once started. */
   private rumble: { gain: GainNode; filter: BiquadFilterNode } | null = null;
   /** Context time the rumble last heard dirt move. */
   private rumbleHeardAt = 0;
+  /** Whether the rumble has been told to fade to silence and has not been driven since. */
+  private rumbleFaded = true;
   /** Projectiles currently in the air, and Rollers currently rolling: each drives a loop. */
   private flying = 0;
   private rolling = 0;
@@ -62,8 +65,10 @@ export class SoundPlayer {
       }
       if (this.context.state === "suspended") void this.context.resume().catch(() => {});
     } catch {
-      this.failed = true;
+      // Transient: forget the half-built context so a later gesture can try again.
       this.context = null;
+      this.noise = null;
+      this.master = null;
     }
   }
 
@@ -84,19 +89,22 @@ export class SoundPlayer {
 
   /** Play the Sound Effect for each cue, in order. */
   play(cues: readonly Cue[]): void {
+    // Cues are tracked even while the context is not running, so the counters never desync and a
+    // loop stops when its Projectile does. Only synthesis needs a running context.
     const ctx = this.context;
-    if (!ctx || ctx.state !== "running") return;
+    const live = ctx !== null && ctx.state === "running";
     // Called every frame, even with no cues, so the rumble dies away once dirt stops moving.
-    try {
-      this.fadeRumbleIfQuiet(ctx);
-    } catch {
-      // Silence, never a broken game.
+    if (live) {
+      try {
+        this.fadeRumbleIfQuiet(ctx);
+      } catch {
+        // Silence, never a broken game.
+      }
     }
-    // The rumble and the loops run through the master gain, so they are silent while muted. Cues
-    // are still tracked, so the loops stop when their Projectiles do.
+    // The rumble and the loops run through the master gain, so they are silent while muted.
     for (const cue of cues) {
       this.track(cue);
-      if (this.muted) continue;
+      if (!live || this.muted) continue;
       const plan = planSound(cue, FIELD_WIDTH);
       if (!plan) continue;
       try {
@@ -106,10 +114,28 @@ export class SoundPlayer {
         // A sound that cannot be made is silence, never a broken game.
       }
     }
+    if (!live) return;
     try {
       this.syncLoops(ctx, cues);
     } catch {
       // As above.
+    }
+  }
+
+  /** Forget what is in the air and stop the loops: call when a Round ends or a new one begins. */
+  stopLoops(): void {
+    this.flying = 0;
+    this.rolling = 0;
+    const ctx = this.context;
+    for (const name of ["flight", "roll"] as const) {
+      const loop = this.loops[name];
+      this.loops[name] = null;
+      if (!loop || !ctx) continue;
+      try {
+        loop.stop(ctx.currentTime);
+      } catch {
+        // As above.
+      }
     }
   }
 
@@ -216,8 +242,6 @@ export class SoundPlayer {
         // A soft whoosh of cloth catching air.
         this.burst(ctx, out, now, 0.4, 1500, 0.35);
         this.sweep(ctx, out, now, 0.3, 300, 500, "triangle", 0.15);
-        break;
-      case "rumble":
         break;
       case "shieldUp":
         // A rising hum.
@@ -326,6 +350,7 @@ export class SoundPlayer {
     }
     const now = ctx.currentTime;
     this.rumbleHeardAt = now;
+    this.rumbleFaded = false;
     this.rumble.gain.gain.setTargetAtTime(plan.gain, now, RUMBLE_SMOOTHING);
     this.rumble.filter.frequency.setTargetAtTime(120 + plan.size * 260, now, RUMBLE_SMOOTHING);
   }
@@ -333,7 +358,9 @@ export class SoundPlayer {
   /** Dirt has stopped moving if no cue has arrived for a moment: let the rumble die away. */
   private fadeRumbleIfQuiet(ctx: AudioContext): void {
     const rumble = this.rumble;
-    if (!rumble || ctx.currentTime - this.rumbleHeardAt < RUMBLE_HOLD_SECONDS) return;
+    if (!rumble || this.rumbleFaded || ctx.currentTime - this.rumbleHeardAt < RUMBLE_HOLD_SECONDS)
+      return;
+    this.rumbleFaded = true;
     rumble.gain.gain.setTargetAtTime(0, ctx.currentTime, RUMBLE_SMOOTHING);
   }
 

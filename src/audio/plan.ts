@@ -2,7 +2,7 @@ import type { Cue } from "../sim/cues";
 import type { DeathAnimationKind, Weapon } from "../sim/types";
 
 /**
- * Which Sound Effect to play. Later cues add more names. Each name is synthesized by the audio
+ * Which Sound Effect to play. Each name is synthesized by the audio
  * module; this module only decides which, how loud and where.
  */
 export type SoundName =

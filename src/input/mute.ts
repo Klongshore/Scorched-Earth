@@ -18,6 +18,8 @@ export function attachMute(
   const onClick = (event: Event): void => {
     event.preventDefault();
     onToggle();
+    // Give focus back so Space goes to the game, not to this button.
+    (button as { blur?: () => void } | undefined)?.blur?.();
   };
   target.addEventListener("keydown", onKeyDown);
   button?.addEventListener("click", onClick);

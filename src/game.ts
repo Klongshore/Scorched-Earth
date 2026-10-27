@@ -179,6 +179,8 @@ export class Game {
 
   /** Move to `screen`; the on-screen controls are greyed out except during a Round. */
   private enter(screen: Screen): void {
+    // A Round ending or beginning leaves no Projectile in flight: stop any flight or roll loop.
+    this.sound.stopLoops();
     this.screen = screen;
     this.options.touchControls?.classList.toggle("idle", screen !== "round");
   }
