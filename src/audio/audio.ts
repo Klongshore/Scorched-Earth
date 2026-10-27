@@ -5,11 +5,15 @@ import { panAt, planSound, type SoundPlan } from "./plan";
 
 /** A sound that keeps going until stopped. */
 interface Loop {
+  /** Glide the loop's stereo position to `pan` (-1 left, 1 right). */
+  moveTo(pan: number, at: number): void;
   stop(at: number): void;
 }
 
 /** Time constant for the rumble's level changes. */
 const RUMBLE_SMOOTHING = 0.06;
+/** Time constant for a loop's stereo position following its Projectiles. */
+const LOOP_PAN_SMOOTHING = 0.05;
 /** How long after the last dirt cue the rumble keeps going, so a quiet frame does not stutter it. */
 const RUMBLE_HOLD_SECONDS = 0.12;
 
@@ -104,6 +108,7 @@ export class SoundPlayer {
     // The rumble and the loops run through the master gain, so they are silent while muted.
     for (const cue of cues) {
       this.track(cue);
+      if (live && cue.kind === "loopAt") this.followLoop(ctx, cue.loop, cue.x);
       if (!live || this.muted) continue;
       const plan = planSound(cue, FIELD_WIDTH);
       if (!plan) continue;
@@ -145,6 +150,15 @@ export class SoundPlayer {
     else if (cue.kind === "landed") this.flying = Math.max(0, this.flying - 1);
     else if (cue.kind === "rollStarted") this.rolling++;
     else if (cue.kind === "rollEnded") this.rolling = Math.max(0, this.rolling - 1);
+  }
+
+  /** Pan a running loop to where its Projectiles are now. */
+  private followLoop(ctx: AudioContext, name: "flight" | "roll", x: number): void {
+    try {
+      this.loops[name]?.moveTo(panAt(x, FIELD_WIDTH), ctx.currentTime);
+    } catch {
+      // As above.
+    }
   }
 
   /** Start a loop when its first Projectile appears; fade it out when its last one is gone. */
@@ -198,6 +212,7 @@ export class SoundPlayer {
     osc.start(now);
     sources.push(osc);
     return {
+      moveTo: (to: number, at: number) => panner.pan.setTargetAtTime(to, at, LOOP_PAN_SMOOTHING),
       stop: (at: number) => {
         out.gain.cancelScheduledValues(at);
         out.gain.setValueAtTime(Math.max(0.0001, out.gain.value), at);

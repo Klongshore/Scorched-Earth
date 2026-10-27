@@ -366,6 +366,17 @@ export class Round {
         }
       }
     }
+    this.recordLoopPositions(projectiles);
+  }
+
+  /** Tell the sound loops where their Projectiles are now: the mean column of each group. */
+  private recordLoopPositions(projectiles: readonly Projectile[]): void {
+    for (const loop of ["flight", "roll"] as const) {
+      const group = projectiles.filter((p) => Boolean(p.rolling) === (loop === "roll"));
+      if (group.length === 0) continue;
+      const x = group.reduce((sum, p) => sum + p.x, 0) / group.length;
+      this.cues.record({ kind: "loopAt", loop, x });
+    }
   }
 
   /** A MIRV's pieces: same place and vertical speed, sideways speed spread evenly around its own. */

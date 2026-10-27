@@ -58,7 +58,12 @@ export type Cue =
   /** A Roller touched Terrain at column `x` and began rolling. */
   | { readonly kind: "rollStarted"; readonly x: number }
   /** A rolling Roller stopped rolling (it exploded or rolled off the field). */
-  | { readonly kind: "rollEnded"; readonly x: number };
+  | { readonly kind: "rollEnded"; readonly x: number }
+  /**
+   * Once per tick while any Projectile is in the air (`loop` "flight") or any Roller is rolling
+   * ("roll"): the mean column of that group, so its loop can follow it across the field.
+   */
+  | { readonly kind: "loopAt"; readonly loop: "flight" | "roll"; readonly x: number };
 
 /** The cues recorded since the last drain, oldest first. */
 export class CueBuffer {

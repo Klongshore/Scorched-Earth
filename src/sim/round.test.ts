@@ -2194,6 +2194,21 @@ describe("Round flight cues", () => {
     expect(kinds.indexOf("landed")).toBeLessThan(kinds.indexOf("exploded"));
   });
 
+  it("reports where the flight loop should be each tick, following the Projectile", () => {
+    const loopXs = cuesFor("Missile", 60, 400)
+      .filter((c) => c.kind === "loopAt" && c.loop === "flight")
+      .map((c) => (c.kind === "loopAt" ? c.x : NaN));
+    expect(loopXs.length).toBeGreaterThan(5);
+    expect(new Set(loopXs).size).toBeGreaterThan(5);
+    expect(loopXs.every(Number.isFinite)).toBe(true);
+    expect(loopXs[loopXs.length - 1]).toBeGreaterThan(loopXs[0] as number);
+  });
+
+  it("reports no loop position once nothing is in the air", () => {
+    const kinds = cuesFor("Missile", 60, 400).map((c) => c.kind);
+    expect(kinds.lastIndexOf("loopAt")).toBeLessThan(kinds.indexOf("exploded"));
+  });
+
   it("marks a Projectile that leaves the field as landed, with no Explosion", () => {
     const cues = cuesFor("Missile", 150, 1000);
     expect(count(cues, "launched")).toBe(1);
