@@ -45,6 +45,7 @@ export type WeaponName =
   | "Nuke"
   | "MIRV"
   | "Funky Bomb"
+  | "Death's Head"
   | "Baby Roller"
   | "Roller"
   | "Heavy Roller"

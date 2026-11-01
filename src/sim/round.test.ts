@@ -717,6 +717,57 @@ describe("Round splitters", () => {
     expect(explosions[0]?.radius).toBe(30);
   });
 
+  it("splits a Death's Head fired at 60° into 5 Baby Nukes either side of where one lands", () => {
+    const nuke = scenario(100, 600);
+    arm(nuke.round, "Baby Nuke");
+    const [one] = fireAndCollect(nuke.round, nuke.firer, 60, 400);
+    if (!one) return expect.fail("the Baby Nuke did not explode");
+
+    const head = scenario(100, 600);
+    arm(head.round, "Death's Head");
+    const explosions = fireAndCollect(head.round, head.firer, 60, 400);
+    expect(explosions).toHaveLength(5);
+    for (const e of explosions) expect(e.radius).toBe(45);
+    const xs = explosions.map((e) => e.x).sort((a, b) => a - b);
+    expect(xs[0]).toBeLessThan(one.x - 20);
+    expect(xs[1]).toBeLessThan(one.x - 5);
+    expect(xs[2]).toBeCloseTo(one.x, 5);
+    expect(xs[3]).toBeGreaterThan(one.x + 5);
+    expect(xs[4]).toBeGreaterThan(one.x + 20);
+  });
+
+  it("explodes a Death's Head that lands before its peak like one Baby Nuke", () => {
+    const { round, firer } = scenario(100, 600);
+    round.terrain.flatten(130, 200, 250); // a cliff in the way
+    arm(round, "Death's Head");
+    const explosions = fireAndCollect(round, firer, 10, 400);
+    expect(explosions).toHaveLength(1);
+    expect(explosions[0]?.radius).toBe(45);
+  });
+
+  it("credits Death's Head piece damage to the firer, and nothing for harming itself", () => {
+    const dry = scenario(100, 600);
+    arm(dry.round, "Death's Head");
+    const pieceX = Math.min(...fireAndCollect(dry.round, dry.firer, 60, 400).map((e) => e.x));
+    const head = scenario(100, Math.round(pieceX));
+    arm(head.round, "Death's Head");
+    const pieces = fireAndCollect(head.round, head.firer, 60, 400);
+    const removed = pieces
+      .flatMap((e) => e.hits)
+      .filter((h) => h.playerId === head.other.playerId)
+      .reduce((sum, h) => sum + h.healthRemoved, 0);
+    expect(removed).toBeGreaterThan(0);
+    const fell = MAX_HEALTH - removed - head.other.health;
+    expect(head.round.earnings[head.firer.playerId]).toBe(MONEY_PER_DAMAGE * (removed + fell));
+
+    // Fired straight up, it comes down on its own Tank: harm to oneself earns nothing.
+    const self = scenario(100, 600);
+    arm(self.round, "Death's Head");
+    fireAndCollect(self.round, self.firer, 90, 100);
+    expect(self.firer.health).toBeLessThan(MAX_HEALTH);
+    expect(self.round.earnings[self.firer.playerId] ?? 0).toBe(0);
+  });
+
   it("explodes a Funky Bomb, then 6 to 8 Baby Missile bomblets, reproducibly from the seed", () => {
     const counts = new Set<number>();
     for (let seed = 1; seed <= 12; seed++) {
@@ -1010,6 +1061,14 @@ describe("Round Landings", () => {
 
   it("records a split MIRV's middle piece's landing", () => {
     const { round, firer } = computerScenario(100, 3, "MIRV");
+    const explosions = fireAndCollect(round, firer, 60, 400);
+    expect(explosions).toHaveLength(5);
+    const middle = explosions.map((e) => e.x).sort((a, b) => a - b)[2];
+    expect(round.memoryOf(firer.playerId)?.lastLanding).toEqual({ kind: "hit", x: middle });
+  });
+
+  it("records a split Death's Head's middle piece's landing", () => {
+    const { round, firer } = computerScenario(100, 3, "Death's Head");
     const explosions = fireAndCollect(round, firer, 60, 400);
     expect(explosions).toHaveLength(5);
     const middle = explosions.map((e) => e.x).sort((a, b) => a - b)[2];
@@ -2223,6 +2282,13 @@ describe("Round flight cues", () => {
     expect(count(cues, "landed")).toBe(6);
     const kinds = cues.map((c) => c.kind);
     expect(kinds.indexOf("split")).toBeLessThan(kinds.indexOf("exploded"));
+  });
+
+  it("marks a Death's Head splitting, with every flight launched and landed once", () => {
+    const cues = cuesFor("Death's Head", 60, 400);
+    expect(count(cues, "split")).toBe(1);
+    expect(count(cues, "launched")).toBe(6); // the Death's Head and its 5 pieces
+    expect(count(cues, "landed")).toBe(6);
   });
 
   it("marks a Funky Bomb scattering its bomblets", () => {
