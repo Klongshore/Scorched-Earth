@@ -288,13 +288,13 @@ describe("Shop view", () => {
     ]);
   });
 
-  it("shows 14 rows: the Weapons, then Shield, Heavy Shield and Parachute", () => {
+  it("shows 15 rows: the Weapons, then Shield, Heavy Shield and Parachute", () => {
     const match = shopping();
     match.money[1] = 20_000;
     match.buy(1, "Parachute");
     const view = shopView(match);
-    expect(view.rows).toHaveLength(14);
-    expect(view.rows.slice(11).map((r) => [r.name, r.bundle, r.price, r.owned])).toEqual([
+    expect(view.rows).toHaveLength(15);
+    expect(view.rows.slice(12).map((r) => [r.name, r.bundle, r.price, r.owned])).toEqual([
       ["Shield", "×3", "$6,000", 0],
       ["Heavy Shield", "×2", "$10,000", 0],
       ["Parachute", "×5", "$3,000", 5],

@@ -70,6 +70,7 @@ const LAUNCH_SOUNDS: Readonly<Record<Weapon["kind"], SoundName>> = {
   blast: "launch",
   mirv: "launchMirv",
   funky: "launchFunky",
+  leapfrog: "launch", // no sound of its own
   roller: "launchRoller",
   dirt: "launchDirt",
 };

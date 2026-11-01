@@ -801,6 +801,112 @@ describe("Round splitters", () => {
   });
 });
 
+describe("Round Leap Frog", () => {
+  const settled = (r: Round): boolean => r.phase.kind === "aiming" || r.phase.kind === "over";
+
+  /** Arm the current Human with one Leap Frog, fire it, and return the Explosions in order. */
+  function hop(round: Round, firer: Tank, angle: number, power: number): Explosion[] {
+    round.inventoryOf(round.currentPlayerId).add("Leap Frog", 1);
+    round.act({ kind: "cycleWeapon", delta: 1 });
+    expect(round.currentWeapon().name).toBe("Leap Frog");
+    firer.angle = angle;
+    firer.power = power;
+    round.act({ kind: "fire" });
+    const seen: Explosion[] = [];
+    runUntil(round, (r) => {
+      if (r.phase.kind === "resolving") {
+        for (const e of r.phase.explosions) if (!seen.includes(e)) seen.push(e);
+      }
+      return settled(r);
+    });
+    return seen;
+  }
+
+  it("explodes three Missiles over open ground, each further along the same way", () => {
+    const { round, firer } = scenario(100, 600);
+    const explosions = hop(round, firer, 60, 300);
+    expect(explosions).toHaveLength(3);
+    for (const e of explosions) expect(e.radius).toBe(30);
+    expect(explosions[0]?.x).toBeLessThan(explosions[1]?.x ?? 0);
+    expect(explosions[1]?.x).toBeLessThan(explosions[2]?.x ?? 0);
+  });
+
+  it("uses up one Leap Frog from the Inventory", () => {
+    const { round, firer } = scenario(100, 600);
+    round.inventoryOf(round.currentPlayerId).add("Leap Frog", 2);
+    const firerId = round.currentPlayerId;
+    hop(round, firer, 60, 300);
+    expect(round.inventoryOf(firerId).count("Leap Frog")).toBe(2);
+  });
+
+  it("pushes every Hop with Wind", () => {
+    const calm = scenario(100, 600);
+    const still = hop(calm.round, calm.firer, 60, 300);
+    const windy = scenario(100, 600);
+    windy.round.wind = WIND_MAX;
+    const blown = hop(windy.round, windy.firer, 60, 300);
+    expect(blown).toHaveLength(3);
+    for (let i = 0; i < 3; i++) expect(blown[i]?.x).toBeGreaterThan((still[i]?.x ?? 0) + 1);
+    const hopLengths = (xs: Explosion[]) => [
+      (xs[1]?.x ?? 0) - (xs[0]?.x ?? 0),
+      (xs[2]?.x ?? 0) - (xs[1]?.x ?? 0),
+    ];
+    expect(hopLengths(blown)).not.toEqual(hopLengths(still));
+  });
+
+  it("credits damage from any Hop to the firer", () => {
+    const dry = scenario(100, 600);
+    const second = hop(dry.round, dry.firer, 60, 300)[1];
+    if (!second) return expect.fail("no second Hop");
+    const { round, firer, other } = scenario(100, Math.round(second.x));
+    const explosions = hop(round, firer, 60, 300);
+    const removed = explosions
+      .flatMap((e) => e.hits)
+      .filter((h) => h.playerId === other.playerId)
+      .reduce((sum, h) => sum + h.healthRemoved, 0);
+    expect(removed).toBeGreaterThan(0);
+    expect(round.earnings[firer.playerId]).toBeGreaterThanOrEqual(MONEY_PER_DAMAGE * removed);
+  });
+
+  it("pays nothing for harm to the firer's own Tank", () => {
+    const { round, firer } = scenario(100, 600);
+    hop(round, firer, 90, 100);
+    expect(firer.health).toBeLessThan(MAX_HEALTH);
+    expect(round.earnings[firer.playerId]).toBe(0);
+  });
+
+  it("holds the Turn until the last Hop has landed and Settling is done", () => {
+    const { round, firer } = scenario(100, 600);
+    round.inventoryOf(round.currentPlayerId).add("Leap Frog", 1);
+    round.act({ kind: "cycleWeapon", delta: 1 });
+    firer.angle = 60;
+    firer.power = 300;
+    round.act({ kind: "fire" });
+    const first = round.currentPlayerId;
+    const seen = new Set<Explosion>();
+    let seenAtSettling = -1;
+    runUntil(round, (r) => {
+      if (r.phase.kind === "resolving") for (const e of r.phase.explosions) seen.add(e);
+      if (r.phase.kind === "settling") {
+        if (seenAtSettling < 0) seenAtSettling = seen.size;
+        expect(r.currentPlayerId).toBe(first);
+      }
+      return settled(r);
+    });
+    expect(seenAtSettling).toBe(3);
+  });
+
+  it("records landed and exploded for each Hop, and launched for every Hop thrown after the first", () => {
+    const { round, firer } = scenario(100, 600);
+    hop(round, firer, 60, 300);
+    const cues = round.drainCues();
+    const count = (kind: Cue["kind"]): number => cues.filter((c) => c.kind === kind).length;
+    expect(count("launched")).toBe(3);
+    expect(count("landed")).toBe(3);
+    expect(count("exploded")).toBe(3);
+  });
+});
+
 describe("Round with 10 Players", () => {
   const tenHumans = (seed = 1): Round =>
     new Round(1, createPlayers(Array.from({ length: MAX_PLAYERS }, () => HUMAN)), new Rng(seed));
@@ -1014,6 +1120,16 @@ describe("Round Landings", () => {
     expect(explosions).toHaveLength(5);
     const middle = explosions.map((e) => e.x).sort((a, b) => a - b)[2];
     expect(round.memoryOf(firer.playerId)?.lastLanding).toEqual({ kind: "hit", x: middle });
+  });
+
+  it("records only a Leap Frog's first Hop's landing", () => {
+    const { round, firer } = computerScenario(100, 3, "Leap Frog");
+    const explosions = fireAndCollect(round, firer, 60, 300);
+    expect(explosions).toHaveLength(3);
+    expect(round.memoryOf(firer.playerId)?.lastLanding).toEqual({
+      kind: "hit",
+      x: explosions[0]?.x,
+    });
   });
 
   it("records a Funky Bomb's own landing, not any bomblet's", () => {
