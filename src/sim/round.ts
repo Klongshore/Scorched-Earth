@@ -360,7 +360,8 @@ export class Round {
           // unless this Hop landed on a Tank, which ends the Leap Frog.
           explosions.push(this.explode(p, outcome.x, outcome.y, weaponNamed(LEAP_FROG_HOP_WEAPON)));
           const hopsLeft = (p.hopsLeft ?? LEAP_FROG_HOPS) - 1;
-          if (hopsLeft > 0 && !onTank) projectiles.push(this.nextHop(p, outcome.x, outcome.y, hopsLeft));
+          if (hopsLeft > 0 && !onTank)
+            projectiles.push(this.nextHop(p, outcome.x, outcome.y, hopsLeft));
         } else {
           // A Splitter that lands before it splits explodes as one of its pieces.
           const weapon = p.weapon.kind === "mirv" ? weaponNamed(p.weapon.pieceWeapon) : p.weapon;
