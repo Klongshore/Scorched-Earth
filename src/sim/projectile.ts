@@ -2,6 +2,7 @@ import {
   FIELD_HEIGHT,
   FIELD_WIDTH,
   GRAVITY,
+  LEAP_FROG_HOPS,
   POWER_TO_SPEED,
   WIND_ACCELERATION_PER_UNIT,
 } from "./constants";
@@ -26,6 +27,7 @@ export function launch(t: Tank, weapon: Weapon): Projectile {
     vy: -speed * Math.sin(radians),
     weapon,
     firedBy: t.playerId,
+    ...(weapon.kind === "leapfrog" ? { hopsLeft: LEAP_FROG_HOPS } : {}),
   };
 }
 

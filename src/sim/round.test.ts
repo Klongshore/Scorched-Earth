@@ -959,14 +959,19 @@ describe("Round Leap Frog", () => {
   });
 
   it("ends the chain with no Explosion for a Hop lost off the side of the field", () => {
-    const { round, firer } = scenario(100, 600);
-    const explosions = hop(round, firer, 60, 300);
-    const last = explosions[2]?.x ?? 0;
-    // Start further along, so the last Hop leaves the field instead of landing.
-    const edge = scenario(FIELD_WIDTH - 1 - Math.round(last - 100) / 2 - 20, 40);
+    const START = 100;
+    const dry = scenario(START, 600);
+    const [, second, third] = hop(dry.round, dry.firer, 60, 300);
+    if (!second || !third) return expect.fail("no Hops");
+    // Start where the second Hop still lands in the field but the third would land past its edge.
+    const reach2 = second.x - START;
+    const reach3 = third.x - START;
+    const startX = Math.round(FIELD_WIDTH - 1 - (reach2 + reach3) / 2);
+    expect(startX + reach2).toBeLessThan(FIELD_WIDTH);
+    expect(startX + reach3).toBeGreaterThan(FIELD_WIDTH);
+    const edge = scenario(startX, 40);
     const edgeExplosions = hop(edge.round, edge.firer, 60, 300);
-    expect(edgeExplosions.length).toBeLessThan(3);
-    expect(edgeExplosions.length).toBeGreaterThan(0);
+    expect(edgeExplosions).toHaveLength(2);
     expect(settled(edge.round)).toBe(true);
     const cues = edge.round.drainCues();
     const count = (kind: Cue["kind"]): number => cues.filter((c) => c.kind === kind).length;

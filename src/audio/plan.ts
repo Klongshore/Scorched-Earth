@@ -26,7 +26,7 @@ export type SoundName =
   | "launchFunky"
   | "launchRoller"
   | "launchDirt"
-  | "split" // a MIRV breaking up
+  | "split" // a MIRV or Death's Head breaking up
   | "scatter" // a Funky Bomb throwing out bomblets
   | "rollStart"; // a Roller touching down and starting to roll
 

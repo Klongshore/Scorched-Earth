@@ -108,7 +108,7 @@ export interface Projectile {
   vy: number;
   readonly weapon: Weapon;
   readonly firedBy: number; // playerId
-  /** Hops a Leap Frog still has to make, this one included; unset means all of them. */
+  /** Hops a Leap Frog still has to make, this one included; set at launch; unset for other Weapons. */
   hopsLeft?: number;
   /** Set once a Roller has touched Terrain: which way it rolls and how long it has rolled. */
   rolling?: { direction: -1 | 1; seconds: number } | null;

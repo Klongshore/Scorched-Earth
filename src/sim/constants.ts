@@ -128,11 +128,12 @@ export function forSaleNamed(name: ShopName): ForSale {
   return forSale;
 }
 
+// Leap Frog
+// (each Hop explodes with the Leap Frog's own radius and damage, which match a Missile's)
+export const LEAP_FROG_HOPS = 3; // Hops a Leap Frog makes, each exploding where it lands
+export const LEAP_FROG_HOP_SPEED = 120; // px/s of upward speed each Hop after the first is thrown with
 // Splitters
 // (a Splitter's piece count, spread and piece Weapon are properties of its Weapon)
-export const LEAP_FROG_HOPS = 3; // Hops a Leap Frog makes, each exploding where it lands
-export const LEAP_FROG_HOP_WEAPON: WeaponName = "Missile"; // what each Hop explodes as
-export const LEAP_FROG_HOP_SPEED = 120; // px/s of upward speed each Hop after the first is thrown with
 export const FUNKY_MIN_BOMBLETS = 6;
 export const FUNKY_MAX_BOMBLETS = 8;
 export const FUNKY_BOMBLET_WEAPON: WeaponName = "Baby Missile";
