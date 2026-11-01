@@ -54,7 +54,17 @@ export const WEAPONS: readonly Weapon[] = [
   { name: "Missile", kind: "blast", bundle: 5, price: 1_875, radius: 30, maxDamage: 50 },
   { name: "Baby Nuke", kind: "blast", bundle: 3, price: 10_000, radius: 45, maxDamage: 70 },
   { name: "Nuke", kind: "blast", bundle: 1, price: 12_000, radius: 75, maxDamage: 100 },
-  { name: "MIRV", kind: "mirv", bundle: 3, price: 10_000, radius: 30, maxDamage: 50 },
+  {
+    name: "MIRV",
+    kind: "mirv",
+    bundle: 3,
+    price: 10_000,
+    radius: 30,
+    maxDamage: 50,
+    pieces: 5,
+    spread: 30,
+    pieceWeapon: "Missile",
+  },
   { name: "Funky Bomb", kind: "funky", bundle: 2, price: 7_000, radius: 30, maxDamage: 50 },
   { name: "Baby Roller", kind: "roller", bundle: 10, price: 5_000, radius: 20, maxDamage: 30 },
   { name: "Roller", kind: "roller", bundle: 5, price: 6_000, radius: 30, maxDamage: 50 },
@@ -107,9 +117,7 @@ export function forSaleNamed(name: ShopName): ForSale {
 }
 
 // Splitters
-export const MIRV_PIECES = 5; // what a MIRV splits into at the top of its arc
-export const MIRV_PIECE_WEAPON: WeaponName = "Missile"; // also what an unsplit MIRV explodes as
-export const MIRV_SPREAD = 30; // px/s of sideways speed between neighbouring pieces
+// (a Splitter's piece count, spread and piece Weapon are properties of its Weapon)
 export const FUNKY_MIN_BOMBLETS = 6;
 export const FUNKY_MAX_BOMBLETS = 8;
 export const FUNKY_BOMBLET_WEAPON: WeaponName = "Baby Missile";

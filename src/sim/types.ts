@@ -62,7 +62,14 @@ interface WeaponBase {
 /** A Weapon, keyed on how it behaves. */
 export type Weapon =
   | (WeaponBase & { readonly kind: "blast"; readonly maxDamage: number })
-  | (WeaponBase & { readonly kind: "mirv"; readonly maxDamage: number }) // splits at the top of its arc
+  | (WeaponBase & {
+      // a Splitter: splits at the top of its arc
+      readonly kind: "mirv";
+      readonly maxDamage: number;
+      readonly pieces: number; // how many pieces it splits into
+      readonly spread: number; // px/s of sideways speed between neighbouring pieces
+      readonly pieceWeapon: WeaponName; // what each piece explodes as; also what an unsplit one explodes as
+    })
   | (WeaponBase & { readonly kind: "funky"; readonly maxDamage: number }) // scatters bomblets on landing
   | (WeaponBase & { readonly kind: "roller"; readonly maxDamage: number })
   | (WeaponBase & { readonly kind: "dirt" }); // adds dirt, damages no one
