@@ -356,10 +356,11 @@ export class Round {
           this.cues.record({ kind: "rollStarted", x: p.x });
           projectiles.push(p);
         } else if (p.weapon.kind === "leapfrog") {
-          // Each Hop explodes as a Missile; the next is thrown onward from the crater.
+          // Each Hop explodes as a Missile; the next is thrown onward from the crater,
+          // unless this Hop landed on a Tank, which ends the Leap Frog.
           explosions.push(this.explode(p, outcome.x, outcome.y, weaponNamed(LEAP_FROG_HOP_WEAPON)));
           const hopsLeft = (p.hopsLeft ?? LEAP_FROG_HOPS) - 1;
-          if (hopsLeft > 0) projectiles.push(this.nextHop(p, outcome.x, outcome.y, hopsLeft));
+          if (hopsLeft > 0 && !onTank) projectiles.push(this.nextHop(p, outcome.x, outcome.y, hopsLeft));
         } else {
           // A Splitter that lands before it splits explodes as one of its pieces.
           const weapon = p.weapon.kind === "mirv" ? weaponNamed(p.weapon.pieceWeapon) : p.weapon;

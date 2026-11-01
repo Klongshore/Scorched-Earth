@@ -896,6 +896,41 @@ describe("Round Leap Frog", () => {
     expect(seenAtSettling).toBe(3);
   });
 
+  it("ends the chain when a Hop lands on a Tank", () => {
+    const dry = scenario(100, 600);
+    const [first, second] = hop(dry.round, dry.firer, 60, 300);
+    if (!first || !second) return expect.fail("no Hops");
+    for (const target of [first, second]) {
+      const { round, firer } = scenario(100, Math.round(target.x));
+      const explosions = hop(round, firer, 60, 300);
+      expect(explosions).toHaveLength(target === first ? 1 : 2);
+    }
+  });
+
+  it("ends the chain with no Explosion for a Hop lost off the side of the field", () => {
+    const { round, firer } = scenario(100, 600);
+    const explosions = hop(round, firer, 60, 300);
+    const last = explosions[2]?.x ?? 0;
+    // Start further along, so the last Hop leaves the field instead of landing.
+    const edge = scenario(FIELD_WIDTH - 1 - Math.round(last - 100) / 2 - 20, 40);
+    const edgeExplosions = hop(edge.round, edge.firer, 60, 300);
+    expect(edgeExplosions.length).toBeLessThan(3);
+    expect(edgeExplosions.length).toBeGreaterThan(0);
+    expect(settled(edge.round)).toBe(true);
+    const cues = edge.round.drainCues();
+    const count = (kind: Cue["kind"]): number => cues.filter((c) => c.kind === kind).length;
+    expect(count("exploded")).toBe(edgeExplosions.length);
+    expect(count("landed")).toBe(edgeExplosions.length + 1);
+  });
+
+  it("plays out the same each time for the same seed", () => {
+    const run = () => {
+      const { round, firer } = scenario(100, 600, 5);
+      return hop(round, firer, 60, 300).map((e) => [e.x, e.y]);
+    };
+    expect(run()).toEqual(run());
+  });
+
   it("records landed and exploded for each Hop, and launched for every Hop thrown after the first", () => {
     const { round, firer } = scenario(100, 600);
     hop(round, firer, 60, 300);
@@ -1130,6 +1165,13 @@ describe("Round Landings", () => {
       kind: "hit",
       x: explosions[0]?.x,
     });
+  });
+
+  it("records a lost first Hop's landing, and ends the Leap Frog there", () => {
+    const { round, firer } = computerScenario(540, 3, "Leap Frog");
+    const explosions = fireAndCollect(round, firer, 20, 1000);
+    expect(explosions).toHaveLength(0);
+    expect(round.memoryOf(firer.playerId)?.lastLanding).toEqual({ kind: "lost", side: "right" });
   });
 
   it("records a Funky Bomb's own landing, not any bomblet's", () => {
