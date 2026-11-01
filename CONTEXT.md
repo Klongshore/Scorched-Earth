@@ -96,6 +96,13 @@ _Avoid_: Ammo, missile (as a general term), shot type
 **Roller**:
 A Weapon whose Projectile, on touching Terrain, rolls downhill and explodes when it comes to rest or meets a Tank (Baby Roller, Roller, Heavy Roller).
 
+**Splitter**:
+A Weapon whose Projectile becomes several Projectiles before or as it lands (MIRV, Funky Bomb, Death's Head).
+
+**Hop**:
+One stage of a Leap Frog's journey: a flight that ends in an Explosion, after which the next Hop is thrown onward from the crater. A Leap Frog has a fixed number of Hops.
+_Avoid_: Bounce, stage, jump
+
 **Dirt Weapon**:
 A Weapon whose Explosion adds dirt instead of removing it, and can bury Tanks (Dirt Clod, Dirt Ball, Ton of Dirt).
 
