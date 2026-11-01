@@ -26,7 +26,7 @@ export type SoundName =
   | "launchFunky"
   | "launchRoller"
   | "launchDirt"
-  | "split" // a MIRV breaking up
+  | "split" // a MIRV or Death's Head breaking up
   | "scatter" // a Funky Bomb throwing out bomblets
   | "rollStart"; // a Roller touching down and starting to roll
 
@@ -70,6 +70,7 @@ const LAUNCH_SOUNDS: Readonly<Record<Weapon["kind"], SoundName>> = {
   blast: "launch",
   mirv: "launchMirv",
   funky: "launchFunky",
+  leapfrog: "launch", // no sound of its own
   roller: "launchRoller",
   dirt: "launchDirt",
 };

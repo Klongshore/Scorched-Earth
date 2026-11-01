@@ -45,6 +45,8 @@ export type WeaponName =
   | "Nuke"
   | "MIRV"
   | "Funky Bomb"
+  | "Death's Head"
+  | "Leap Frog"
   | "Baby Roller"
   | "Roller"
   | "Heavy Roller"
@@ -62,8 +64,16 @@ interface WeaponBase {
 /** A Weapon, keyed on how it behaves. */
 export type Weapon =
   | (WeaponBase & { readonly kind: "blast"; readonly maxDamage: number })
-  | (WeaponBase & { readonly kind: "mirv"; readonly maxDamage: number }) // splits at the top of its arc
+  | (WeaponBase & {
+      // a Splitter: splits at the top of its arc
+      readonly kind: "mirv";
+      readonly maxDamage: number;
+      readonly pieces: number; // how many pieces it splits into
+      readonly spread: number; // px/s of sideways speed between neighbouring pieces
+      readonly pieceWeapon: WeaponName; // what each piece explodes as; also what an unsplit one explodes as
+    })
   | (WeaponBase & { readonly kind: "funky"; readonly maxDamage: number }) // scatters bomblets on landing
+  | (WeaponBase & { readonly kind: "leapfrog"; readonly maxDamage: number }) // per-Hop radius and damage
   | (WeaponBase & { readonly kind: "roller"; readonly maxDamage: number })
   | (WeaponBase & { readonly kind: "dirt" }); // adds dirt, damages no one
 
@@ -98,6 +108,8 @@ export interface Projectile {
   vy: number;
   readonly weapon: Weapon;
   readonly firedBy: number; // playerId
+  /** Hops a Leap Frog still has to make, this one included; set at launch; unset for other Weapons. */
+  hopsLeft?: number;
   /** Set once a Roller has touched Terrain: which way it rolls and how long it has rolled. */
   rolling?: { direction: -1 | 1; seconds: number } | null;
 }

@@ -54,8 +54,30 @@ export const WEAPONS: readonly Weapon[] = [
   { name: "Missile", kind: "blast", bundle: 5, price: 1_875, radius: 30, maxDamage: 50 },
   { name: "Baby Nuke", kind: "blast", bundle: 3, price: 10_000, radius: 45, maxDamage: 70 },
   { name: "Nuke", kind: "blast", bundle: 1, price: 12_000, radius: 75, maxDamage: 100 },
-  { name: "MIRV", kind: "mirv", bundle: 3, price: 10_000, radius: 30, maxDamage: 50 },
+  {
+    name: "MIRV",
+    kind: "mirv",
+    bundle: 3,
+    price: 10_000,
+    radius: 30,
+    maxDamage: 50,
+    pieces: 5,
+    spread: 30,
+    pieceWeapon: "Missile",
+  },
   { name: "Funky Bomb", kind: "funky", bundle: 2, price: 7_000, radius: 30, maxDamage: 50 },
+  {
+    name: "Death's Head",
+    kind: "mirv",
+    bundle: 1,
+    price: 20_000,
+    radius: 45,
+    maxDamage: 70,
+    pieces: 5,
+    spread: 30,
+    pieceWeapon: "Baby Nuke",
+  },
+  { name: "Leap Frog", kind: "leapfrog", bundle: 3, price: 7_500, radius: 30, maxDamage: 50 },
   { name: "Baby Roller", kind: "roller", bundle: 10, price: 5_000, radius: 20, maxDamage: 30 },
   { name: "Roller", kind: "roller", bundle: 5, price: 6_000, radius: 30, maxDamage: 50 },
   { name: "Heavy Roller", kind: "roller", bundle: 2, price: 6_750, radius: 45, maxDamage: 70 },
@@ -106,10 +128,12 @@ export function forSaleNamed(name: ShopName): ForSale {
   return forSale;
 }
 
+// Leap Frog
+// (each Hop explodes with the Leap Frog's own radius and damage, which match a Missile's)
+export const LEAP_FROG_HOPS = 3; // Hops a Leap Frog makes, each exploding where it lands
+export const LEAP_FROG_HOP_SPEED = 120; // px/s of upward speed each Hop after the first is thrown with
 // Splitters
-export const MIRV_PIECES = 5; // what a MIRV splits into at the top of its arc
-export const MIRV_PIECE_WEAPON: WeaponName = "Missile"; // also what an unsplit MIRV explodes as
-export const MIRV_SPREAD = 30; // px/s of sideways speed between neighbouring pieces
+// (a Splitter's piece count, spread and piece Weapon are properties of its Weapon)
 export const FUNKY_MIN_BOMBLETS = 6;
 export const FUNKY_MAX_BOMBLETS = 8;
 export const FUNKY_BOMBLET_WEAPON: WeaponName = "Baby Missile";

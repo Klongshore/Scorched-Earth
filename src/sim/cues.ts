@@ -51,7 +51,7 @@ export type Cue =
   | { readonly kind: "launched"; readonly x: number }
   /** A Projectile's flight ended, landed, lost or replaced by pieces: its flight sound stops. */
   | { readonly kind: "landed"; readonly x: number }
-  /** A MIRV split into its pieces at (x, y). */
+  /** A Splitter split into its pieces at (x, y). */
   | { readonly kind: "split"; readonly x: number; readonly y: number }
   /** A Funky Bomb scattered its bomblets from (x, y). */
   | { readonly kind: "scattered"; readonly x: number; readonly y: number }

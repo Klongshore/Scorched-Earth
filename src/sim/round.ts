@@ -14,9 +14,7 @@ import {
   FUNKY_MIN_ANGLE,
   FUNKY_MIN_BOMBLETS,
   FUNKY_MIN_SPEED,
-  MIRV_PIECES,
-  MIRV_PIECE_WEAPON,
-  MIRV_SPREAD,
+  LEAP_FROG_HOP_SPEED,
   TAUNT_SECONDS,
   WIND_MAX,
   weaponNamed,
@@ -105,7 +103,7 @@ export class Round {
   private readonly memories = new Map<number, ComputerMemory>();
   /**
    * The Projectile whose first landing the firer remembers: the one launched from the barrel, or
-   * a split MIRV's middle piece. Null once it has landed or been lost.
+   * a split Splitter's middle piece. Null once it has landed or been lost.
    */
   private barrelProjectile: Projectile | null = null;
   /**
@@ -317,9 +315,9 @@ export class Round {
 
   /**
    * One tick of everything in the air. Explosions already showing age first, so one born this
-   * tick starts at elapsed 0; then every Projectile steps. A MIRV that starts falling splits into
-   * its pieces; each Projectile that lands becomes an Explosion, and a Funky Bomb's also throws
-   * its bomblets. New Projectiles first step on the next tick. Both lists are edited in place.
+   * tick starts at elapsed 0; then every Projectile steps. A Splitter that starts falling splits into
+   * its pieces; each Projectile that lands becomes an Explosion, a Funky Bomb's also throws
+   * its bomblets, and a Leap Frog's Hop throws the next Hop onward from its crater. New Projectiles first step on the next tick. Both lists are edited in place.
    */
   private resolveTick(projectiles: Projectile[], explosions: Explosion[], dt: number): void {
     for (const explosion of explosions) explosion.elapsed += dt;
@@ -340,9 +338,9 @@ export class Round {
       const outcome = stepProjectile(p, this.wind, this.terrain, this.tanks, dt);
       if (outcome.kind === "flying") {
         if (p.weapon.kind === "mirv" && p.vy >= 0) {
-          this.cues.record({ kind: "landed", x: p.x }); // the MIRV's own flight ends here
+          this.cues.record({ kind: "landed", x: p.x }); // the Splitter's own flight ends here
           this.cues.record({ kind: "split", x: p.x, y: p.y });
-          projectiles.push(...this.splitMirv(p));
+          projectiles.push(...this.split(p));
         } else projectiles.push(p);
       } else if (outcome.kind === "lost") {
         this.cues.record({ kind: "landed", x: p.x });
@@ -355,9 +353,17 @@ export class Round {
           startRolling(p, outcome.x, outcome.y, this.terrain);
           this.cues.record({ kind: "rollStarted", x: p.x });
           projectiles.push(p);
+        } else if (p.weapon.kind === "leapfrog") {
+          // Each Hop explodes as a Leap Frog (same radius and damage as a Missile); the next is
+          // thrown onward from the crater, unless this Hop landed on a Tank, which ends the Leap Frog.
+          explosions.push(this.explode(p, outcome.x, outcome.y));
+          if (p.hopsLeft === undefined) throw new Error("A Leap Frog Hop always has Hops left");
+          const hopsLeft = p.hopsLeft - 1;
+          if (hopsLeft > 0 && !onTank)
+            projectiles.push(this.nextHop(p, outcome.x, outcome.y, hopsLeft));
         } else {
-          // A MIRV that lands before it splits explodes as one of its pieces.
-          const weapon = p.weapon.kind === "mirv" ? weaponNamed(MIRV_PIECE_WEAPON) : p.weapon;
+          // A Splitter that lands before it splits explodes as one of its pieces.
+          const weapon = p.weapon.kind === "mirv" ? weaponNamed(p.weapon.pieceWeapon) : p.weapon;
           explosions.push(this.explode(p, outcome.x, outcome.y, weapon));
           if (weapon.kind === "funky") {
             this.cues.record({ kind: "scattered", x: outcome.x, y: outcome.y });
@@ -379,22 +385,39 @@ export class Round {
     }
   }
 
-  /** A MIRV's pieces: same place and vertical speed, sideways speed spread evenly around its own. */
-  private splitMirv(mirv: Projectile): Projectile[] {
-    const weapon = weaponNamed(MIRV_PIECE_WEAPON);
-    const middle = (MIRV_PIECES - 1) / 2;
-    const pieces = Array.from({ length: MIRV_PIECES }, (_, i) => ({
-      x: mirv.x,
-      y: mirv.y,
-      vx: mirv.vx + (i - middle) * MIRV_SPREAD,
-      vy: mirv.vy,
-      weapon,
-      firedBy: mirv.firedBy,
+  /** A Splitter's pieces: same place and vertical speed, sideways speed spread evenly around its own. */
+  private split(splitter: Projectile): Projectile[] {
+    const weapon = splitter.weapon;
+    if (weapon.kind !== "mirv") throw new Error(`${weapon.name} does not split`);
+    const pieceWeapon = weaponNamed(weapon.pieceWeapon);
+    const middle = (weapon.pieces - 1) / 2;
+    const pieces = Array.from({ length: weapon.pieces }, (_, i) => ({
+      x: splitter.x,
+      y: splitter.y,
+      vx: splitter.vx + (i - middle) * weapon.spread,
+      vy: splitter.vy,
+      weapon: pieceWeapon,
+      firedBy: splitter.firedBy,
     }));
-    // The MIRV itself never lands, so the firer remembers its middle piece instead.
-    if (this.barrelProjectile === mirv) this.barrelProjectile = pieces[Math.floor(middle)] ?? null;
+    // The Splitter itself never lands, so the firer remembers its middle piece instead.
+    if (this.barrelProjectile === splitter)
+      this.barrelProjectile = pieces[Math.floor(middle)] ?? null;
     for (const piece of pieces) this.cues.record({ kind: "launched", x: piece.x });
     return pieces;
+  }
+
+  /** A Leap Frog's next Hop: thrown from the crater with the sideways speed the last one landed with. */
+  private nextHop(hop: Projectile, x: number, y: number, hopsLeft: number): Projectile {
+    this.cues.record({ kind: "launched", x });
+    return {
+      x,
+      y,
+      vx: hop.vx,
+      vy: -LEAP_FROG_HOP_SPEED, // y points down
+      weapon: hop.weapon,
+      firedBy: hop.firedBy,
+      hopsLeft,
+    };
   }
 
   /** A Funky Bomb's bomblets, thrown from the centre of its crater at random Angles and speeds. */

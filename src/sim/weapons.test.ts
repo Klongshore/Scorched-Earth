@@ -41,7 +41,7 @@ describe("Item catalogue", () => {
 describe("What the Shop sells", () => {
   it("is the Weapons but the Baby Missile, in catalogue order, then the Items", () => {
     expect(FOR_SALE).toEqual([...WEAPONS.slice(1), ...ITEMS]);
-    expect(FOR_SALE).toHaveLength(14);
+    expect(FOR_SALE).toHaveLength(16);
     expect(FOR_SALE).not.toContain(BABY_MISSILE);
   });
 
@@ -106,17 +106,35 @@ describe("Weapon catalogue", () => {
   });
 
   it("has the splitters' Bundles, prices, radii and damage, after the blast family", () => {
-    expect(WEAPONS.slice(4, 6).map((w) => w.name)).toEqual(["MIRV", "Funky Bomb"]);
+    expect(WEAPONS.slice(4, 8).map((w) => w.name)).toEqual([
+      "MIRV",
+      "Funky Bomb",
+      "Death's Head",
+      "Leap Frog",
+    ]);
     const row = (name: WeaponName) => {
       const w = weaponNamed(name);
       return [w.kind, w.bundle, w.price, w.radius, w.kind === "dirt" ? null : w.maxDamage];
     };
     expect(row("MIRV")).toEqual(["mirv", 3, 10_000, 30, 50]);
     expect(row("Funky Bomb")).toEqual(["funky", 2, 7_000, 30, 50]);
+    expect(row("Death's Head")).toEqual(["mirv", 1, 20_000, 45, 70]);
+  });
+
+  it("has Leap Frog after the existing splitters with Bundle 3 and price 7,500", () => {
+    expect(WEAPONS.slice(7, 8).map((w) => w.name)).toEqual(["Leap Frog"]);
+    const w = weaponNamed("Leap Frog");
+    expect([w.kind, w.bundle, w.price, w.radius, w.kind === "dirt" ? null : w.maxDamage]).toEqual([
+      "leapfrog",
+      3,
+      7_500,
+      30,
+      50,
+    ]);
   });
 
   it("has the Rollers' Bundles, prices, radii and damage, after the splitters", () => {
-    expect(WEAPONS.slice(6, 9).map((w) => w.name)).toEqual([
+    expect(WEAPONS.slice(8, 11).map((w) => w.name)).toEqual([
       "Baby Roller",
       "Roller",
       "Heavy Roller",
