@@ -10,6 +10,7 @@ export function damageAt(weapon: Weapon, distance: number): number {
     case "blast":
     case "mirv":
     case "funky":
+    case "leapfrog":
     case "roller":
       if (distance >= weapon.radius) return 0;
       return Math.round(weapon.maxDamage * (1 - distance / weapon.radius));

@@ -14,6 +14,9 @@ import {
   FUNKY_MIN_ANGLE,
   FUNKY_MIN_BOMBLETS,
   FUNKY_MIN_SPEED,
+  LEAP_FROG_HOP_SPEED,
+  LEAP_FROG_HOP_WEAPON,
+  LEAP_FROG_HOPS,
   TAUNT_SECONDS,
   WIND_MAX,
   weaponNamed,
@@ -352,6 +355,11 @@ export class Round {
           startRolling(p, outcome.x, outcome.y, this.terrain);
           this.cues.record({ kind: "rollStarted", x: p.x });
           projectiles.push(p);
+        } else if (p.weapon.kind === "leapfrog") {
+          // Each Hop explodes as a Missile; the next is thrown onward from the crater.
+          explosions.push(this.explode(p, outcome.x, outcome.y, weaponNamed(LEAP_FROG_HOP_WEAPON)));
+          const hopsLeft = (p.hopsLeft ?? LEAP_FROG_HOPS) - 1;
+          if (hopsLeft > 0) projectiles.push(this.nextHop(p, outcome.x, outcome.y, hopsLeft));
         } else {
           // A Splitter that lands before it splits explodes as one of its pieces.
           const weapon = p.weapon.kind === "mirv" ? weaponNamed(p.weapon.pieceWeapon) : p.weapon;
@@ -393,6 +401,20 @@ export class Round {
       this.barrelProjectile = pieces[Math.floor(middle)] ?? null;
     for (const piece of pieces) this.cues.record({ kind: "launched", x: piece.x });
     return pieces;
+  }
+
+  /** A Leap Frog's next Hop: thrown from the crater with the sideways speed the last one landed with. */
+  private nextHop(hop: Projectile, x: number, y: number, hopsLeft: number): Projectile {
+    this.cues.record({ kind: "launched", x });
+    return {
+      x,
+      y,
+      vx: hop.vx,
+      vy: -LEAP_FROG_HOP_SPEED, // y points down
+      weapon: hop.weapon,
+      firedBy: hop.firedBy,
+      hopsLeft,
+    };
   }
 
   /** A Funky Bomb's bomblets, thrown from the centre of its crater at random Angles and speeds. */

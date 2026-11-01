@@ -9,7 +9,7 @@ exports[`Match integration > replays a seeded Match of only Morons, Shooters and
     },
     {
       "kind": "win",
-      "playerId": 4,
+      "playerId": 3,
     },
     {
       "kind": "win",
@@ -20,8 +20,8 @@ exports[`Match integration > replays a seeded Match of only Morons, Shooters and
     0,
     0,
     0,
-    2,
-    1,
+    3,
+    0,
     0,
   ],
 }

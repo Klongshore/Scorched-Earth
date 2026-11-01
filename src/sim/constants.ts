@@ -66,6 +66,7 @@ export const WEAPONS: readonly Weapon[] = [
     pieceWeapon: "Missile",
   },
   { name: "Funky Bomb", kind: "funky", bundle: 2, price: 7_000, radius: 30, maxDamage: 50 },
+  { name: "Leap Frog", kind: "leapfrog", bundle: 3, price: 7_500, radius: 30, maxDamage: 50 },
   { name: "Baby Roller", kind: "roller", bundle: 10, price: 5_000, radius: 20, maxDamage: 30 },
   { name: "Roller", kind: "roller", bundle: 5, price: 6_000, radius: 30, maxDamage: 50 },
   { name: "Heavy Roller", kind: "roller", bundle: 2, price: 6_750, radius: 45, maxDamage: 70 },
@@ -118,6 +119,9 @@ export function forSaleNamed(name: ShopName): ForSale {
 
 // Splitters
 // (a Splitter's piece count, spread and piece Weapon are properties of its Weapon)
+export const LEAP_FROG_HOPS = 3; // Hops a Leap Frog makes, each exploding where it lands
+export const LEAP_FROG_HOP_WEAPON: WeaponName = "Missile"; // what each Hop explodes as
+export const LEAP_FROG_HOP_SPEED = 120; // px/s of upward speed each Hop after the first is thrown with
 export const FUNKY_MIN_BOMBLETS = 6;
 export const FUNKY_MAX_BOMBLETS = 8;
 export const FUNKY_BOMBLET_WEAPON: WeaponName = "Baby Missile";
